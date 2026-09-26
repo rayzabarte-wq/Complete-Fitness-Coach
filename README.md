@@ -199,15 +199,23 @@ or lawyer review the actual legal side before you treat it as compliant.
 
 ## Local setup
 
+New to this? **[SETUP.md](SETUP.md)** is a full beginner walkthrough
+(installing Node and Postgres, creating the database, first login). The
+short version:
+
 ### 1. Backend
 
 ```bash
 cd backend
 cp .env.example .env       # fill in DATABASE_URL, ANTHROPIC_API_KEY, JWT_SECRET
 npm install
-npx prisma migrate dev --name init
+npx prisma migrate dev     # creates the tables
+npm run seed               # loads the exercise catalog
 npm run dev                 # http://localhost:3001
 ```
+
+No local Postgres? `docker compose up -d` from the repo root starts one that
+matches `postgresql://strength:strength@localhost:5432/strength_app`.
 
 ### 2. Frontend
 

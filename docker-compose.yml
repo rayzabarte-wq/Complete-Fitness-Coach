@@ -1,0 +1,18 @@
+# Optional: runs the Postgres database in Docker so you don't have to
+# install Postgres yourself. Start it with `docker compose up -d` from the
+# project root. The credentials match the DATABASE_URL in SETUP.md.
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: strength
+      POSTGRES_PASSWORD: strength
+      POSTGRES_DB: strength_app
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:

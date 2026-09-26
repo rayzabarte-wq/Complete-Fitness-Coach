@@ -68,6 +68,10 @@ export default function PlanDashboard({ planId }: { planId: string }) {
     return <p className="text-dim">Loading dashboard...</p>;
   }
 
+  if (dashboard === null) {
+    return <p className="text-dim">No dashboard data yet.</p>;
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       {dashboard.hasAmendments && (

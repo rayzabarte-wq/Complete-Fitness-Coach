@@ -2,10 +2,11 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { authenticator } from "otplib";
 
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET) {
+const secret = process.env.JWT_SECRET;
+if (!secret) {
   throw new Error("JWT_SECRET is not set — generate one and add it to .env before starting the server");
 }
+const JWT_SECRET: string = secret;
 
 const SESSION_TTL = "12h";
 
