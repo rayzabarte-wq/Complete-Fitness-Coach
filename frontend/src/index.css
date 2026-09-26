@@ -1,0 +1,68 @@
+:root {
+  --bg: #14181b;
+  --surface: #1d2226;
+  --border: #2a3136;
+  --text: #edf0f2;
+  --text-dim: #8b959c;
+  --accent: #6fae8f;
+  --danger: #c96a5c;
+  font-family: "Inter", -apple-system, "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  /* Removes the gray flash Safari shows on tap, for a more native feel */
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  /* Crisper text rendering on iOS */
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  /* Stops the whole page rubber-banding/pulling down to reveal white space
+     above the header when scrolling past the top on iOS Safari/PWA */
+  overscroll-behavior-y: contain;
+}
+
+button {
+  font-family: inherit;
+  /* Removes the ~300ms tap delay and stray double-tap-zoom on buttons */
+  touch-action: manipulation;
+}
+
+/* iOS Safari auto-zooms the page when a focused text input's font-size is
+   under 16px — this keeps every text input/select/textarea at exactly the
+   size that avoids it, regardless of any smaller inline font-size set for
+   visual density elsewhere. */
+input,
+select,
+textarea {
+  font-size: 16px !important;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.button-primary {
+  background: var(--accent);
+  color: #0e1512;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.text-dim {
+  color: var(--text-dim);
+}

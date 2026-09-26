@@ -1,0 +1,484 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Every table below that holds personal data (workouts, recommendations,
+// scheduled sessions, nutrition logs, the Outlook connection) is scoped to
+// a User with onDelete: Cascade, so deleting a User row is sufficient to
+// erase everything that person's account owns — see
+// backend/src/routes/account.ts for the export/delete endpoints this
+// supports. The Exercise catalog is the one exception: it's a shared
+// reference list (exercise names, equipment, rep ranges), not personal
+// data about anyone, so it isn't scoped per-user.
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  totpSecret   String?  // set once 2FA setup begins
+  totpEnabled  Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  // Which workout types show up in the Calendar tab's day view and its
+  // "schedule a session" type picker — set from Settings. REST is exempt
+  // from this and always available, since hiding rest days doesn't make
+  // sense as a preference. Defaults to everything visible.
+  visibleSessionTypes SessionType[] @default([STRENGTH, SWIM, GOLF_RANGE, GOLF_ROUND, GOLF_SHORT_GAME, GOLF_PUTTING, RUN_RECOVERY, RUN_TEMPO, RUN_FARTLEK, RUN_INTERVALS, RUN_LONG_RUN, WALK_WALK, WALK_HIKE, CYCLING_EASY, CYCLING_LONG, CYCLING_HILLS, CYCLING_TURBO_EASY, CYCLING_TURBO_LONG, CYCLING_TURBO_HILLS])
+
+  sessions         WorkoutSession[]
+  recommendations  Recommendation[]
+  plannedSessions  PlannedSession[]
+  nutritionLogs    NutritionLog[]
+  microsoftAccount MicrosoftAccount?
+  stravaAccount    StravaAccount?
+  trainingPlans    TrainingPlan[]
+}
+
+enum ExerciseCategory {
+  COMPOUND
+  ACCESSORY
+}
+
+enum RepRangeStyle {
+  STRENGTH    // 5-8 reps, progressive overload focus
+  HYPERTROPHY // 8-15 reps, progression via rep quality / RPE
+}
+
+// Matches the equipment actually on hand: an adjustable dumbbell set
+// (5-45lb, 5lb steps), a barbell (20-80lb, 5lb steps), an EZ bar
+// (20-80lb, 10lb steps), elastic bands, and bodyweight work on a chin-up
+// bar / rings. Increments and ranges per type live in
+// backend/src/lib/equipmentConfig.ts (and are mirrored on the frontend so
+// inputs only ever offer loadable values).
+enum Equipment {
+  DUMBBELL
+  BARBELL
+  EZ_BAR
+  BAND
+  BODYWEIGHT
+}
+
+// Used to group exercises into full-session workouts (Push / Pull / Legs /
+// Core) rather than picking one exercise at a time.
+enum MovementPattern {
+  PUSH
+  PULL
+  LEGS
+  CORE
+}
+
+// Simple 3-level scale for the pre-workout readiness check-in (sleep,
+// soreness, energy) — kept coarse on purpose so it's a fast tap, not a
+// form to fill out.
+enum ReadinessLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+// Shared exercise catalog — not scoped per-user, see the note on User above.
+model Exercise {
+  id              String            @id @default(cuid())
+  name            String            @unique
+  category        ExerciseCategory
+  muscleGroup     String
+  repRangeStyle   RepRangeStyle
+  equipment       Equipment
+  movementPattern MovementPattern
+  defaultSets     Int               @default(3)
+  createdAt       DateTime          @default(now())
+
+  sets            SetEntry[]
+  recommendations Recommendation[]
+}
+
+model WorkoutSession {
+  id     String @id @default(cuid())
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+
+  date      DateTime   @default(now())
+  notes     String?
+
+  // Actual session duration, captured client-side: startedAt when the Log
+  // screen opens with a generated plan, endedAt when the workout is saved.
+  startedAt DateTime?
+  endedAt   DateTime?
+
+  // Pre-workout readiness check-in — 3 taps, captured once per session.
+  sleepQuality ReadinessLevel?
+  soreness     ReadinessLevel?
+  energyLevel  ReadinessLevel?
+
+  sets      SetEntry[]
+  feedback  SessionFeedback?
+  createdAt DateTime   @default(now())
+
+  // Set once this session's Outlook calendar event has been created, so
+  // later updates (e.g. after feedback is submitted) patch the same event
+  // instead of creating a duplicate.
+  outlookEventId String?
+
+  @@index([userId, date])
+}
+
+model SetEntry {
+  id          String   @id @default(cuid())
+  session     WorkoutSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId   String
+  exercise    Exercise @relation(fields: [exerciseId], references: [id])
+  exerciseId  String
+
+  // Used for DUMBBELL / BARBELL / EZ_BAR, and as optional added weight for
+  // BODYWEIGHT movements. Left 0 for plain bodyweight sets and for BAND
+  // sets (see bandLevel instead).
+  weightLb    Float
+  // Only set for BAND exercises — a tension label (e.g. "Medium") rather
+  // than a number, since bands aren't rated in lb here.
+  bandLevel   String?
+  reps        Int
+  targetReps  Int
+  rpe         Float?   // 1-10, captured via quick-tap buttons in the UI
+  // Derived at save time: reps >= targetReps. Cheap to compute once,
+  // useful for every later trend/plateau calculation.
+  hitTarget   Boolean
+  setOrder    Int
+
+  createdAt   DateTime @default(now())
+
+  @@index([exerciseId, createdAt])
+  @@index([sessionId])
+}
+
+model Recommendation {
+  id     String @id @default(cuid())
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+
+  exercise     Exercise @relation(fields: [exerciseId], references: [id])
+  exerciseId   String
+
+  suggestedWeightLb Float
+  suggestedReps     Int
+  suggestedSets     Int
+  restSeconds       Int
+  reasoning         String
+
+  // Filled in once the corresponding session is logged: true if at least
+  // one logged set matched the suggested weight and met/exceeded the
+  // suggested reps. Lets future recommendations (and the data-quality
+  // metrics) see whether past suggestions were actually followed.
+  followedAsGiven Boolean?
+
+  generatedAt  DateTime @default(now())
+
+  @@index([userId, exerciseId, generatedAt])
+}
+
+// One row per session — a quick thumbs up/down on the generated plan,
+// prompted right after saving a workout.
+model SessionFeedback {
+  id        String         @id @default(cuid())
+  session   WorkoutSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId String         @unique
+  thumbsUp  Boolean
+  createdAt DateTime       @default(now())
+}
+
+// Schema in place now for a future nutrition feature; no routes/UI yet.
+model NutritionLog {
+  id     String @id @default(cuid())
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+
+  date      DateTime @default(now())
+  calories  Int?
+  proteinG  Float?
+  carbsG    Float?
+  fatG      Float?
+  notes     String?
+  createdAt DateTime @default(now())
+
+  @@index([userId, date])
+}
+
+// Holds the OAuth tokens for one user's connected Microsoft/Outlook
+// account — one row per user (not global, now that the app is
+// multi-user). See backend/src/services/outlookCalendar.ts for the token
+// refresh logic.
+model MicrosoftAccount {
+  id     String @id @default(cuid())
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String @unique
+
+  accessToken  String
+  refreshToken String
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// Every kind of session the training calendar can schedule. STRENGTH plans
+// link back to a MovementPattern (Push/Pull/Legs/Core); everything else
+// doesn't have logging/data-model support yet (see README) — this is a
+// scheduling entry, not a full tracker. REST is excluded from scheduled/
+// actual time totals — see backend/src/routes/calendar.ts.
+enum SessionType {
+  STRENGTH
+  SWIM
+  GOLF_RANGE
+  GOLF_ROUND
+  GOLF_SHORT_GAME
+  GOLF_PUTTING
+  RUN_RECOVERY
+  RUN_TEMPO
+  RUN_FARTLEK
+  RUN_INTERVALS
+  RUN_LONG_RUN
+  WALK_WALK
+  WALK_HIKE
+  CYCLING_EASY
+  CYCLING_LONG
+  CYCLING_HILLS
+  CYCLING_TURBO_EASY
+  CYCLING_TURBO_LONG
+  CYCLING_TURBO_HILLS
+  REST
+}
+
+// Where an actual-time figure came from — typed by hand, or pulled from a
+// linked Strava activity (see backend/src/services/stravaSync.ts).
+enum ActualTimeSource {
+  MANUAL
+  STRAVA
+}
+
+model PlannedSession {
+  id     String @id @default(cuid())
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+
+  date            DateTime
+  type            SessionType
+  // Only meaningful when type is STRENGTH — which day to plan.
+  movementPattern MovementPattern?
+  notes           String?
+  completed       Boolean          @default(false)
+  createdAt       DateTime         @default(now())
+
+  // How long this session is expected to take, in minutes — set when
+  // scheduling (a per-type default is suggested in the UI, editable).
+  // Never set for REST days; summed across the week to show total
+  // scheduled training time.
+  estimatedMinutes Int?
+
+  // How long it actually took, filled in either by hand or by linking a
+  // Strava activity once the session is done.
+  actualMinutes    Int?
+  actualSource     ActualTimeSource?
+  stravaActivityId String? // set when actualSource is STRAVA, for reference
+
+  @@index([userId, date])
+}
+
+// Holds the OAuth tokens for one user's connected Strava account — one row
+// per user. Used to look up nearby activities so their actual duration can
+// be linked to a planned session instead of typed in by hand. See
+// backend/src/services/stravaSync.ts for the token refresh logic.
+model StravaAccount {
+  id     String @id @default(cuid())
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String @unique
+
+  accessToken  String
+  refreshToken String
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// 3-month training plan (Scheduler module — see backend/src/scheduler). This
+// is a coarser grouping than SessionType: one row of priority/approach per
+// *sport*, not per specific session type, since the user sets goals like
+// "prioritize Strength this quarter" rather than per-sub-type. Balancing and
+// scheduling across sports is exactly what makes this a Scheduler concern
+// rather than something bolted onto Sport's per-sport planners.
+enum Sport {
+  STRENGTH
+  GOLF
+  RUN
+  WALK
+  CYCLING
+  CYCLING_TURBO
+  SWIM
+}
+
+enum PriorityLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum TimeOfDay {
+  MORNING
+  AFTERNOON
+  EVENING
+}
+
+// DRAFT: priorities set, sport approaches being generated/reviewed/approved.
+// FRAMEWORK: all approaches approved, weekly framework proposed and being
+// reviewed/adjusted (including via constraints) before going live.
+// ACTIVE: the framework has been approved — this is the live plan.
+// ARCHIVED: superseded by a newer plan for this user.
+enum PlanStatus {
+  DRAFT
+  FRAMEWORK
+  ACTIVE
+  ARCHIVED
+}
+
+enum ApproachStatus {
+  PROPOSED
+  APPROVED
+}
+
+model TrainingPlan {
+  id     String @id @default(cuid())
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+
+  startDate DateTime
+  endDate   DateTime
+  status    PlanStatus @default(DRAFT)
+
+  // Free-text goal the user gives when starting the plan (e.g. "build
+  // strength and lean muscle while keeping up golf and a cardio base") —
+  // passed to the AI alongside per-sport priorities so it can balance the
+  // whole picture, not just react to priority levels in isolation.
+  overallGoal String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  priorities  SportPriority[]
+  approaches  SportApproach[]
+  versions    FrameworkVersion[]
+  constraints ScheduleConstraint[]
+
+  @@index([userId, status])
+}
+
+model SportPriority {
+  id     String       @id @default(cuid())
+  plan   TrainingPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  planId String
+
+  sport    Sport
+  priority PriorityLevel
+  // Optional sport-specific goal, e.g. "add 20lb to my back squat" or
+  // "break 90" — feeds directly into that sport's approach generation.
+  goalNote String?
+
+  @@unique([planId, sport])
+}
+
+// The AI-proposed 3-month approach for one sport within a plan — a short
+// narrative (phasing, focus, how it should progress) plus a weekly session
+// count. Generated together across all prioritized sports in one call so
+// the total weekly load is balanced, not just each sport considered alone.
+model SportApproach {
+  id     String       @id @default(cuid())
+  plan   TrainingPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  planId String
+
+  sport               Sport
+  approachText        String
+  weeklySessionTarget Int
+  status              ApproachStatus @default(PROPOSED)
+
+  @@unique([planId, sport])
+}
+
+// A version of the weekly scheduling framework. The initial framework
+// generation (and any "still drafting" regeneration before the plan goes
+// ACTIVE) reuses a single version in place — there's no progress yet worth
+// preserving. Once the plan is ACTIVE, an amendment (see
+// backend/src/scheduler/routes/plan.ts's POST /:id/amend) closes the
+// current version (sets effectiveTo) and opens a new one, so the dashboard
+// can tell "what the plan called for" apart on either side of the change:
+// effectiveTo: null marks the currently-active version.
+model FrameworkVersion {
+  id     String       @id @default(cuid())
+  plan   TrainingPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  planId String
+
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
+
+  // Set only when this version came from an amendment (not the initial
+  // framework) — the AI's short summary of what changed, and the user's
+  // original free-text request, verbatim, for the version history / dashboard.
+  amendmentSummary String?
+  amendmentRequest String?
+
+  createdAt DateTime @default(now())
+
+  slots FrameworkSlot[]
+
+  @@index([planId, effectiveFrom])
+}
+
+// One recurring weekly slot in a framework version — a template ("Tuesday
+// evenings: Run - Tempo"), not a dated calendar entry. The Calendar tab's
+// actual day-by-day scheduling stays a separate, more concrete step; this
+// is the reusable weekly shape it can be built from.
+model FrameworkSlot {
+  id        String           @id @default(cuid())
+  version   FrameworkVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  versionId String
+
+  dayOfWeek   Int // 0 = Sunday .. 6 = Saturday
+  timeOfDay   TimeOfDay
+  sport       Sport
+  // Optional finer-grained suggestion within the sport, e.g. RUN_TEMPO —
+  // left null when the AI didn't have a strong reason to pick a sub-type.
+  sessionType SessionType?
+  // Only meaningful for STRENGTH — which movement pattern this slot is for,
+  // mirroring PlannedSession's own movementPattern field so the dashboard
+  // can compare planned vs. actual Push/Pull/Legs/Core minutes directly.
+  movementPattern MovementPattern?
+  label       String? // short human label, e.g. "Push day" or "Easy spin"
+  notes       String? // one line of AI reasoning for this placement
+
+  createdAt DateTime @default(now())
+
+  @@index([versionId, dayOfWeek])
+}
+
+// A free-text scheduling limitation the user typed in their own words
+// ("I can't do mornings on office days, Tue/Thu"), parsed into structured
+// days-of-week + blocked times-of-day so it can be checked against the
+// framework. rawText is kept so the user can see what they originally said
+// and the parse can be re-explained or corrected.
+model ScheduleConstraint {
+  id     String       @id @default(cuid())
+  plan   TrainingPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  planId String
+
+  rawText          String
+  daysOfWeek       Int[] // 0 = Sunday .. 6 = Saturday
+  blockedTimeOfDay TimeOfDay[]
+  // The AI's one-line explanation of how it parsed rawText — shown to the
+  // user so a misreading (e.g. which days count as "office days") is
+  // obvious and correctable rather than silently applied.
+  parseExplanation String?
+
+  createdAt DateTime @default(now())
+
+  @@index([planId])
+}
