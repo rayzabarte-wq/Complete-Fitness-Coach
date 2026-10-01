@@ -87,15 +87,18 @@ Use this only if you already use Docker or want to try it.
 
 ## Step 3: Get the code and open it in the terminal
 
-1. Unzip `strength-app-258.zip` somewhere easy to find, like your **Documents** folder. You can also download this repository from GitHub (green **Code** button, then **Download ZIP**).
-2. Move your terminal into the project folder with `cd` ("change directory"). For example:
+1. Download the app **from GitHub, not from your own zip**. Your `strength-app259.zip` is missing the database setup files and fixes that make it run. Go to
+   https://github.com/rayzabarte-wq/Complete-Fitness-Coach/tree/claude/strength-app-258-setup-l7wuii,
+   click the green **Code** button, then **Download ZIP**.
+2. Unzip it somewhere easy to find, like your **Documents** folder, and rename the folder to `strength-app259`.
+3. Move your terminal into the project folder with `cd` ("change directory"). For example:
 
    ```bash
    # Mac
-   cd ~/Documents/strength-app-258
+   cd ~/Documents/strength-app259
 
    # Windows
-   cd $HOME\Documents\strength-app-258
+   cd $HOME\Documents\strength-app259
    ```
 
    > **Tip:** Type `cd ` (with a space), drag the folder from Finder or File
@@ -209,17 +212,39 @@ Once the setup is done, you only need two terminals each time:
 
 ```bash
 # Terminal 1
-cd path/to/strength-app-258/backend
+cd path/to/strength-app259/backend
 npm run dev
 
 # Terminal 2
-cd path/to/strength-app-258/frontend
+cd path/to/strength-app259/frontend
 npm run dev
 ```
 
 Then open http://localhost:5173. Make sure the database is running first: Postgres.app is open (Mac), or Docker Desktop is open (if you used Docker). The Windows installer version starts automatically.
 
 To **stop** the app, click into each terminal and press `Ctrl + C`.
+
+## Already set up the earlier version (258)?
+
+Version 259 adds the **Schedule Builder**, where you choose the day and time of each session yourself instead of having the AI place them. It also adds a few new database fields. Your existing account and data are kept. To upgrade:
+
+1. Download the new version as in [Step 3](#step-3-get-the-code-and-open-it-in-the-terminal).
+2. Copy your old `backend/.env` file into the new `backend` folder.
+3. Stop the old app (`Ctrl + C` in both terminals). Then, in the new `backend` folder, run:
+
+   ```bash
+   npm install
+   npx prisma migrate dev
+   ```
+
+   You should see `manual_schedule_builder` listed and "Your database is now in sync with your schema."
+
+   > If you see `Drift detected` or a message asking to **reset** the database,
+   > type `n` and press Enter so nothing is deleted, then ask for help.
+   > This can happen if you created the database tables yourself earlier
+   > with `--name init`.
+
+4. In the new `frontend` folder, run `npm install`, then start both parts as usual.
 
 ## Troubleshooting
 
