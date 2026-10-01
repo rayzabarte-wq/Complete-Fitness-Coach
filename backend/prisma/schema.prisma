@@ -383,14 +383,22 @@ model SportPriority {
   // Optional sport-specific goal, e.g. "add 20lb to my back squat" or
   // "break 90" — feeds directly into that sport's approach generation.
   goalNote String?
+  // How much weekly time the person actually has for this sport, in
+  // minutes — a hard constraint the approach (and later the schedule
+  // built from it) has to fit inside, not just a priority weighting.
+  weeklyMinutesAvailable Int?
 
   @@unique([planId, sport])
 }
 
 // The AI-proposed 3-month approach for one sport within a plan — a short
-// narrative (phasing, focus, how it should progress) plus a weekly session
-// count. Generated together across all prioritized sports in one call so
-// the total weekly load is balanced, not just each sport considered alone.
+// narrative (phasing, focus, how it should progress), a weekly session
+// count, and a typical session length. Generated together across all
+// prioritized sports in one call so the total weekly load is balanced, not
+// just each sport considered alone. weeklySessionTarget x sessionMinutes is
+// the starting point for building the actual weekly schedule (see
+// FrameworkSlot) — which day/time each of those sessions lands on is a
+// decision the person makes themselves, not something generated here.
 model SportApproach {
   id     String       @id @default(cuid())
   plan   TrainingPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
@@ -399,6 +407,7 @@ model SportApproach {
   sport               Sport
   approachText        String
   weeklySessionTarget Int
+  sessionMinutes      Int            @default(45)
   status              ApproachStatus @default(PROPOSED)
 
   @@unique([planId, sport])
@@ -437,6 +446,13 @@ model FrameworkVersion {
 // evenings: Run - Tempo"), not a dated calendar entry. The Calendar tab's
 // actual day-by-day scheduling stays a separate, more concrete step; this
 // is the reusable weekly shape it can be built from.
+//
+// The day/time placement itself is chosen by the person, not proposed by
+// AI (see backend/src/scheduler/routes/plan.ts's PUT /:id/framework) — an
+// earlier version had Claude propose the whole week's layout, which didn't
+// place things the way people actually wanted, so scheduling was handed
+// back to the person, working from the AI-proposed session count/length in
+// SportApproach.
 model FrameworkSlot {
   id        String           @id @default(cuid())
   version   FrameworkVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
@@ -445,15 +461,19 @@ model FrameworkSlot {
   dayOfWeek   Int // 0 = Sunday .. 6 = Saturday
   timeOfDay   TimeOfDay
   sport       Sport
-  // Optional finer-grained suggestion within the sport, e.g. RUN_TEMPO —
-  // left null when the AI didn't have a strong reason to pick a sub-type.
+  // Optional finer-grained sub-type within the sport, e.g. RUN_TEMPO —
+  // left null when the person didn't pick one.
   sessionType SessionType?
   // Only meaningful for STRENGTH — which movement pattern this slot is for,
   // mirroring PlannedSession's own movementPattern field so the dashboard
   // can compare planned vs. actual Push/Pull/Legs/Core minutes directly.
   movementPattern MovementPattern?
+  // How long this session is expected to take — defaults to the sport's
+  // SportApproach.sessionMinutes but editable per slot, and what the
+  // schedule-builder grid sums per day for the "total planned time" view.
+  estimatedMinutes Int?
   label       String? // short human label, e.g. "Push day" or "Easy spin"
-  notes       String? // one line of AI reasoning for this placement
+  notes       String? // free-form note
 
   createdAt DateTime @default(now())
 

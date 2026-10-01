@@ -129,6 +129,7 @@ export interface SportPriority {
   sport: Sport;
   priority: PriorityLevel;
   goalNote: string | null;
+  weeklyMinutesAvailable: number | null;
 }
 
 export interface SportApproach {
@@ -136,6 +137,7 @@ export interface SportApproach {
   sport: Sport;
   approachText: string;
   weeklySessionTarget: number;
+  sessionMinutes: number;
   status: ApproachStatus;
 }
 
@@ -146,8 +148,28 @@ export interface FrameworkSlot {
   sport: Sport;
   sessionType: SessionType | null;
   movementPattern: MovementPattern | null;
+  estimatedMinutes: number | null;
   label: string | null;
   notes: string | null;
+}
+
+// A single session card in the schedule builder before it's been saved —
+// no id yet, and day/time start unset until the person picks them.
+export interface DraftFrameworkSlot {
+  sport: Sport;
+  dayOfWeek: number | null;
+  timeOfDay: TimeOfDay | null;
+  sessionType?: SessionType;
+  movementPattern?: MovementPattern;
+  estimatedMinutes: number;
+  label?: string;
+}
+
+export interface SlotsNeeded {
+  sport: Sport;
+  weeklySessionTarget: number;
+  sessionMinutes: number;
+  alreadyPlaced: number;
 }
 
 export interface ScheduleConstraint {
@@ -408,12 +430,17 @@ export const api = {
       throw err;
     }),
 
-  createPlan: (data: { overallGoal?: string; priorities: { sport: Sport; priority: PriorityLevel; goalNote?: string }[] }) =>
-    request<TrainingPlan>("/plan", { method: "POST", body: JSON.stringify(data) }),
+  createPlan: (data: {
+    overallGoal?: string;
+    priorities: { sport: Sport; priority: PriorityLevel; goalNote?: string; weeklyMinutesAvailable?: number }[];
+  }) => request<TrainingPlan>("/plan", { method: "POST", body: JSON.stringify(data) }),
 
   updatePlanPriorities: (
     planId: string,
-    data: { overallGoal?: string; priorities: { sport: Sport; priority: PriorityLevel; goalNote?: string }[] }
+    data: {
+      overallGoal?: string;
+      priorities: { sport: Sport; priority: PriorityLevel; goalNote?: string; weeklyMinutesAvailable?: number }[];
+    }
   ) => request<TrainingPlan>(`/plan/${planId}/priorities`, { method: "PATCH", body: JSON.stringify(data) }),
 
   generateApproaches: (planId: string) => request<TrainingPlan>(`/plan/${planId}/approaches/generate`, { method: "POST" }),
@@ -421,13 +448,24 @@ export const api = {
   updateApproach: (
     planId: string,
     sport: Sport,
-    data: { status?: ApproachStatus; approachText?: string; weeklySessionTarget?: number }
+    data: { status?: ApproachStatus; approachText?: string; weeklySessionTarget?: number; sessionMinutes?: number }
   ) => request<TrainingPlan>(`/plan/${planId}/approaches/${sport}`, { method: "PATCH", body: JSON.stringify(data) }),
 
-  generateFramework: (planId: string) => request<TrainingPlan>(`/plan/${planId}/framework/generate`, { method: "POST" }),
+  // How many session cards the schedule builder needs to show per sport,
+  // and how many are already placed in the current framework version.
+  getSlotsNeeded: (planId: string) => request<SlotsNeeded[]>(`/plan/${planId}/framework/slots-needed`),
 
-  updateFrameworkSlot: (planId: string, slotId: string, data: { dayOfWeek?: number; timeOfDay?: TimeOfDay; label?: string }) =>
-    request<TrainingPlan>(`/plan/${planId}/framework/${slotId}`, { method: "PATCH", body: JSON.stringify(data) }),
+  // Saves the schedule the person built themselves — a full replace of the
+  // current framework version's slots. No AI proposes placement; see
+  // api.ts's DraftFrameworkSlot and pages/ScheduleBuilder.tsx.
+  saveFramework: (planId: string, slots: DraftFrameworkSlot[], note?: string) =>
+    request<TrainingPlan>(`/plan/${planId}/framework`, { method: "PUT", body: JSON.stringify({ slots, note }) }),
+
+  updateFrameworkSlot: (
+    planId: string,
+    slotId: string,
+    data: { dayOfWeek?: number; timeOfDay?: TimeOfDay; sessionType?: SessionType; movementPattern?: MovementPattern; estimatedMinutes?: number; label?: string }
+  ) => request<TrainingPlan>(`/plan/${planId}/framework/${slotId}`, { method: "PATCH", body: JSON.stringify(data) }),
 
   activatePlan: (planId: string) => request<TrainingPlan>(`/plan/${planId}/activate`, { method: "POST" }),
 
@@ -446,8 +484,11 @@ export const api = {
   deleteConstraint: (planId: string, constraintId: string) =>
     request<TrainingPlan>(`/plan/${planId}/constraints/${constraintId}`, { method: "DELETE" }),
 
+  // Updates approach content only (weekly session count, session length,
+  // approach text) — never the schedule. changeSummary is a one-line
+  // description of what the AI changed, for the caller to show once.
   amendPlan: (planId: string, requestText: string) =>
-    request<TrainingPlan>(`/plan/${planId}/amend`, { method: "POST", body: JSON.stringify({ requestText }) }),
+    request<TrainingPlan & { changeSummary: string }>(`/plan/${planId}/amend`, { method: "POST", body: JSON.stringify({ requestText }) }),
 
   // todayKey should be a local YYYY-MM-DD (see lib/location.ts's
   // formatLocalDateKey) so the week/month periods line up with the

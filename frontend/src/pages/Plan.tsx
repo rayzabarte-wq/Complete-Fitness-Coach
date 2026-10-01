@@ -9,6 +9,7 @@ import {
   SlotConflict,
 } from "../lib/api.js";
 import PlanDashboard from "./PlanDashboard.js";
+import ScheduleBuilder from "./ScheduleBuilder.js";
 
 const SPORTS: Sport[] = ["STRENGTH", "GOLF", "RUN", "WALK", "CYCLING", "CYCLING_TURBO", "SWIM"];
 const SPORT_LABELS: Record<Sport, string> = {
@@ -25,10 +26,31 @@ const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const TIME_LABELS = { MORNING: "Morning", AFTERNOON: "Afternoon", EVENING: "Evening" } as const;
 const TIMES: (keyof typeof TIME_LABELS)[] = ["MORNING", "AFTERNOON", "EVENING"];
 
-type DraftPriority = { sport: Sport; included: boolean; priority: PriorityLevel; goalNote: string };
+type DraftPriority = {
+  sport: Sport;
+  included: boolean;
+  priority: PriorityLevel;
+  goalNote: string;
+  weeklyHours: number | "";
+  weeklyMinutes: number | "";
+};
 
 function defaultDraftPriorities(): DraftPriority[] {
-  return SPORTS.map((sport) => ({ sport, included: sport === "STRENGTH", priority: "MEDIUM", goalNote: "" }));
+  return SPORTS.map((sport) => ({
+    sport,
+    included: sport === "STRENGTH",
+    priority: "MEDIUM",
+    goalNote: "",
+    weeklyHours: "",
+    weeklyMinutes: "",
+  }));
+}
+
+function minutesFromDraft(p: DraftPriority): number | undefined {
+  const h = p.weeklyHours === "" ? 0 : p.weeklyHours;
+  const m = p.weeklyMinutes === "" ? 0 : p.weeklyMinutes;
+  const total = h * 60 + m;
+  return total > 0 ? total : undefined;
 }
 
 export default function Plan() {
@@ -45,6 +67,7 @@ export default function Plan() {
 
   const [amendmentText, setAmendmentText] = useState("");
   const [view, setView] = useState<"plan" | "dashboard">("plan");
+  const [showScheduleBuilder, setShowScheduleBuilder] = useState(false);
 
   useEffect(() => {
     refresh();
@@ -59,9 +82,18 @@ export default function Plan() {
         setDraftPriorities(
           SPORTS.map((sport) => {
             const existing = current.priorities.find((p) => p.sport === sport);
-            return existing
-              ? { sport, included: true, priority: existing.priority, goalNote: existing.goalNote ?? "" }
-              : { sport, included: false, priority: "MEDIUM", goalNote: "" };
+            if (!existing) {
+              return { sport, included: false, priority: "MEDIUM", goalNote: "", weeklyHours: "", weeklyMinutes: "" };
+            }
+            const totalMinutes = existing.weeklyMinutesAvailable ?? null;
+            return {
+              sport,
+              included: true,
+              priority: existing.priority,
+              goalNote: existing.goalNote ?? "",
+              weeklyHours: totalMinutes !== null ? Math.floor(totalMinutes / 60) : "",
+              weeklyMinutes: totalMinutes !== null ? totalMinutes % 60 : "",
+            };
           })
         );
       }
@@ -81,7 +113,12 @@ export default function Plan() {
     try {
       const payload = {
         overallGoal: overallGoal || undefined,
-        priorities: included.map((p) => ({ sport: p.sport, priority: p.priority, goalNote: p.goalNote || undefined })),
+        priorities: included.map((p) => ({
+          sport: p.sport,
+          priority: p.priority,
+          goalNote: p.goalNote || undefined,
+          weeklyMinutesAvailable: minutesFromDraft(p),
+        })),
       };
       const updated = plan && plan.status === "DRAFT" ? await api.updatePlanPriorities(plan.id, payload) : await api.createPlan(payload);
       setPlan(updated);
@@ -106,7 +143,10 @@ export default function Plan() {
     }
   }
 
-  async function handleApproveApproach(approach: SportApproach, edits?: { approachText?: string; weeklySessionTarget?: number }) {
+  async function handleApproveApproach(
+    approach: SportApproach,
+    edits?: { approachText?: string; weeklySessionTarget?: number; sessionMinutes?: number }
+  ) {
     if (!plan) return;
     setBusy(true);
     setError(null);
@@ -119,17 +159,9 @@ export default function Plan() {
     }
   }
 
-  async function handleGenerateFramework() {
-    if (!plan) return;
-    setBusy(true);
-    setError(null);
-    try {
-      setPlan(await api.generateFramework(plan.id));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to generate the weekly framework");
-    } finally {
-      setBusy(false);
-    }
+  function handleScheduleSaved(updated: TrainingPlan) {
+    setPlan(updated);
+    setShowScheduleBuilder(false);
   }
 
   async function handleActivate() {
@@ -216,6 +248,15 @@ export default function Plan() {
 
   const showPriorityForm = editingPriorities || !plan || (plan.status === "DRAFT" && plan.priorities.length === 0);
 
+  const approvedApproaches = plan ? plan.approaches.filter((a) => a.status === "APPROVED") : [];
+  const allApproachesApproved = plan ? plan.approaches.length > 0 && approvedApproaches.length === plan.approaches.length : false;
+
+  // After an amendment changes a sport's session count, the schedule built earlier may no longer
+  // match — flag it so the person knows to revisit the schedule builder for that sport.
+  const scheduleMismatch = plan
+    ? approvedApproaches.some((a) => plan.slots.filter((s) => s.sport === a.sport).length !== a.weeklySessionTarget)
+    : false;
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div>
@@ -270,6 +311,15 @@ export default function Plan() {
 
       {view === "dashboard" && plan ? (
         <PlanDashboard planId={plan.id} />
+      ) : showScheduleBuilder && plan ? (
+        <ScheduleBuilder
+          plan={plan}
+          approaches={approvedApproaches}
+          existingSlots={plan.slots}
+          constraints={plan.constraints}
+          onSaved={handleScheduleSaved}
+          onCancel={() => setShowScheduleBuilder(false)}
+        />
       ) : (
         <>
       {plan && plan.status !== "DRAFT" && (
@@ -318,9 +368,9 @@ export default function Plan() {
             Regenerate all approaches
           </button>
 
-          {plan.approaches.every((a) => a.status === "APPROVED") ? (
-            <button className="button-primary" disabled={busy} onClick={handleGenerateFramework}>
-              {busy ? "Building framework..." : "Propose weekly scheduling framework"}
+          {allApproachesApproved ? (
+            <button className="button-primary" disabled={busy} onClick={() => setShowScheduleBuilder(true)}>
+              Build your weekly schedule
             </button>
           ) : (
             <p className="text-dim" style={{ fontSize: 13 }}>
@@ -344,11 +394,24 @@ export default function Plan() {
             <button
               className="button-primary"
               disabled={busy}
-              onClick={handleGenerateFramework}
+              onClick={() => setShowScheduleBuilder(true)}
               style={{ background: "transparent", border: "1px solid var(--border)", color: "var(--text)" }}
             >
-              Regenerate framework
+              Edit schedule
             </button>
+          )}
+
+          {plan.status === "ACTIVE" && scheduleMismatch && (
+            <div className="card" style={{ borderColor: "var(--danger)" }}>
+              <strong style={{ fontSize: 13 }}>Your schedule needs updating</strong>
+              <p className="text-dim" style={{ fontSize: 13, marginTop: 6 }}>
+                A recent amendment changed how many sessions a week one or more sports call for, so the placed schedule below no longer
+                matches. Rebuild it to fit the current approach.
+              </p>
+              <button className="button-primary" disabled={busy} onClick={() => setShowScheduleBuilder(true)} style={{ marginTop: 8 }}>
+                Update schedule
+              </button>
+            </div>
           )}
 
           {plan.status === "ACTIVE" && (
@@ -357,6 +420,8 @@ export default function Plan() {
               <p className="text-dim" style={{ fontSize: 13, marginTop: 6 }}>
                 Describe a change in your own words — e.g. "cut running back to twice a week and add a second golf short-game session".
                 It applies from today through the rest of the 3 months; the dashboard keeps track of progress from before and after the change.
+                Amendments only change the plan's content (sessions per week, session length, approach) — afterward, revisit your schedule
+                if the day/time placement needs to change too.
               </p>
               <textarea
                 value={amendmentText}
@@ -533,6 +598,34 @@ function PriorityForm({
                   placeholder={`Specific goal for ${SPORT_LABELS[p.sport]} (optional)`}
                   style={{ background: "var(--bg)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 6, padding: 6 }}
                 />
+                <label style={{ fontSize: 12 }} className="text-dim">
+                  Weekly time available for {SPORT_LABELS[p.sport]} (optional — the AI's proposed sessions/week won't exceed this):
+                </label>
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <input
+                    type="number"
+                    min={0}
+                    value={p.weeklyHours}
+                    onChange={(e) => update(p.sport, { weeklyHours: e.target.value === "" ? "" : Number(e.target.value) })}
+                    placeholder="hrs"
+                    style={{ width: 60, background: "var(--bg)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 6, padding: 6 }}
+                  />
+                  <span className="text-dim" style={{ fontSize: 12 }}>
+                    h
+                  </span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={59}
+                    value={p.weeklyMinutes}
+                    onChange={(e) => update(p.sport, { weeklyMinutes: e.target.value === "" ? "" : Number(e.target.value) })}
+                    placeholder="min"
+                    style={{ width: 60, background: "var(--bg)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 6, padding: 6 }}
+                  />
+                  <span className="text-dim" style={{ fontSize: 12 }}>
+                    m / week
+                  </span>
+                </div>
               </div>
             )}
           </div>
@@ -553,11 +646,12 @@ function ApproachCard({
 }: {
   approach: SportApproach;
   busy: boolean;
-  onApprove: (a: SportApproach, edits?: { approachText?: string; weeklySessionTarget?: number }) => void;
+  onApprove: (a: SportApproach, edits?: { approachText?: string; weeklySessionTarget?: number; sessionMinutes?: number }) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(approach.approachText);
   const [target, setTarget] = useState(approach.weeklySessionTarget);
+  const [minutes, setMinutes] = useState(approach.sessionMinutes);
 
   return (
     <div className="card">
@@ -574,21 +668,34 @@ function ApproachCard({
             rows={3}
             style={{ width: "100%", background: "var(--bg)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 6, padding: 8 }}
           />
-          <label style={{ fontSize: 13 }}>
-            Sessions/week:{" "}
-            <input
-              type="number"
-              min={1}
-              value={target}
-              onChange={(e) => setTarget(Number(e.target.value))}
-              style={{ width: 60, background: "var(--bg)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 6, padding: 4 }}
-            />
-          </label>
+          <div style={{ display: "flex", gap: 12 }}>
+            <label style={{ fontSize: 13 }}>
+              Sessions/week:{" "}
+              <input
+                type="number"
+                min={1}
+                value={target}
+                onChange={(e) => setTarget(Number(e.target.value))}
+                style={{ width: 60, background: "var(--bg)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 6, padding: 4 }}
+              />
+            </label>
+            <label style={{ fontSize: 13 }}>
+              Min/session:{" "}
+              <input
+                type="number"
+                min={5}
+                step={5}
+                value={minutes}
+                onChange={(e) => setMinutes(Number(e.target.value))}
+                style={{ width: 60, background: "var(--bg)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 6, padding: 4 }}
+              />
+            </label>
+          </div>
           <button
             className="button-primary"
             disabled={busy}
             onClick={() => {
-              onApprove(approach, { approachText: text, weeklySessionTarget: target });
+              onApprove(approach, { approachText: text, weeklySessionTarget: target, sessionMinutes: minutes });
               setEditing(false);
             }}
           >
@@ -598,7 +705,9 @@ function ApproachCard({
       ) : (
         <>
           <p style={{ fontSize: 14, margin: "8px 0" }}>{approach.approachText}</p>
-          <p className="text-dim" style={{ fontSize: 13, margin: "0 0 10px" }}>{approach.weeklySessionTarget} sessions/week</p>
+          <p className="text-dim" style={{ fontSize: 13, margin: "0 0 10px" }}>
+            {approach.weeklySessionTarget} sessions/week, ~{approach.sessionMinutes} min each
+          </p>
           {approach.status !== "APPROVED" && (
             <div style={{ display: "flex", gap: 8 }}>
               <button className="button-primary" disabled={busy} onClick={() => onApprove(approach)}>
@@ -657,7 +766,14 @@ function WeekGrid({ slots }: { slots: FrameworkSlot[] }) {
                     textAlign: "center",
                   }}
                 >
-                  {slot ? slot.label ?? SPORT_LABELS[slot.sport] : ""}
+                  {slot ? (
+                    <span>
+                      {slot.label ?? SPORT_LABELS[slot.sport]}
+                      {slot.estimatedMinutes ? <div className="text-dim">{slot.estimatedMinutes}m</div> : null}
+                    </span>
+                  ) : (
+                    ""
+                  )}
                 </div>
               );
             })}

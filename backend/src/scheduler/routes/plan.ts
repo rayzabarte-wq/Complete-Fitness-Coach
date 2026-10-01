@@ -4,7 +4,6 @@ import { prisma } from "../../lib/prisma.js";
 import { AuthedRequest } from "../../lib/requireAuth.js";
 import {
   generateSportApproaches,
-  generateWeeklyFramework,
   parseScheduleConstraint,
   findConstraintConflicts,
   generatePlanAmendment,
@@ -18,6 +17,28 @@ const sportSchema = z.enum(["STRENGTH", "GOLF", "RUN", "WALK", "CYCLING", "CYCLI
 const priorityLevelSchema = z.enum(["LOW", "MEDIUM", "HIGH"]);
 const timeOfDaySchema = z.enum(["MORNING", "AFTERNOON", "EVENING"]);
 const movementPatternSchema = z.enum(["PUSH", "PULL", "LEGS", "CORE"]);
+const sessionTypeSchema = z.enum([
+  "STRENGTH",
+  "SWIM",
+  "GOLF_RANGE",
+  "GOLF_ROUND",
+  "GOLF_SHORT_GAME",
+  "GOLF_PUTTING",
+  "RUN_RECOVERY",
+  "RUN_TEMPO",
+  "RUN_FARTLEK",
+  "RUN_INTERVALS",
+  "RUN_LONG_RUN",
+  "WALK_WALK",
+  "WALK_HIKE",
+  "CYCLING_EASY",
+  "CYCLING_LONG",
+  "CYCLING_HILLS",
+  "CYCLING_TURBO_EASY",
+  "CYCLING_TURBO_LONG",
+  "CYCLING_TURBO_HILLS",
+]);
+const DAY_LABELS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 // Loads a plan with everything the frontend needs, shaped so `slots` is
 // always the CURRENT framework version's slots (flattened, for backward
@@ -61,11 +82,19 @@ async function loadOwnedPlan(userId: string | undefined, planId: string) {
 
 // POST /plan - start a new 3-month plan. Archives any existing non-archived
 // plan for this user first, since only one plan is "current" at a time.
+const priorityInputSchema = z.object({
+  sport: sportSchema,
+  priority: priorityLevelSchema,
+  goalNote: z.string().optional(),
+  // Minutes/week the person actually has for this sport — a hard ceiling
+  // the AI-proposed approach (and later the schedule built from it) has to
+  // fit inside, not just a priority weighting.
+  weeklyMinutesAvailable: z.number().int().positive().optional(),
+});
+
 const createPlanSchema = z.object({
   overallGoal: z.string().optional(),
-  priorities: z
-    .array(z.object({ sport: sportSchema, priority: priorityLevelSchema, goalNote: z.string().optional() }))
-    .min(1),
+  priorities: z.array(priorityInputSchema).min(1),
 });
 
 planRouter.post("/", async (req: AuthedRequest, res) => {
@@ -90,7 +119,14 @@ planRouter.post("/", async (req: AuthedRequest, res) => {
         startDate,
         endDate,
         overallGoal,
-        priorities: { create: priorities.map((p) => ({ sport: p.sport, priority: p.priority, goalNote: p.goalNote })) },
+        priorities: {
+          create: priorities.map((p) => ({
+            sport: p.sport,
+            priority: p.priority,
+            goalNote: p.goalNote,
+            weeklyMinutesAvailable: p.weeklyMinutesAvailable,
+          })),
+        },
       },
     });
   });
@@ -116,9 +152,7 @@ planRouter.get("/current", async (req: AuthedRequest, res) => {
 // (or regenerating) approaches. Only sensible while the plan is still DRAFT.
 const updatePrioritiesSchema = z.object({
   overallGoal: z.string().optional(),
-  priorities: z
-    .array(z.object({ sport: sportSchema, priority: priorityLevelSchema, goalNote: z.string().optional() }))
-    .min(1),
+  priorities: z.array(priorityInputSchema).min(1),
 });
 
 planRouter.patch("/:id/priorities", async (req: AuthedRequest, res) => {
@@ -136,7 +170,14 @@ planRouter.patch("/:id/priorities", async (req: AuthedRequest, res) => {
       where: { id: plan.id },
       data: {
         overallGoal: parsed.data.overallGoal,
-        priorities: { create: parsed.data.priorities.map((p) => ({ sport: p.sport, priority: p.priority, goalNote: p.goalNote })) },
+        priorities: {
+          create: parsed.data.priorities.map((p) => ({
+            sport: p.sport,
+            priority: p.priority,
+            goalNote: p.goalNote,
+            weeklyMinutesAvailable: p.weeklyMinutesAvailable,
+          })),
+        },
       },
     }),
   ]);
@@ -163,7 +204,13 @@ planRouter.post("/:id/approaches/generate", async (req: AuthedRequest, res) => {
       prisma.sportApproach.deleteMany({ where: { planId: plan.id } }),
       ...generated.map((a) =>
         prisma.sportApproach.create({
-          data: { planId: plan.id, sport: a.sport, approachText: a.approachText, weeklySessionTarget: a.weeklySessionTarget },
+          data: {
+            planId: plan.id,
+            sport: a.sport,
+            approachText: a.approachText,
+            weeklySessionTarget: a.weeklySessionTarget,
+            sessionMinutes: a.sessionMinutes,
+          },
         })
       ),
     ]);
@@ -181,6 +228,7 @@ const updateApproachSchema = z.object({
   status: z.enum(["PROPOSED", "APPROVED"]).optional(),
   approachText: z.string().optional(),
   weeklySessionTarget: z.number().int().positive().optional(),
+  sessionMinutes: z.number().int().positive().optional(),
 });
 
 planRouter.patch("/:id/approaches/:sport", async (req: AuthedRequest, res) => {
@@ -196,81 +244,151 @@ planRouter.patch("/:id/approaches/:sport", async (req: AuthedRequest, res) => {
   const existing = await prisma.sportApproach.findFirst({ where: { planId: plan.id, sport: sportParsed.data } });
   if (!existing) return res.status(404).json({ error: "Approach not found for this sport" });
 
-  const { status, approachText, weeklySessionTarget } = parsed.data;
+  const { status, approachText, weeklySessionTarget, sessionMinutes } = parsed.data;
   await prisma.sportApproach.update({
     where: { id: existing.id },
     data: {
       approachText,
       weeklySessionTarget,
-      status: status ?? (approachText || weeklySessionTarget ? "APPROVED" : undefined),
+      sessionMinutes,
+      status: status ?? (approachText || weeklySessionTarget || sessionMinutes ? "APPROVED" : undefined),
     },
   });
 
   res.json(await loadFullPlan(plan.id));
 });
 
-// POST /plan/:id/framework/generate - AI-generate the recurring weekly
-// framework. While the plan is still DRAFT/FRAMEWORK (not yet activated),
-// this replaces the one-and-only version's slots in place — there's no
-// progress yet worth preserving as history. Once the plan is ACTIVE, use
-// POST /:id/amend instead, which properly versions the change.
-planRouter.post("/:id/framework/generate", async (req: AuthedRequest, res) => {
+// GET /plan/:id/framework/slots-needed - how many slots of each sport the
+// person needs to place, derived from the approved approaches' weekly
+// session targets, and how many they've already placed in the current
+// framework version (if any) — what the schedule-builder grid seeds itself
+// from. Not itself a mutation; the frontend uses this to know how many
+// session cards to show per sport before the person has placed anything.
+planRouter.get("/:id/framework/slots-needed", async (req: AuthedRequest, res) => {
+  const plan = await prisma.trainingPlan.findFirst({
+    where: { id: req.params.id, userId: req.userId },
+    include: { approaches: true },
+  });
+  if (!plan) return res.status(404).json({ error: "Plan not found" });
+
+  const currentVersion = await getCurrentVersion(plan.id);
+  const placedBySport = new Map<string, number>();
+  for (const slot of currentVersion?.slots ?? []) {
+    placedBySport.set(slot.sport, (placedBySport.get(slot.sport) ?? 0) + 1);
+  }
+
+  res.json(
+    plan.approaches
+      .filter((a) => a.status === "APPROVED")
+      .map((a) => ({
+        sport: a.sport,
+        weeklySessionTarget: a.weeklySessionTarget,
+        sessionMinutes: a.sessionMinutes,
+        alreadyPlaced: placedBySport.get(a.sport) ?? 0,
+      }))
+  );
+});
+
+// PUT /plan/:id/framework - save the weekly schedule the person built
+// themselves (day + time-of-day + sport, for every session they've placed)
+// — this is a full replace of the current framework version's slots, not a
+// generator. No AI is involved in choosing placement; see
+// trainingPlanner.ts's comment on generateSportApproaches for why.
+//
+// While the plan is still DRAFT/FRAMEWORK (not yet activated), this
+// replaces the one-and-only version's slots in place — there's no progress
+// yet worth preserving as history. Once the plan is ACTIVE, saving here
+// closes the current version and opens a new one, the same versioning an
+// approach-content amendment (POST /:id/amend) uses, so the dashboard can
+// still show progress against the schedule as it stood before this change.
+const saveFrameworkSlotSchema = z
+  .object({
+    sport: sportSchema,
+    dayOfWeek: z.number().int().min(0).max(6),
+    timeOfDay: timeOfDaySchema,
+    sessionType: sessionTypeSchema.optional(),
+    movementPattern: movementPatternSchema.optional(),
+    estimatedMinutes: z.number().int().positive().optional(),
+    label: z.string().optional(),
+  })
+  .refine((s) => s.sport !== "STRENGTH" || s.movementPattern, {
+    message: "movementPattern is required for STRENGTH sessions",
+    path: ["movementPattern"],
+  })
+  .refine((s) => s.sport === "STRENGTH" || !s.movementPattern, {
+    message: "movementPattern only applies to STRENGTH sessions",
+    path: ["movementPattern"],
+  });
+
+const saveFrameworkSchema = z.object({
+  slots: z.array(saveFrameworkSlotSchema).min(1),
+  // Optional free-text note on what changed and why — only used (and only
+  // shown later) when this save is amending an ACTIVE plan's schedule.
+  note: z.string().optional(),
+});
+
+planRouter.put("/:id/framework", async (req: AuthedRequest, res) => {
   const plan = await prisma.trainingPlan.findFirst({
     where: { id: req.params.id, userId: req.userId },
     include: { approaches: true, constraints: true },
   });
   if (!plan) return res.status(404).json({ error: "Plan not found" });
-  if (plan.status === "ACTIVE") {
-    return res.status(400).json({ error: "Plan is already active — use a plan amendment to change the framework for the remainder of the plan." });
-  }
-  if (plan.approaches.length === 0) {
-    return res.status(400).json({ error: "Generate and approve sport approaches first" });
-  }
-  const unapproved = plan.approaches.filter((a) => a.status !== "APPROVED");
-  if (unapproved.length > 0) {
-    return res.status(400).json({ error: `Approve every sport's approach first (still pending: ${unapproved.map((a) => a.sport).join(", ")})` });
+  if (plan.approaches.length === 0 || plan.approaches.some((a) => a.status !== "APPROVED")) {
+    return res.status(400).json({ error: "Approve every sport's approach before building the schedule" });
   }
 
-  const user = await prisma.user.findUnique({ where: { id: req.userId! } });
+  const parsed = saveFrameworkSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  const { slots, note } = parsed.data;
 
-  try {
-    const generated = await generateWeeklyFramework(
-      plan.approaches.map((a) => ({ sport: a.sport, approachText: a.approachText, weeklySessionTarget: a.weeklySessionTarget })),
-      user?.visibleSessionTypes ?? [],
-      plan.constraints.map((c) => ({ rawText: c.rawText, daysOfWeek: c.daysOfWeek, blockedTimeOfDay: c.blockedTimeOfDay }))
-    );
+  // No two sessions in the same day + time-of-day slot.
+  const seen = new Set<string>();
+  for (const s of slots) {
+    const key = `${s.dayOfWeek}-${s.timeOfDay}`;
+    if (seen.has(key)) {
+      return res.status(400).json({
+        error: `Two sessions are both scheduled for ${DAY_LABELS[s.dayOfWeek]} — each day can only have one session per time of day (morning/afternoon/evening).`,
+      });
+    }
+    seen.add(key);
+  }
 
-    const existingVersion = await getCurrentVersion(plan.id);
+  // Don't allow saving a session into a day/time a constraint has blocked.
+  for (const s of slots) {
+    const violated = plan.constraints.find((c) => c.daysOfWeek.includes(s.dayOfWeek) && c.blockedTimeOfDay.includes(s.timeOfDay));
+    if (violated) {
+      return res.status(400).json({
+        error: `${DAY_LABELS[s.dayOfWeek]} ${s.timeOfDay.toLowerCase()} conflicts with your constraint "${violated.rawText}" — pick a different day or time for that session.`,
+      });
+    }
+  }
 
-    await prisma.$transaction(async (tx) => {
+  const currentVersion = await getCurrentVersion(plan.id);
+  const now = new Date();
+
+  await prisma.$transaction(async (tx) => {
+    if (plan.status === "ACTIVE" && currentVersion) {
+      // A schedule change to a live plan is versioned the same way a
+      // content amendment is, so the dashboard can compare before/after.
+      await tx.frameworkVersion.update({ where: { id: currentVersion.id }, data: { effectiveTo: now } });
+      const newVersion = await tx.frameworkVersion.create({
+        data: { planId: plan.id, effectiveFrom: now, amendmentSummary: note ?? "Schedule updated" },
+      });
+      await tx.frameworkSlot.createMany({ data: slots.map((s) => ({ ...s, versionId: newVersion.id })) });
+    } else {
+      // Still drafting — replace the one-and-only version's slots in place.
       await tx.trainingPlan.update({ where: { id: plan.id }, data: { status: "FRAMEWORK" } });
-
-      const versionId = existingVersion
-        ? existingVersion.id
+      const versionId = currentVersion
+        ? currentVersion.id
         : (await tx.frameworkVersion.create({ data: { planId: plan.id, effectiveFrom: plan.startDate } })).id;
-
-      if (existingVersion) {
+      if (currentVersion) {
         await tx.frameworkSlot.deleteMany({ where: { versionId } });
       }
+      await tx.frameworkSlot.createMany({ data: slots.map((s) => ({ ...s, versionId })) });
+    }
+  });
 
-      await tx.frameworkSlot.createMany({
-        data: generated.map((s) => ({
-          versionId,
-          dayOfWeek: s.dayOfWeek,
-          timeOfDay: s.timeOfDay,
-          sport: s.sport,
-          sessionType: s.sessionType ?? null,
-          movementPattern: s.movementPattern ?? null,
-          label: s.label ?? null,
-          notes: s.notes ?? null,
-        })),
-      });
-    });
-
-    res.json(await loadFullPlan(plan.id));
-  } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : "Failed to generate the weekly framework" });
-  }
+  res.json(await loadFullPlan(plan.id));
 });
 
 // PATCH /plan/:id/framework/:slotId - manually move or edit one slot in the
@@ -278,7 +396,9 @@ planRouter.post("/:id/framework/generate", async (req: AuthedRequest, res) => {
 const updateSlotSchema = z.object({
   dayOfWeek: z.number().int().min(0).max(6).optional(),
   timeOfDay: timeOfDaySchema.optional(),
+  sessionType: sessionTypeSchema.optional(),
   movementPattern: movementPatternSchema.optional(),
+  estimatedMinutes: z.number().int().positive().optional(),
   label: z.string().optional(),
 });
 
@@ -312,16 +432,18 @@ planRouter.post("/:id/activate", async (req: AuthedRequest, res) => {
 });
 
 // POST /plan/:id/amend - apply a free-text amendment request to an ACTIVE
-// plan's framework (and, where relevant, the affected sports' approaches),
-// for the remainder of the 3 months. Closes the current framework version
-// and opens a new one, so the dashboard can show progress against the plan
-// as it stood before this change as well as the plan as it now stands.
+// plan's sport approaches (weekly session count, session length, approach
+// text) — content only, never the day/time schedule. Doesn't touch the
+// framework version at all: after this, the affected sports' targets have
+// changed, and the person goes to the schedule builder (PUT /:id/framework)
+// to rework the placement themselves, which is what actually opens a new
+// framework version.
 const amendPlanSchema = z.object({ requestText: z.string().min(1) });
 
 planRouter.post("/:id/amend", async (req: AuthedRequest, res) => {
   const plan = await prisma.trainingPlan.findFirst({
     where: { id: req.params.id, userId: req.userId },
-    include: { approaches: true, constraints: true },
+    include: { approaches: true },
   });
   if (!plan) return res.status(404).json({ error: "Plan not found" });
   if (plan.status !== "ACTIVE") {
@@ -331,65 +453,32 @@ planRouter.post("/:id/amend", async (req: AuthedRequest, res) => {
   const parsed = amendPlanSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
-  const currentVersion = await getCurrentVersion(plan.id);
-  if (!currentVersion) {
-    return res.status(400).json({ error: "No active framework version found for this plan" });
-  }
-
   try {
     const amendment = await generatePlanAmendment({
       overallGoal: plan.overallGoal,
-      approaches: plan.approaches.map((a) => ({ sport: a.sport, approachText: a.approachText, weeklySessionTarget: a.weeklySessionTarget })),
-      currentSlots: currentVersion.slots.map((s) => ({
-        dayOfWeek: s.dayOfWeek,
-        timeOfDay: s.timeOfDay,
-        sport: s.sport,
-        sessionType: s.sessionType,
-        movementPattern: s.movementPattern,
-        label: s.label,
+      approaches: plan.approaches.map((a) => ({
+        sport: a.sport,
+        approachText: a.approachText,
+        weeklySessionTarget: a.weeklySessionTarget,
+        sessionMinutes: a.sessionMinutes,
       })),
-      constraints: plan.constraints.map((c) => ({ rawText: c.rawText, daysOfWeek: c.daysOfWeek, blockedTimeOfDay: c.blockedTimeOfDay })),
       requestText: parsed.data.requestText,
     });
 
-    const now = new Date();
+    await prisma.$transaction(
+      amendment.approachUpdates
+        .map((update) => plan.approaches.find((a) => a.sport === update.sport))
+        .filter((existing): existing is (typeof plan.approaches)[number] => !!existing)
+        .map((existing) => {
+          const update = amendment.approachUpdates.find((u) => u.sport === existing.sport)!;
+          return prisma.sportApproach.update({
+            where: { id: existing.id },
+            data: { approachText: update.approachText, weeklySessionTarget: update.weeklySessionTarget, sessionMinutes: update.sessionMinutes },
+          });
+        })
+    );
 
-    await prisma.$transaction(async (tx) => {
-      await tx.frameworkVersion.update({ where: { id: currentVersion.id }, data: { effectiveTo: now } });
-
-      for (const update of amendment.approachUpdates) {
-        const existing = plan.approaches.find((a) => a.sport === update.sport);
-        if (!existing) continue;
-        await tx.sportApproach.update({
-          where: { id: existing.id },
-          data: { approachText: update.approachText, weeklySessionTarget: update.weeklySessionTarget },
-        });
-      }
-
-      const newVersion = await tx.frameworkVersion.create({
-        data: {
-          planId: plan.id,
-          effectiveFrom: now,
-          amendmentSummary: amendment.changeSummary,
-          amendmentRequest: parsed.data.requestText,
-        },
-      });
-
-      await tx.frameworkSlot.createMany({
-        data: amendment.slots.map((s) => ({
-          versionId: newVersion.id,
-          dayOfWeek: s.dayOfWeek,
-          timeOfDay: s.timeOfDay,
-          sport: s.sport,
-          sessionType: s.sessionType ?? null,
-          movementPattern: s.movementPattern ?? null,
-          label: s.label ?? null,
-          notes: s.notes ?? null,
-        })),
-      });
-    });
-
-    res.json(await loadFullPlan(plan.id));
+    res.json({ ...(await loadFullPlan(plan.id)), changeSummary: amendment.changeSummary });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : "Failed to apply that amendment" });
   }
@@ -500,7 +589,7 @@ planRouter.post("/:id/constraints/:constraintId/apply", async (req: AuthedReques
 
 // DELETE /plan/:id/constraints/:constraintId - remove a constraint. Leaves
 // any already-moved slots where they are; it just stops enforcing that limit
-// going forward (e.g. on the next framework regeneration or amendment).
+// going forward (e.g. the next time the schedule is rebuilt).
 planRouter.delete("/:id/constraints/:constraintId", async (req: AuthedRequest, res) => {
   const plan = await loadOwnedPlan(req.userId, req.params.id);
   if (!plan) return res.status(404).json({ error: "Plan not found" });

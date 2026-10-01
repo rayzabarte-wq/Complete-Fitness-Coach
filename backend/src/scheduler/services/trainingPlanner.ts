@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "../../lib/prisma.js";
-import type { Sport, TimeOfDay, SessionType, SportPriority, MovementPattern } from "@prisma/client";
+import type { Sport, TimeOfDay, SportPriority } from "@prisma/client";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -47,37 +47,50 @@ async function askClaude(prompt: string, maxTokens: number): Promise<string> {
 // ---------------------------------------------------------------------------
 // Step 1: per-sport 3-month approach, generated together across every
 // prioritized sport in one call so total weekly volume stays realistic
-// rather than each sport being sized as if it were the only one.
+// rather than each sport being sized as if it were the only one. This is
+// as far as AI involvement in scheduling goes — the day/time placement
+// itself (see PUT /:id/framework in routes/plan.ts) is the person's own
+// choice, not generated. An earlier version had Claude propose the whole
+// week's layout too, but it didn't place sessions the way people actually
+// wanted, so that step is now a manual grid the person fills in, seeded by
+// the session count/length proposed here.
 // ---------------------------------------------------------------------------
 
 export interface GeneratedApproach {
   sport: Sport;
   approachText: string;
   weeklySessionTarget: number;
+  sessionMinutes: number;
 }
 
 export async function generateSportApproaches(
   overallGoal: string | null,
-  priorities: Pick<SportPriority, "sport" | "priority" | "goalNote">[]
+  priorities: Pick<SportPriority, "sport" | "priority" | "goalNote" | "weeklyMinutesAvailable">[]
 ): Promise<GeneratedApproach[]> {
   const priorityLines = priorities
-    .map((p) => `- ${SPORT_LABELS[p.sport]}: priority ${p.priority}${p.goalNote ? `, goal: "${p.goalNote}"` : ""}`)
+    .map(
+      (p) =>
+        `- ${SPORT_LABELS[p.sport]}: priority ${p.priority}${p.goalNote ? `, goal: "${p.goalNote}"` : ""}${
+          p.weeklyMinutesAvailable ? `, time available: ${p.weeklyMinutesAvailable} minutes/week` : ""
+        }`
+    )
     .join("\n");
 
   const prompt = `You are a training coach building a balanced 3-month (12-week) plan across multiple sports/activities for one person.
 
 ${overallGoal ? `Overall goal stated by the person: "${overallGoal}"\n` : ""}
-Sports they want included this quarter, with their priority level and any specific goal for that sport:
+Sports they want included this quarter, with their priority level, any specific goal, and (where given) how much weekly time they actually have available for that sport:
 ${priorityLines}
 
 For EACH sport listed above, propose:
 1. A short approach (2-4 sentences) describing how training in that sport should be structured and progress across the 12 weeks — mention phasing where it helps (e.g. base building, then intensity), and what the main focus is given its priority level and goal.
 2. A realistic weekly session count (weeklySessionTarget) for that sport.
+3. A typical single-session length in minutes (sessionMinutes) for that sport.
 
-Balance the weekly session targets ACROSS all sports together — the total weekly commitment must be realistic for one person to actually do (a HIGH priority sport should get more sessions/week than a LOW priority one, and the grand total across all sports should be a plausible week, generally in the 4-8 total sessions/week range unless the goals clearly call for more). A sport marked LOW priority should still appear with a maintenance-level approach and a small session count, not be dropped.
+Where a weekly time-available figure is given, treat it as a hard ceiling: weeklySessionTarget x sessionMinutes must not exceed it (round session count/length down rather than over-committing). Where none is given, use your own judgment for a realistic weekly commitment. Balance the weekly session targets ACROSS all sports together too — the total weekly commitment must be realistic for one person to actually do (a HIGH priority sport should get more sessions/week than a LOW priority one). A sport marked LOW priority should still appear with a maintenance-level approach and a small session count, not be dropped.
 
 Respond with ONLY a JSON array, no other text, in this exact shape:
-[{"sport": "STRENGTH", "approachText": "...", "weeklySessionTarget": 3}, ...]
+[{"sport": "STRENGTH", "approachText": "...", "weeklySessionTarget": 3, "sessionMinutes": 45}, ...]
 Use these exact sport codes: ${priorities.map((p) => p.sport).join(", ")}.`;
 
   const rawText = await askClaude(prompt, 2000);
@@ -89,80 +102,7 @@ Use these exact sport codes: ${priorities.map((p) => p.sport).join(", ")}.`;
 }
 
 // ---------------------------------------------------------------------------
-// Step 2: weekly scheduling framework — a recurring template (day of week +
-// time of day + sport, optionally a specific sub-type) distributing every
-// approved sport's weekly session target across the week.
-// ---------------------------------------------------------------------------
-
-export interface GeneratedSlot {
-  dayOfWeek: number;
-  timeOfDay: TimeOfDay;
-  sport: Sport;
-  sessionType?: SessionType | null;
-  // Only meaningful when sport is STRENGTH — mirrors PlannedSession's own
-  // field so the dashboard can compare planned vs. actual Push/Pull/Legs/
-  // Core minutes directly.
-  movementPattern?: MovementPattern | null;
-  label?: string | null;
-  notes?: string | null;
-}
-
-export async function generateWeeklyFramework(
-  approaches: { sport: Sport; approachText: string; weeklySessionTarget: number }[],
-  visibleSessionTypes: SessionType[],
-  existingConstraints: { rawText: string; daysOfWeek: number[]; blockedTimeOfDay: TimeOfDay[] }[]
-): Promise<GeneratedSlot[]> {
-  const approachLines = approaches
-    .map((a) => `- ${SPORT_LABELS[a.sport]}: ${a.weeklySessionTarget} sessions/week. Approach: ${a.approachText}`)
-    .join("\n");
-
-  const constraintLines =
-    existingConstraints.length === 0
-      ? "None yet."
-      : existingConstraints
-          .map(
-            (c) =>
-              `- "${c.rawText}" -> blocks ${c.blockedTimeOfDay.map((t) => TIME_LABELS[t]).join("/")} on ${c.daysOfWeek
-                .map((d) => DAY_LABELS[d])
-                .join(", ")}`
-          )
-          .join("\n");
-
-  const visibleTypesLine = visibleSessionTypes.length > 0 ? visibleSessionTypes.join(", ") : "(use general sport-level slots only)";
-
-  const prompt = `You are building a recurring WEEKLY scheduling framework (a template, not dated sessions) for a training plan that spans several sports.
-
-Approved sport approaches and weekly session targets:
-${approachLines}
-
-Session types the person actually tracks (only use these for the optional "sessionType" field, or omit it if none fits well):
-${visibleTypesLine}
-
-Known scheduling constraints already in place — do NOT place anything in a blocked day/time combination:
-${constraintLines}
-
-Design one recurring week (Sunday through Saturday, each day split into Morning/Afternoon/Evening) placing exactly the weekly session target for each sport somewhere across the week. Rules:
-- Never put two sessions in the same day+time-of-day slot.
-- Spread hard sessions out — don't stack two demanding sessions back-to-back when avoidable (e.g. don't put a long run the morning right before an evening strength session on the same day if a better slot exists).
-- Respect the constraints listed above exactly — do not use a blocked day/time-of-day for anything.
-- Leave slots empty (i.e. don't create an entry) for rest/recovery — you don't need to fill every slot.
-- Prefer Evening or Morning for most sessions; use Afternoon sparingly, only when it clearly helps spacing.
-- For every STRENGTH slot, set "movementPattern" to one of PUSH, PULL, LEGS, or CORE, and rotate through them sensibly across the week (e.g. don't repeat the same pattern on back-to-back strength days without adequate spacing) so each gets covered roughly evenly.
-
-Respond with ONLY a JSON array, no other text, in this exact shape:
-[{"dayOfWeek": 1, "timeOfDay": "EVENING", "sport": "STRENGTH", "sessionType": "STRENGTH", "movementPattern": "PUSH", "label": "Push day", "notes": "one short reason for this placement"}, ...]
-dayOfWeek is 0=Sunday .. 6=Saturday. sessionType is optional (omit or null if none fits). movementPattern is required for STRENGTH slots and should be omitted/null for every other sport. Use these exact sport codes: ${approaches.map((a) => a.sport).join(", ")}.`;
-
-  const rawText = await askClaude(prompt, 2500);
-  const parsed = extractJson(rawText) as GeneratedSlot[];
-  if (!Array.isArray(parsed)) {
-    throw new Error("Expected a JSON array of framework slots");
-  }
-  return parsed;
-}
-
-// ---------------------------------------------------------------------------
-// Step 3: parse a free-text scheduling constraint into structured days/times.
+// Step 2: parse a free-text scheduling constraint into structured days/times.
 // ---------------------------------------------------------------------------
 
 export interface ParsedConstraint {
@@ -187,7 +127,7 @@ Respond with ONLY a JSON object, no other text, in this exact shape:
 }
 
 // ---------------------------------------------------------------------------
-// Step 4: for a given constraint, find any framework slots it conflicts
+// Step 3: for a given constraint, find any framework slots it conflicts
 // with and propose alternative day/time-of-day options for each — plain
 // deterministic scheduling logic (no AI needed), so it's fast and reliable.
 // ---------------------------------------------------------------------------
@@ -206,7 +146,7 @@ export interface SlotConflict {
 
 /** The framework version currently in force for a plan (effectiveTo: null).
  * There's at most one at a time — a new one only opens once the prior one
- * is explicitly closed (see applyAmendment below). */
+ * is explicitly closed (see PUT /:id/framework in routes/plan.ts). */
 export async function getCurrentVersion(planId: string) {
   return prisma.frameworkVersion.findFirst({ where: { planId, effectiveTo: null }, include: { slots: true } });
 }
@@ -281,82 +221,56 @@ export async function findConstraintConflicts(planId: string, constraintId: stri
 }
 
 // ---------------------------------------------------------------------------
-// Amendments: the user can ask, in free text, to change the plan partway
-// through the 3 months ("cut running back to twice a week and add a second
-// golf short-game session"). Unlike the initial framework, this needs the
-// current state (approaches, current slots) as context, and can adjust
-// both the per-sport weekly targets and the weekly template — but only for
-// the sports the request actually concerns; the rest should come back
-// unchanged so the caller can apply a partial update.
+// Amendments: the user can ask, in free text, to change the plan's CONTENT
+// partway through the 3 months ("cut running back to twice a week and add a
+// second golf short-game session"). This only touches approaches (weekly
+// session target, session length, approach text) — never the day/time
+// layout itself. Once the approach changes are applied, the person goes
+// back to the same manual schedule-builder grid to rework the placement
+// themselves (see PUT /:id/framework), which is exactly how the initial
+// schedule was built — one placement mechanism, not two.
 // ---------------------------------------------------------------------------
 
 export interface ApproachUpdate {
   sport: Sport;
   approachText?: string;
   weeklySessionTarget?: number;
+  sessionMinutes?: number;
 }
 
 export interface PlanAmendment {
   changeSummary: string;
   approachUpdates: ApproachUpdate[];
-  slots: GeneratedSlot[];
 }
 
 export async function generatePlanAmendment(params: {
   overallGoal: string | null;
-  approaches: { sport: Sport; approachText: string; weeklySessionTarget: number }[];
-  currentSlots: { dayOfWeek: number; timeOfDay: TimeOfDay; sport: Sport; sessionType: SessionType | null; movementPattern: MovementPattern | null; label: string | null }[];
-  constraints: { rawText: string; daysOfWeek: number[]; blockedTimeOfDay: TimeOfDay[] }[];
+  approaches: { sport: Sport; approachText: string; weeklySessionTarget: number; sessionMinutes: number }[];
   requestText: string;
 }): Promise<PlanAmendment> {
-  const { overallGoal, approaches, currentSlots, constraints, requestText } = params;
+  const { overallGoal, approaches, requestText } = params;
 
   const approachLines = approaches
-    .map((a) => `- ${SPORT_LABELS[a.sport]}: ${a.weeklySessionTarget} sessions/week. Current approach: ${a.approachText}`)
+    .map((a) => `- ${SPORT_LABELS[a.sport]}: ${a.weeklySessionTarget} sessions/week x ${a.sessionMinutes} min. Current approach: ${a.approachText}`)
     .join("\n");
 
-  const slotLines =
-    currentSlots.length === 0
-      ? "(no weekly framework yet)"
-      : currentSlots
-          .map(
-            (s) =>
-              `- ${DAY_LABELS[s.dayOfWeek]} ${TIME_LABELS[s.timeOfDay]}: ${SPORT_LABELS[s.sport]}${
-                s.movementPattern ? ` (${s.movementPattern})` : s.sessionType ? ` (${s.sessionType})` : ""
-              }${s.label ? ` - ${s.label}` : ""}`
-          )
-          .join("\n");
-
-  const constraintLines =
-    constraints.length === 0
-      ? "None."
-      : constraints
-          .map((c) => `- "${c.rawText}" -> blocks ${c.blockedTimeOfDay.map((t) => TIME_LABELS[t]).join("/")} on ${c.daysOfWeek.map((d) => DAY_LABELS[d]).join(", ")}`)
-          .join("\n");
-
-  const prompt = `You are amending an in-progress 3-month training plan partway through, based on the person's own request. This is NOT a fresh plan — keep everything the request doesn't ask you to change exactly as it is.
+  const prompt = `You are amending an in-progress 3-month training plan partway through, based on the person's own request. This is NOT a fresh plan — keep everything the request doesn't ask you to change exactly as it is, and you are only adjusting the CONTENT of the plan (weekly session count, session length, approach text) — never a day/time schedule, which the person builds themselves separately.
 
 ${overallGoal ? `Overall goal for the quarter: "${overallGoal}"\n` : ""}
-Current per-sport approaches and weekly session targets:
+Current per-sport approaches:
 ${approachLines}
-
-Current weekly framework (the recurring template in effect right now):
-${slotLines}
-
-Scheduling constraints that still apply — do NOT place anything in a blocked day/time combination:
-${constraintLines}
 
 The person's amendment request: "${requestText}"
 
-Apply ONLY the change(s) the request actually asks for. For any sport whose weekly session target or approach text should change as a result, include it in approachUpdates (only the sports that change — omit sports that don't need updating). Then produce the FULL new weekly framework (every slot for every sport, not just the changed ones) reflecting the update — reuse the existing placements for anything unaffected by the request, and only move/add/remove what the request requires. Keep the same rules as before: no double-booking a day+time-of-day, respect constraints, spread hard sessions out, set movementPattern for every STRENGTH slot.
+Apply ONLY the change(s) the request actually asks for. For any sport whose weekly session target, session length, or approach text should change as a result, include it in approachUpdates with just the fields that change (omit sports that don't need updating, and omit fields on a sport that don't need updating).
 
 Respond with ONLY a JSON object, no other text, in this exact shape:
-{"changeSummary": "one short sentence describing what changed, in plain terms", "approachUpdates": [{"sport": "RUN", "weeklySessionTarget": 2}], "slots": [{"dayOfWeek": 1, "timeOfDay": "EVENING", "sport": "STRENGTH", "sessionType": "STRENGTH", "movementPattern": "PUSH", "label": "Push day", "notes": "..."}]}`;
+{"changeSummary": "one short sentence describing what changed, in plain terms", "approachUpdates": [{"sport": "RUN", "weeklySessionTarget": 2}]}`;
 
-  const rawText = await askClaude(prompt, 3000);
+  const rawText = await askClaude(prompt, 1200);
   const parsed = extractJson(rawText) as PlanAmendment;
-  if (!Array.isArray(parsed.slots) || !Array.isArray(parsed.approachUpdates)) {
-    throw new Error("Expected an amendment object with slots and approachUpdates arrays");
+  if (!Array.isArray(parsed.approachUpdates)) {
+    throw new Error("Expected an amendment object with an approachUpdates array");
   }
   return parsed;
 }

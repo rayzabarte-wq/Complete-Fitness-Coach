@@ -550,23 +550,32 @@ walks through four steps:
 1. **Priorities.** Pick which sports (of the 7: Strength, Golf, Run, Walk,
    Cycling, Cycling - Turbo, Swim) are in scope for the next 3 months, a
    priority (Low/Medium/High) for each, an optional per-sport goal (e.g.
-   "add 20lb to my back squat", "break 90"), and an optional overall goal
-   for the quarter.
+   "add 20lb to my back squat", "break 90"), an optional weekly time
+   available for that sport (hours/minutes), and an optional overall goal
+   for the quarter. The weekly time figure is a hard ceiling, not a
+   suggestion — it constrains what Claude proposes in the next step.
 2. **Per-sport approach.** Claude proposes, for every prioritized sport
    together in one call (so the total weekly load stays realistic instead
    of each sport being sized in isolation), a short narrative approach —
-   phasing, focus, how it should progress — plus a weekly session count.
-   Each is reviewed individually: approve as-is, or edit the text/count
-   (which counts as approving it). Every sport must be approved before
-   moving on.
-3. **Weekly framework.** Once every approach is approved, Claude proposes a
-   recurring weekly template — which sport goes in which day/time-of-day
-   slot (Morning/Afternoon/Evening) across the 7-day week — respecting any
-   constraints already in place (see below) and trying not to stack
-   demanding sessions back-to-back. This is a *template*, not dated
-   sessions; the Calendar tab's day-by-day scheduling is still the place
-   actual sessions get put on specific dates. Approving it activates the
-   plan.
+   phasing, focus, how it should progress — plus a weekly session count and
+   a typical session length. Where a weekly time-available figure was given,
+   session count × session length is kept at or under it. Each is reviewed
+   individually: approve as-is, or edit the text/count/length (which counts
+   as approving it). Every sport must be approved before moving on.
+3. **Weekly schedule.** Once every approach is approved, the person builds
+   their own schedule — not Claude. An earlier version had Claude propose
+   the whole week's day/time layout, but that didn't place sessions the way
+   people actually wanted, so placement was handed back to the person: for
+   each session Claude's approach called for (e.g. "3 Strength sessions,
+   45 min each"), pick a day of the week and a time of day
+   (Morning/Afternoon/Evening), and optionally a specific sub-type (like
+   which Strength movement pattern) and exact minutes. A live grid shows
+   total planned time per day as you go, and flags two sessions placed at
+   the same day/time or a placement that falls inside a scheduling
+   constraint (see below) before you can save. This is a *template*, not
+   dated sessions; the Calendar tab's day-by-day scheduling is still the
+   place actual sessions get put on specific dates. Approving the saved
+   schedule activates the plan.
 4. **Scheduling constraints.** Free-text limitations like "I can't train
    mornings on office days, Tuesday and Thursday" are parsed by Claude into
    structured days-of-week + blocked times-of-day (common phrases like
@@ -586,29 +595,37 @@ export/deletion endpoints cover training plans the same way as everything
 else. Since this adds new tables, an existing install needs to run the
 migration once: `cd backend && npx prisma migrate dev --name add_training_plan`.
 (If you'd already run that migration from an earlier version of this
-feature, the framework-versioning/dashboard changes below need one more:
-`npx prisma migrate dev --name add_plan_amendments_dashboard`.)
+feature, the framework-versioning/dashboard changes need one more:
+`npx prisma migrate dev --name add_plan_amendments_dashboard`, and the move
+away from AI-driven scheduling to the manual schedule builder needs a third,
+for the new `weeklyMinutesAvailable`, `sessionMinutes`, and
+`estimatedMinutes` fields: `npx prisma migrate dev --name manual_schedule_builder`.)
 
 ### Amending a plan mid-cycle
 
 Once a plan is ACTIVE, its framework isn't frozen for the rest of the 3
 months — the same Plan tab has a "Request a plan amendment" box, where a
 free-text request ("cut running back to twice a week and add a second golf
-short-game session") is sent to Claude along with the current approaches,
-the current weekly framework, and any scheduling constraints. It comes back
-with a short summary of what changed, updates to just the sports affected
-(weekly target and/or approach text — everything else is left alone), and a
-full replacement weekly framework for the rest of the plan.
+short-game session") is sent to Claude along with the current approaches.
+It comes back with a short summary of what changed and updates to just the
+sports affected (weekly session target, session length, and/or approach
+text — everything else is left alone). Claude only ever touches this
+*content*; it never touches the day/time schedule. If an amendment changes
+how many sessions a week a sport calls for, the placed schedule for that
+sport no longer matches session-for-session, so the Plan tab flags it and
+offers to reopen the schedule builder to place the new session count.
 
-Under the hood this is versioned rather than a straight overwrite: each
-amendment closes the current `FrameworkVersion` (sets its `effectiveTo`)
-and opens a new one from that moment. That's what lets the dashboard (next
-section) show two honest answers to "how am I doing" once a plan has been
-amended — how it looks against the plan as it was originally, and how it
-looks against the plan as it now stands, crediting whatever was actually
-done under each version while it was in effect. Regenerating the framework
-before activation doesn't create this history — there's no progress yet to
-preserve, so it just replaces the one version in place.
+Under the hood the schedule itself is still versioned rather than a
+straight overwrite: saving a schedule change against an ACTIVE plan closes
+the current `FrameworkVersion` (sets its `effectiveTo`) and opens a new one
+from that moment, via the same `PUT /plan/:id/framework` endpoint used to
+build the schedule the first time. That's what lets the dashboard (next
+section) show two honest answers to "how am I doing" once a plan's schedule
+has changed — how it looks against the plan as it was originally, and how
+it looks against the plan as it now stands, crediting whatever was actually
+done under each version while it was in effect. Saving a schedule before
+activation doesn't create this history — there's no progress yet to
+preserve, so it just replaces the one version's slots in place.
 
 ## Consistency dashboard
 
