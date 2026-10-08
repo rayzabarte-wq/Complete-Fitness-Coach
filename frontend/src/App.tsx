@@ -1,17 +1,34 @@
-import { useState } from "react";
-import { BrowserRouter, Routes, Route, NavLink } from "react-router-dom";
-import LogWorkout from "./pages/LogWorkout.js";
-import History from "./pages/History.js";
-import Workout from "./pages/Workout.js";
+import { useEffect, useState } from "react";
+import { BrowserRouter, Routes, Route, NavLink, Link } from "react-router-dom";
+import Log from "./pages/Log.js";
 import Login from "./pages/Login.js";
 import Settings from "./pages/Settings.js";
-import Calendar from "./pages/Calendar.js";
+import Calendar, { DayDetail } from "./pages/Calendar.js";
+import Progress from "./pages/Progress.js";
 import Plan from "./pages/Plan.js";
-import { auth } from "./lib/api.js";
+import { api, auth } from "./lib/api.js";
 import { PlanProvider } from "./lib/planContext.js";
+import { ConsentOnboarding } from "./components/Consent.js";
+
+// Information architecture: three tabs for the things used day to day —
+// Calendar (plan + what happened), Log (record it), Progress (goals and
+// trends) — with Settings behind a gear icon in the header.
 
 export default function App() {
   const [loggedIn, setLoggedIn] = useState(!!auth.getToken());
+  const [consentReviewed, setConsentReviewed] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!loggedIn) return;
+    api
+      .getProfile()
+      .then((p) => setConsentReviewed(p.consentReviewed))
+      .catch(() => {
+        // An expired session clears the token in api.ts — fall back to login.
+        if (!auth.getToken()) setLoggedIn(false);
+        else setConsentReviewed(true);
+      });
+  }, [loggedIn]);
 
   if (!loggedIn) {
     return (
@@ -27,6 +44,16 @@ export default function App() {
     );
   }
 
+  if (consentReviewed === null) {
+    return <p className="text-dim" style={{ textAlign: "center", marginTop: 80 }}>Loading…</p>;
+  }
+
+  // First run (or first time after this update): the consent step comes
+  // before anything that could collect personal data.
+  if (!consentReviewed) {
+    return <ConsentOnboarding onDone={() => setConsentReviewed(true)} />;
+  }
+
   return (
     <BrowserRouter>
       <PlanProvider>
@@ -34,42 +61,44 @@ export default function App() {
           style={{
             maxWidth: 480,
             margin: "0 auto",
-            paddingBottom: "calc(72px + env(safe-area-inset-bottom))",
+            paddingBottom: "calc(76px + env(safe-area-inset-bottom))",
           }}
         >
           <header
             style={{
+              position: "sticky",
+              top: 0,
+              zIndex: 10,
+              background: "var(--navy)",
+              color: "var(--on-navy)",
               padding:
-                "max(20px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 8px max(16px, env(safe-area-inset-left))",
+                "max(14px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 12px max(16px, env(safe-area-inset-left))",
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
             }}
           >
-            <h1 style={{ margin: 0, fontSize: 22 }}>Complete Fitness Coach</h1>
-            <button
-              onClick={() => {
-                auth.clearToken();
-                setLoggedIn(false);
-              }}
-              style={{ background: "none", border: "none", color: "var(--text-dim)", cursor: "pointer", fontSize: 13 }}
-            >
-              Log out
-            </button>
+            <h1 style={{ margin: 0, fontSize: 19, color: "var(--on-navy)", letterSpacing: "-0.01em" }}>
+              Complete Fitness Coach
+            </h1>
+            <Link to="/settings" aria-label="Settings" style={{ color: "var(--on-navy)", display: "flex", padding: 4 }}>
+              <GearIcon />
+            </Link>
           </header>
 
-          <main style={{ padding: "8px max(16px, env(safe-area-inset-right)) 8px max(16px, env(safe-area-inset-left))" }}>
+          <main style={{ padding: "14px max(16px, env(safe-area-inset-right)) 8px max(16px, env(safe-area-inset-left))" }}>
             <Routes>
               <Route path="/" element={<Calendar />} />
+              <Route path="/day/:date" element={<DayDetail />} />
+              <Route path="/log" element={<Log />} />
+              <Route path="/progress" element={<Progress />} />
+              <Route path="/settings" element={<Settings onLoggedOut={() => setLoggedIn(false)} />} />
               <Route path="/plan" element={<Plan />} />
-              <Route path="/workout" element={<Workout />} />
-              <Route path="/log" element={<LogWorkout />} />
-              <Route path="/history" element={<History />} />
-              <Route path="/settings" element={<Settings />} />
             </Routes>
           </main>
 
           <nav
+            aria-label="Main"
             style={{
               position: "fixed",
               bottom: 0,
@@ -79,15 +108,12 @@ export default function App() {
               justifyContent: "space-around",
               background: "var(--surface)",
               borderTop: "1px solid var(--border)",
-              padding: "10px max(0px, env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) max(0px, env(safe-area-inset-left))",
+              padding: "8px max(0px, env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(0px, env(safe-area-inset-left))",
             }}
           >
-            <NavTab to="/" label="Calendar" />
-            <NavTab to="/plan" label="Plan" />
-            <NavTab to="/workout" label="Workout" />
+            <NavTab to="/" label="Calendar" end />
             <NavTab to="/log" label="Log" />
-            <NavTab to="/history" label="History" />
-            <NavTab to="/settings" label="Settings" />
+            <NavTab to="/progress" label="Progress" />
           </nav>
         </div>
       </PlanProvider>
@@ -95,18 +121,32 @@ export default function App() {
   );
 }
 
-function NavTab({ to, label }: { to: string; label: string }) {
+function NavTab({ to, label, end }: { to: string; label: string; end?: boolean }) {
   return (
     <NavLink
       to={to}
+      end={end}
       style={({ isActive }) => ({
         color: isActive ? "var(--accent)" : "var(--text-dim)",
         textDecoration: "none",
-        fontSize: 12,
-        fontWeight: 600,
+        fontSize: 13,
+        fontWeight: 700,
+        padding: "6px 18px",
+        borderTop: isActive ? "3px solid var(--accent)" : "3px solid transparent",
+        marginTop: -9,
+        paddingTop: 9,
       })}
     >
       {label}
     </NavLink>
+  );
+}
+
+function GearIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </svg>
   );
 }

@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { api, DayForecast, PlannedSession, SessionType, MovementPattern, StravaActivity, GolfSessionType, GolfSessionPlan } from "../lib/api.js";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { api, DayForecast, DaySummary, PlannedSession, SessionType, MovementPattern, StravaActivity, GolfSessionType, GolfSessionPlan } from "../lib/api.js";
+import { ACTIVITY_COLORS, FOCUS_LABELS, activityForSessionType } from "../lib/activity.js";
 import { requestLocation, parseLocalDate, formatLocalDateKey } from "../lib/location.js";
 import {
-  ALL_SESSION_TYPES,
   fullLabelFor,
   findCategoryByLabel,
   categoryLabelForType,
@@ -80,27 +81,33 @@ export default function Calendar() {
   const [weatherError, setWeatherError] = useState<string | null>(null);
   const [locationDenied, setLocationDenied] = useState(false);
   const [sessions, setSessions] = useState<PlannedSession[]>([]);
-  const [stravaConnected, setStravaConnected] = useState(false);
+  const [summaries, setSummaries] = useState<Map<string, DaySummary>>(new Map());
   const [weekOffset, setWeekOffset] = useState(0);
-  const [visibleTypes, setVisibleTypes] = useState<SessionType[]>(ALL_SESSION_TYPES);
+  const [visibleTypes, setVisibleTypes] = useState<SessionType[]>(["STRENGTH"]);
+  const [autofilling, setAutofilling] = useState(false);
+  const [autofillNotes, setAutofillNotes] = useState<string[] | null>(null);
+  const [autofillError, setAutofillError] = useState<string | null>(null);
 
   const days = sevenDaysFrom(weekOffset);
+  // Weather only matters for outdoor sports — with strength only switched
+  // on, the forecast strip is just noise, so it's hidden.
+  const showWeather = visibleTypes.some((t) => OUTDOOR_RELEVANT_TYPES.includes(t));
 
   useEffect(() => {
-    loadForecast();
-    api
-      .getStravaStatus()
-      .then((s) => setStravaConnected(s.connected))
-      .catch(() => setStravaConnected(false));
     api
       .getPreferences()
       .then((p) => setVisibleTypes(p.visibleSessionTypes))
-      .catch(() => setVisibleTypes(ALL_SESSION_TYPES));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+      .catch(() => setVisibleTypes(["STRENGTH"]));
   }, []);
 
   useEffect(() => {
-    loadSessions();
+    if (showWeather && !forecast) loadForecast();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showWeather]);
+
+  useEffect(() => {
+    loadWeek();
+    setAutofillNotes(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weekOffset]);
 
@@ -114,23 +121,32 @@ export default function Calendar() {
       .catch((err) => setWeatherError(err.message ?? "Failed to load forecast"));
   }
 
-  function loadSessions() {
+  function loadWeek() {
     const currentDays = sevenDaysFrom(weekOffset);
     const from = new Date(currentDays[0].date);
     from.setHours(0, 0, 0, 0);
     const to = new Date(currentDays[DAY_COUNT - 1].date);
     to.setHours(23, 59, 59, 999);
     api.getPlannedSessions(from.toISOString(), to.toISOString()).then(setSessions);
+    const endKey = formatLocalDateKey(new Date(currentDays[DAY_COUNT - 1].date.getTime() + 86400_000));
+    api
+      .getDaySummaries(currentDays[0].key, endKey)
+      .then((list) => setSummaries(new Map(list.map((d) => [d.date, d]))))
+      .catch(() => setSummaries(new Map()));
   }
 
-  async function markCompleted(id: string, completed: boolean) {
-    await api.updatePlannedSession(id, { completed });
-    loadSessions();
-  }
-
-  async function remove(id: string) {
-    await api.deletePlannedSession(id);
-    loadSessions();
+  async function autofill() {
+    setAutofilling(true);
+    setAutofillError(null);
+    try {
+      const result = await api.autofillWeek(days[0].key, formatLocalDateKey(new Date()));
+      setAutofillNotes(result.notes.length ? result.notes : ["Nothing to add. This week is already planned."]);
+      loadWeek();
+    } catch (err: any) {
+      setAutofillError(err.message ?? "Auto-fill failed");
+    } finally {
+      setAutofilling(false);
+    }
   }
 
   const forecastByDate = new Map((forecast ?? []).map((d) => [d.date, d]));
@@ -143,51 +159,55 @@ export default function Calendar() {
     (sessionsByDay.get(key) ?? sessionsByDay.set(key, []).get(key)!).push(s);
   }
 
-  const restDayCount = visibleSessions.filter((s) => s.type === "REST").length;
   const scheduledMinutes = visibleSessions
     .filter((s) => s.type !== "REST")
     .reduce((sum, s) => sum + (s.estimatedMinutes ?? 0), 0);
-  const actualMinutesTotal = visibleSessions
-    .filter((s) => s.type !== "REST" && s.actualMinutes !== null)
-    .reduce((sum, s) => sum + (s.actualMinutes ?? 0), 0);
   const workoutCount = visibleSessions.filter((s) => s.type !== "REST").length;
+  const doneCount = visibleSessions.filter((s) => s.type !== "REST" && s.completed).length;
 
   const weekLabel =
     weekOffset === 0
-      ? "NEXT 7 DAYS"
+      ? "Next 7 days"
       : `${days[0].date.toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${days[
           DAY_COUNT - 1
         ].date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
 
   return (
     <div>
-      <WeatherStrip forecast={forecast} error={weatherError} locationDenied={locationDenied} onRetryLocation={loadForecast} />
+      {showWeather && <WeatherStrip forecast={forecast} error={weatherError} locationDenied={locationDenied} onRetryLocation={loadForecast} />}
 
-      <div className="card" style={{ marginTop: 16, marginBottom: 8 }}>
+      <div className="card" style={{ marginBottom: 12 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
           <button
             onClick={() => setWeekOffset((w) => w - 1)}
             aria-label="Previous week"
-            style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", fontSize: 16, padding: "0 4px" }}
+            style={{ background: "none", border: "none", color: "var(--navy)", cursor: "pointer", fontSize: 20, padding: "0 6px" }}
           >
             ‹
           </button>
-          <div className="text-dim" style={{ fontSize: 12 }}>
-            {weekLabel}
-          </div>
+          <strong style={{ fontSize: 14, color: "var(--navy)" }}>{weekLabel}</strong>
           <button
             onClick={() => setWeekOffset((w) => w + 1)}
             aria-label="Next week"
-            style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", fontSize: 16, padding: "0 4px" }}
+            style={{ background: "none", border: "none", color: "var(--navy)", cursor: "pointer", fontSize: 20, padding: "0 6px" }}
           >
             ›
           </button>
         </div>
-        <div style={{ fontSize: 14 }}>
-          {workoutCount} session{workoutCount === 1 ? "" : "s"} scheduled · {formatHoursMinutes(scheduledMinutes)} planned
-          {actualMinutesTotal > 0 ? ` · ${formatHoursMinutes(actualMinutesTotal)} actual so far` : ""}
-          {restDayCount > 0 ? ` · ${restDayCount} rest day${restDayCount === 1 ? "" : "s"}` : ""}
+        <div className="text-dim" style={{ fontSize: 13, textAlign: "center" }}>
+          {workoutCount} session{workoutCount === 1 ? "" : "s"} · {formatHoursMinutes(scheduledMinutes)} planned · {doneCount} done
         </div>
+        <button className="button-primary" onClick={autofill} disabled={autofilling} style={{ width: "100%", marginTop: 10 }}>
+          {autofilling ? "Planning your week…" : "Auto-fill strength for this week"}
+        </button>
+        {autofillNotes && (
+          <ul style={{ margin: "8px 0 0", paddingLeft: 18, fontSize: 12 }} className="text-dim">
+            {autofillNotes.map((n, i) => (
+              <li key={i}>{n}</li>
+            ))}
+          </ul>
+        )}
+        {autofillError && <p style={{ color: "var(--danger)", fontSize: 13, marginBottom: 0 }}>{autofillError}</p>}
         {weekOffset !== 0 && (
           <button
             onClick={() => setWeekOffset(0)}
@@ -199,109 +219,279 @@ export default function Calendar() {
       </div>
 
       {days.map(({ key, date }) => (
-        <DayBlock
+        <DaySummaryRow
           key={key}
           date={date}
           sessions={sessionsByDay.get(key) ?? []}
-          dayForecast={forecastByDate.get(key)}
-          stravaConnected={stravaConnected}
-          visibleTypes={visibleTypes}
-          onToggleComplete={markCompleted}
-          onDelete={remove}
-          onUpdated={loadSessions}
+          summary={summaries.get(key)}
+          dayForecast={showWeather ? forecastByDate.get(key) : undefined}
         />
       ))}
     </div>
   );
 }
 
-function DayBlock({
+/** The simplified, at-a-glance day in the 7-day view: one line per
+ * activity with its colour and a done/planned state, plus a steps bar.
+ * Tapping the day opens the full detail (DayDetail). */
+function DaySummaryRow({
   date,
   sessions,
+  summary,
   dayForecast,
-  stravaConnected,
-  visibleTypes,
-  onToggleComplete,
-  onDelete,
-  onUpdated,
 }: {
   date: Date;
   sessions: PlannedSession[];
+  summary: DaySummary | undefined;
   dayForecast: DayForecast | undefined;
-  stravaConnected: boolean;
-  visibleTypes: SessionType[];
-  onToggleComplete: (id: string, completed: boolean) => void;
-  onDelete: (id: string) => void;
-  onUpdated: () => void;
 }) {
-  const isToday = formatLocalDateKey(date) === formatLocalDateKey(new Date());
-  const dateKey = formatLocalDateKey(date);
-  const [adding, setAdding] = useState(false);
+  const key = formatLocalDateKey(date);
+  const isToday = key === formatLocalDateKey(new Date());
+  const loggedOnly = (summary?.workouts ?? []).filter(
+    (w) => !sessions.some((s) => s.type === "STRENGTH" && s.completed && (s.movementPattern === w.focus || !w.focus))
+  );
+  const nothing = sessions.length === 0 && loggedOnly.length === 0;
 
   return (
-    <div style={{ marginBottom: 14 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
-        <strong style={{ fontSize: 14 }}>
+    <Link
+      to={`/day/${key}`}
+      className="card"
+      style={{ display: "block", textDecoration: "none", color: "inherit", marginBottom: 8, padding: "10px 12px", borderColor: isToday ? "var(--navy)" : undefined }}
+      aria-label={`${isToday ? "Today" : date.toLocaleDateString(undefined, { weekday: "long" })}, open day details`}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+        <strong style={{ fontSize: 14, color: "var(--navy)" }}>
           {isToday ? "Today" : date.toLocaleDateString(undefined, { weekday: "long" })}
           <span className="text-dim" style={{ fontWeight: 400, marginLeft: 6, fontSize: 12 }}>
             {date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
           </span>
         </strong>
-        {dayForecast && (
+        <span className="text-dim" style={{ fontSize: 12 }}>
+          {dayForecast ? `${dayForecast.tempMaxC}° · ${dayForecast.condition}  ` : ""}›
+        </span>
+      </div>
+
+      <div style={{ marginTop: 6, display: "grid", gap: 4 }}>
+        {sessions.map((s) => {
+          const activity = activityForSessionType(s.type);
+          return (
+            <ActivityLine
+              key={s.id}
+              color={ACTIVITY_COLORS[activity]}
+              label={s.type === "STRENGTH" && s.movementPattern ? `Strength · ${FOCUS_LABELS[s.movementPattern] ?? s.movementPattern}` : fullLabelFor(s.type)}
+              done={s.completed}
+              rest={s.type === "REST"}
+            />
+          );
+        })}
+        {loggedOnly.map((w) => (
+          <ActivityLine key={w.id} color={ACTIVITY_COLORS.STRENGTH} label={`Strength · ${w.focus ? FOCUS_LABELS[w.focus] : "logged"}`} done rest={false} />
+        ))}
+        {summary?.steps != null && <StepsLine steps={summary.steps} goal={summary.stepGoal} />}
+        {summary?.scan && (
+          <div className="text-dim" style={{ fontSize: 12 }}>
+            Scan{summary.scan.bodyFatPct != null ? ` · ${summary.scan.bodyFatPct}% fat` : ""}
+            {summary.scan.weightKg != null ? ` · ${summary.scan.weightKg} kg` : ""}
+          </div>
+        )}
+        {nothing && summary?.steps == null && (
           <span className="text-dim" style={{ fontSize: 12 }}>
-            {dayForecast.tempMaxC}°/{dayForecast.tempMinC}° · {dayForecast.condition}
+            Nothing planned
           </span>
         )}
       </div>
+    </Link>
+  );
+}
 
-      {sessions.length === 0 && !adding && (
-        <div className="card" style={{ padding: 10 }}>
-          <p className="text-dim" style={{ fontSize: 13, margin: 0 }}>
-            Nothing scheduled
-          </p>
-        </div>
+/** One activity in the simplified day view. The swatch colour always means
+ * the activity type; done vs planned is shown by the tick and by fading,
+ * never by changing the colour. */
+function ActivityLine({ color, label, done, rest }: { color: string; label: string; done: boolean; rest: boolean }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, opacity: done || rest ? 1 : 0.75 }}>
+      <span className="swatch" style={{ background: color }} />
+      <span style={{ flex: 1 }}>{label}</span>
+      {!rest && (
+        <span style={{ fontSize: 12, fontWeight: 700, color: done ? "var(--good)" : "var(--text-dim)" }}>{done ? "✓ Done" : "Planned"}</span>
       )}
+    </div>
+  );
+}
 
-      {sessions.map((s) => (
+/** Steps as a bar in the steps colour, filled toward the day's goal, with
+ * a tick once it's reached. */
+function StepsLine({ steps, goal }: { steps: number; goal: number | null }) {
+  const pct = goal ? Math.min(100, (steps / goal) * 100) : 100;
+  const hit = goal != null && steps >= goal;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+      <span className="swatch" style={{ background: ACTIVITY_COLORS.STEPS }} />
+      <span style={{ width: 44 }}>Steps</span>
+      <div style={{ flex: 1, height: 8, background: "var(--surface-2)", borderRadius: 4, overflow: "hidden" }}>
+        <div style={{ width: `${pct}%`, height: "100%", background: ACTIVITY_COLORS.STEPS, opacity: hit ? 1 : 0.55, borderRadius: 4 }} />
+      </div>
+      <span style={{ fontSize: 12, fontWeight: 700, minWidth: 56, textAlign: "right", color: hit ? "var(--good)" : "var(--text-dim)" }}>
+        {hit ? "✓ " : ""}
+        {steps >= 1000 ? `${Math.round(steps / 100) / 10}k` : steps}
+      </span>
+    </div>
+  );
+}
+
+/** The drill-down for one day: every scheduled session with its full
+ * controls, what was actually logged (sets, steps, scan), and adding more. */
+export function DayDetail() {
+  const { date: dateKey } = useParams();
+  const navigate = useNavigate();
+  const [sessions, setSessions] = useState<PlannedSession[]>([]);
+  const [summary, setSummary] = useState<DaySummary | null>(null);
+  const [visibleTypes, setVisibleTypes] = useState<SessionType[]>(["STRENGTH"]);
+  const [stravaConnected, setStravaConnected] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [stepsInput, setStepsInput] = useState("");
+  const [stepsError, setStepsError] = useState<string | null>(null);
+
+  const date = dateKey ? parseLocalDate(dateKey) : new Date();
+
+  function load() {
+    if (!dateKey) return;
+    const from = new Date(date);
+    from.setHours(0, 0, 0, 0);
+    const to = new Date(date);
+    to.setHours(23, 59, 59, 999);
+    api.getPlannedSessions(from.toISOString(), to.toISOString()).then((list) => setSessions(list.filter((s) => s.date.slice(0, 10) === dateKey)));
+    const next = formatLocalDateKey(new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1));
+    api.getDaySummaries(dateKey, next).then((d) => setSummary(d[0] ?? null));
+  }
+
+  useEffect(() => {
+    load();
+    api.getPreferences().then((p) => setVisibleTypes(p.visibleSessionTypes)).catch(() => undefined);
+    api.getStravaStatus().then((s) => setStravaConnected(s.connected)).catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateKey]);
+
+  async function saveSteps() {
+    setStepsError(null);
+    try {
+      await api.setSteps(dateKey!, Number(stepsInput));
+      setStepsInput("");
+      load();
+    } catch (err: any) {
+      setStepsError(typeof err.message === "string" ? err.message : "Couldn't save steps");
+    }
+  }
+
+  const visible = sessions.filter((s) => s.type === "REST" || visibleTypes.includes(s.type));
+
+  return (
+    <div>
+      <button onClick={() => navigate(-1)} className="button-quiet" style={{ marginBottom: 10 }}>
+        ‹ Back
+      </button>
+      <h2 style={{ margin: "0 0 12px", fontSize: 20 }}>
+        {date.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}
+      </h2>
+
+      <div className="section-title">Planned</div>
+      {visible.length === 0 && !adding && <p className="text-dim" style={{ fontSize: 13 }}>Nothing scheduled.</p>}
+      {visible.map((s) => (
         <SessionRow
           key={s.id}
           session={s}
-          dayForecast={dayForecast}
+          dayForecast={undefined}
           stravaConnected={stravaConnected}
           visibleTypes={visibleTypes}
-          onToggleComplete={(completed) => onToggleComplete(s.id, completed)}
-          onDelete={() => onDelete(s.id)}
-          onUpdated={onUpdated}
+          onToggleComplete={async (completed) => {
+            await api.updatePlannedSession(s.id, { completed });
+            load();
+          }}
+          onDelete={async () => {
+            await api.deletePlannedSession(s.id);
+            load();
+          }}
+          onUpdated={load}
         />
       ))}
-
       {adding ? (
         <AddSessionForm
-          date={dateKey}
+          date={dateKey!}
           visibleTypes={visibleTypes}
           onCreated={() => {
             setAdding(false);
-            onUpdated();
+            load();
           }}
           onCancel={() => setAdding(false)}
         />
       ) : (
         <button
           onClick={() => setAdding(true)}
-          style={{
-            width: "100%",
-            padding: 8,
-            marginTop: sessions.length > 0 ? 4 : 8,
-            borderRadius: 8,
-            border: "1px dashed var(--border)",
-            background: "none",
-            color: "var(--text-dim)",
-            cursor: "pointer",
-            fontSize: 13,
-          }}
+          style={{ width: "100%", padding: 8, borderRadius: 8, border: "1px dashed var(--border)", background: "none", color: "var(--text-dim)", cursor: "pointer", fontSize: 13 }}
         >
           + Add workout
         </button>
+      )}
+
+      <div className="section-title">What you did</div>
+      {summary?.workouts.map((w) => (
+        <div key={w.id} className="card" style={{ marginBottom: 8, borderLeft: `4px solid ${ACTIVITY_COLORS.STRENGTH}` }}>
+          <div style={{ display: "flex", justifyContent: "space-between" }}>
+            <strong>Strength{w.focus ? ` · ${FOCUS_LABELS[w.focus]}` : ""}</strong>
+            <span className="text-dim" style={{ fontSize: 12 }}>
+              {w.setCount} sets{w.minutes ? ` · ${w.minutes} min` : ""}
+            </span>
+          </div>
+          {w.exercises.map((e) => (
+            <div key={e.name} className="text-dim" style={{ fontSize: 13, marginTop: 4 }}>
+              {e.name}: {e.sets.join(", ")}
+            </div>
+          ))}
+        </div>
+      ))}
+
+      <div className="card" style={{ marginBottom: 8, borderLeft: `4px solid ${ACTIVITY_COLORS.STEPS}` }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+          <strong>Steps</strong>
+          <span style={{ fontSize: 15, fontWeight: 700 }}>
+            {summary?.steps != null ? summary.steps.toLocaleString() : "—"}
+            {summary?.hitStepGoal && <span style={{ color: "var(--good)", marginLeft: 6 }}>✓</span>}
+          </span>
+        </div>
+        {summary?.stepGoal != null && (
+          <div className="text-dim" style={{ fontSize: 12 }}>
+            Goal {summary.stepGoal.toLocaleString()} (your average target)
+          </div>
+        )}
+        <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+          <input
+            inputMode="numeric"
+            placeholder={summary?.steps != null ? "Correct the count" : "Enter steps by hand"}
+            value={stepsInput}
+            onChange={(e) => setStepsInput(e.target.value.replace(/[^0-9]/g, ""))}
+            style={{ flex: 1, padding: 6, minWidth: 0 }}
+            aria-label="Steps"
+          />
+          <button className="button-secondary" onClick={saveSteps} disabled={!stepsInput}>
+            Save
+          </button>
+        </div>
+        {stepsError && <p style={{ color: "var(--danger)", fontSize: 12 }}>{stepsError}</p>}
+      </div>
+
+      {summary?.scan && (
+        <div className="card" style={{ marginBottom: 8 }}>
+          <strong>Body scan</strong>
+          <div className="text-dim" style={{ fontSize: 13, marginTop: 4 }}>
+            {[
+              summary.scan.weightKg != null && `${summary.scan.weightKg} kg`,
+              summary.scan.bodyFatPct != null && `${summary.scan.bodyFatPct}% body fat`,
+              summary.scan.muscleMassKg != null && `${summary.scan.muscleMassKg} kg muscle`,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </div>
+        </div>
       )}
     </div>
   );
@@ -378,7 +568,7 @@ function WeatherStrip({
               padding: "2px 0",
               borderRadius: 4,
               background: day.outdoorRecommended ? "var(--accent)" : "var(--border)",
-              color: day.outdoorRecommended ? "#0e1512" : "var(--text-dim)",
+              color: day.outdoorRecommended ? "var(--on-accent)" : "var(--text-dim)",
             }}
           >
             {day.outdoorRecommended ? "OUTDOOR OK" : "GO INDOOR"}
@@ -601,6 +791,9 @@ function AddSessionForm({
           <option value="PUSH">Push</option>
           <option value="PULL">Pull</option>
           <option value="LEGS">Legs</option>
+          <option value="UPPER">Upper</option>
+          <option value="LOWER">Lower</option>
+          <option value="FULL_BODY">Full body</option>
           <option value="CORE">Core</option>
         </select>
       )}
@@ -698,9 +891,11 @@ function SessionRow({
   return (
     <div className="card" style={{ marginBottom: 8, opacity: session.completed ? 0.6 : 1 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-        <strong style={{ fontSize: 14 }}>
+        <strong style={{ fontSize: 14, display: "flex", alignItems: "center", gap: 6 }}>
+          <span className="swatch" style={{ background: ACTIVITY_COLORS[activityForSessionType(session.type)] }} />
           {fullLabelFor(session.type)}
-          {session.movementPattern ? ` · ${session.movementPattern}` : ""}
+          {session.movementPattern ? ` · ${FOCUS_LABELS[session.movementPattern] ?? session.movementPattern}` : ""}
+          {session.autoPlanned && <span className="chip">Auto</span>}
         </strong>
         {!isRestDay && session.estimatedMinutes && (
           <span className="text-dim" style={{ fontSize: 12 }}>
@@ -721,6 +916,16 @@ function SessionRow({
         </p>
       )}
 
+      {session.type === "STRENGTH" && session.movementPattern && !session.completed && (
+        <Link
+          to={`/log?focus=${session.movementPattern}&planned=${session.id}`}
+          className="button-primary"
+          style={{ display: "block", textAlign: "center", textDecoration: "none", marginTop: 8 }}
+        >
+          Start this workout
+        </Link>
+      )}
+
       {!isRestDay && <ActualTimeEntry session={session} stravaConnected={stravaConnected} onUpdated={onUpdated} />}
 
       <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
@@ -734,7 +939,7 @@ function SessionRow({
             border: "none",
             cursor: "pointer",
             background: session.completed ? "var(--accent)" : "var(--border)",
-            color: session.completed ? "#0e1512" : "var(--text-dim)",
+            color: session.completed ? "var(--on-accent)" : "var(--text-dim)",
           }}
         >
           {session.completed ? "Completed ✓" : isRestDay ? "Mark rested" : "Mark done"}
@@ -860,6 +1065,9 @@ function EditSessionForm({
           <option value="PUSH">Push</option>
           <option value="PULL">Pull</option>
           <option value="LEGS">Legs</option>
+          <option value="UPPER">Upper</option>
+          <option value="LOWER">Lower</option>
+          <option value="FULL_BODY">Full body</option>
           <option value="CORE">Core</option>
         </select>
       )}
@@ -1019,7 +1227,7 @@ function ActualTimeEntry({
                 borderRadius: 6,
                 border: "none",
                 background: "var(--accent)",
-                color: "#0e1512",
+                color: "var(--on-accent)",
                 cursor: "pointer",
               }}
             >

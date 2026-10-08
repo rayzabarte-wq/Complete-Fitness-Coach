@@ -279,7 +279,7 @@ export default function Plan() {
             style={{
               flex: 1,
               background: view === "plan" ? "var(--accent)" : "transparent",
-              color: view === "plan" ? "#0e1512" : "var(--text)",
+              color: view === "plan" ? "var(--on-accent)" : "var(--text)",
               border: view === "plan" ? "none" : "1px solid var(--border)",
               borderRadius: 8,
               padding: "8px 10px",
@@ -295,7 +295,7 @@ export default function Plan() {
             style={{
               flex: 1,
               background: view === "dashboard" ? "var(--accent)" : "transparent",
-              color: view === "dashboard" ? "#0e1512" : "var(--text)",
+              color: view === "dashboard" ? "var(--on-accent)" : "var(--text)",
               border: view === "dashboard" ? "none" : "1px solid var(--border)",
               borderRadius: 8,
               padding: "8px 10px",

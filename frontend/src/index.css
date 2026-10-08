@@ -1,11 +1,26 @@
+/* Navy + brick red on white. White/off-white carries most of the screen,
+   navy is structure (header, nav, headings), brick red is the accent for the
+   things that should draw the eye: primary buttons, the active tab, a hit
+   goal. Soft greys for secondary text and dividers. */
 :root {
-  --bg: #14181b;
-  --surface: #1d2226;
-  --border: #2a3136;
-  --text: #edf0f2;
-  --text-dim: #8b959c;
-  --accent: #6fae8f;
-  --danger: #c96a5c;
+  color-scheme: light;
+  --bg: #f6f5f2;
+  --surface: #ffffff;
+  --surface-2: #f0eee9;
+  --border: #e2dfd8;
+  --text: #1b2333;
+  --text-dim: #5f6673;
+  --navy: #1f2f4d;
+  --navy-2: #2c4068;
+  --on-navy: #ffffff;
+  --accent: #a63d2f; /* brick red */
+  --accent-soft: #f6e7e4;
+  --on-accent: #ffffff;
+  --danger: #a63d2f;
+  /* Change arrows: better / worse. Colour supports, never replaces, the
+     arrow direction and the words. */
+  --good: #2e7d5b;
+  --bad: #a63d2f;
   font-family: "Inter", -apple-system, "Segoe UI", sans-serif;
 }
 
@@ -30,6 +45,12 @@ body {
   overscroll-behavior-y: contain;
 }
 
+h1,
+h2,
+h3 {
+  color: var(--navy);
+}
+
 button {
   font-family: inherit;
   /* Removes the ~300ms tap delay and stray double-tap-zoom on buttons */
@@ -44,18 +65,32 @@ input,
 select,
 textarea {
   font-size: 16px !important;
+  font-family: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+input:focus,
+select:focus,
+textarea:focus,
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--navy-2);
+  outline-offset: 1px;
 }
 
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 12px;
   padding: 16px;
 }
 
 .button-primary {
   background: var(--accent);
-  color: #0e1512;
+  color: var(--on-accent);
   border: none;
   border-radius: 8px;
   padding: 10px 16px;
@@ -63,6 +98,95 @@ textarea {
   cursor: pointer;
 }
 
+.button-primary:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.button-secondary {
+  background: var(--surface);
+  color: var(--navy);
+  border: 1px solid var(--navy);
+  border-radius: 8px;
+  padding: 9px 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.button-quiet {
+  background: var(--surface-2);
+  color: var(--text-dim);
+  border: none;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
 .text-dim {
   color: var(--text-dim);
+}
+
+.section-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--navy);
+  margin: 18px 0 8px;
+}
+
+/* Sub-tabs (Log and Progress) — a segmented row under the header. */
+.subtabs {
+  display: flex;
+  gap: 4px;
+  background: var(--surface-2);
+  padding: 4px;
+  border-radius: 10px;
+  margin-bottom: 14px;
+  overflow-x: auto;
+}
+
+.subtabs button {
+  flex: 1;
+  border: none;
+  background: none;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-dim);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.subtabs button[aria-selected="true"] {
+  background: var(--surface);
+  color: var(--navy);
+  box-shadow: 0 1px 2px rgba(31, 47, 77, 0.12);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-dim);
+}
+
+.chip-accent {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex-shrink: 0;
 }

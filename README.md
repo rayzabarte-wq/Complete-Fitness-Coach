@@ -74,6 +74,92 @@ while both are still evolving fast. See the README section on this
 decision (or just ask — Claude can walk through the reasoning again) for
 why now isn't the right time for an actual split.
 
+## Strength-first release (260)
+
+The first release is a **strength app**. Every other sport is still in the
+code and the database, but switched off by default (`User.visibleSessionTypes`
+defaults to `[STRENGTH]`; the migration switched existing accounts too). Ticking
+a type back on in Settings → Workout types brings it back to the Calendar
+and the Log tab.
+
+**Navigation.** Three tabs: **Calendar** (plan + what happened), **Log**
+(record it) and **Progress** (goals and trends). Settings sits behind the gear
+icon in the header. The 3-month planner is reachable from Settings.
+
+**Log is per sport.** Strength is *active*: build a session, then log it live,
+set by set. Steps and the connector sports (run, cycling, walk, swim, golf
+rounds) are *passive*: data arrives from Apple Health or Strava and is just
+displayed. Golf range/short-game/putting stay active (AI drill plan, then log).
+
+**Split from days per week** (`sport/lib/training.ts`). Every muscle should get
+about two sessions a week, so the split follows the days you commit to:
+2–3 → full body, 4 → upper/lower, 5 → push/pull/legs/upper/lower,
+6 → push/pull/legs ×2. A 3–4 day push/pull/legs would hit each muscle once.
+
+**Per-muscle recovery** (`sport/services/recovery.ts`). Nine muscles. Every
+exercise is tagged with one primary and any secondary muscles. Logging it
+starts a 72h (primary) / 48h (secondary) clock, scaled by the sets' RPE
+(0.8× at RPE 6 up to 1.2× at RPE 10). No heart-rate or sleep data.
+
+**Block-based variation** (`sport/services/exerciseSelection.ts`). Each session
+focus keeps the same exercises for a 4-week block so the load can progress. An
+exercise is swapped mid-block only if it stalls (no improvement in estimated
+1RM over 3 sessions). At a block's end, main lifts that are still progressing
+carry over and the rest rotate. Each exercise has a `variationTag` (e.g.
+`CHEST_INCLINE_PRESS`), and the new block favours the tags with the fewest
+sets over the last 8 weeks. This follows the evidence that frequent rotation
+doesn't help, but covering different regions of a muscle does.
+
+**Week auto-fill** (`scheduler/services/strengthAutofill.ts`, Calendar →
+"Auto-fill strength for this week"). It continues the split rotation and
+places each session on a day when that session's muscles are projected to
+have recovered, with no more than 3 training days in a row. Empty days become
+rest days. If a body goal is behind pace, it adds one extra session. Re-running
+it only replaces auto-planned entries that haven't happened yet. Anything you
+added or edited yourself stays.
+
+**Body goals** (`services/goals.ts`, `routes/body.ts`). Each goal is a metric
+(body fat %, muscle mass, body weight), a target value and a date. Every
+revision is kept as a `GoalTarget` version. The chart shows the current pace
+line in full and earlier ones faintly, with a tappable marker at each revision.
+A revision needs a reason. The **quarterly review** describes, rather than
+scores, how ambitious goals were and how they were recalibrated. It reports
+injury/life-event revisions separately from targets that were simply eased.
+
+**Body data sources.** For now, Renpho scans come from `tools/renpho_sync.py`
+(the unofficial `renpho-py` client, run on your own machine). For a public
+product, the intended sources are Apple Health (Renpho can write there) and
+manual entry. Both already work through the same `/ingest/body` endpoint and
+the manual form.
+
+**Steps.** A daily log imported from Apple Health by an iPhone Shortcut posting
+to `/ingest/steps` with a personal upload token (`routes/ingest.ts`). The goal
+is an *average* daily step goal. Progress compares your average with it, and
+the calendar ticks the days you reached it.
+
+**Progress tab.** Sub-tabs: Goals (goals, scans, benchmarks, quarterly review),
+Strength (best set per session as estimated 1RM), Balance (recovery now,
+variation coverage) and Steps. Each sub-tab has the same period-on-period
+comparison: two periods, plain numbers, the difference and an up/down arrow.
+
+**Calendar day view.** Each day is a simplified summary: one line per activity
+in that activity's fixed colour (strength blue, steps green, ...) with a tick
+when done, and a steps bar filled toward the goal. Tap a day for the full
+detail (`/day/:date`). Colour always identifies the activity. Hitting a target
+is shown with a tick or fill, never a colour change.
+
+**Profile and consent** (`services/consent.ts`, `routes/consent.ts`). Birth year,
+sex and height are kept only to compare you with published healthy ranges
+(body fat: Gallagher et al. 2000; BMI: WHO). Consent is asked once, before
+anything personal is collected, as four separate opt-ins with nothing
+pre-ticked: store profile, store body/activity data, benchmarking, future
+analytics. `ConsentRecord` is an append-only log tied to the wording version.
+Withdrawing takes effect immediately: profile fields, or all scans, goals and
+steps, are deleted. It all appears in the data export and is erased with the
+account. **Have the wording and lawful bases reviewed by a data-protection
+professional before any public launch.** Body composition is special-category
+health data under GDPR.
+
 ## Data model (v1)
 
 - `Exercise` — name, category (compound/accessory), primary muscle group,

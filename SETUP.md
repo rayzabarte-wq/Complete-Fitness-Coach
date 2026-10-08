@@ -224,6 +224,51 @@ Then open http://localhost:5173. Make sure the database is running first: Postgr
 
 To **stop** the app, click into each terminal and press `Ctrl + C`.
 
+## Upgrading to the strength-first version (260)
+
+Version 260 refocuses the app on strength. It adds body goals, a Progress tab, per-muscle recovery, block-based exercise variation, week auto-fill, daily steps, a profile and a consent step. Your existing account and data are kept. Other sports are switched off, not deleted: tick them back on in **Settings → Workout types**. To upgrade:
+
+1. Get the new code (or `git pull` and check out the new branch).
+2. Stop the app (`Ctrl + C` in both terminals). Then, in the `backend` folder, run:
+
+   ```bash
+   npm install
+   npx prisma migrate dev
+   npm run seed
+   ```
+
+   You should see `strength_focus_goals_progress` applied. `npm run seed` adds the larger exercise catalog and the muscle and variation tags the recovery and variation features need. It never touches your logged workouts.
+
+3. In the `frontend` folder, run `npm install`, then start both parts as usual.
+4. When you next open the app, you'll see a one-time **"Your data, your choice"** screen. Tick what you're happy for the app to store. To use body goals, scans and steps, tick **Store my body and activity data**.
+
+### Daily steps from Apple Health (optional)
+
+A web app can't read Apple Health directly, so an iPhone Shortcut sends your daily step count to the app instead. Your Garmin's steps reach Apple Health through Garmin Connect's Apple Health sharing, so this picks those up too.
+
+1. In the app, go to **Settings → Data import** and tap **Create token**. Copy it.
+2. Follow the step-by-step instructions under **Apple Health steps** on that screen.
+
+> Your iPhone has to be able to reach the backend. On your home network, use
+> your computer's local address (e.g. `http://192.168.1.20:3001`) rather than
+> `localhost`. Once the app is deployed, use its public URL.
+
+### Renpho sync (optional)
+
+Pulls your Renpho body-composition scans into the app. It runs on your computer, so your Renpho password never goes to the app.
+
+```bash
+pip install renpho-py
+export RENPHO_EMAIL="you@example.com"
+export RENPHO_PASSWORD="your-renpho-password"
+export CFC_API_URL="http://localhost:3001"
+export CFC_UPLOAD_TOKEN="cfc_..."          # from Settings → Data import
+python3 tools/renpho_sync.py --dry-run     # check what it found
+python3 tools/renpho_sync.py               # upload
+```
+
+Run it again whenever you've had new scans, or schedule it. Already-imported scans are skipped. If it says nothing is usable, run `python3 tools/renpho_sync.py --dump` and share the output, since Renpho's record format varies between scales.
+
 ## Already set up the earlier version (258)?
 
 Version 259 adds the **Schedule Builder**, where you choose the day and time of each session yourself instead of having the AI place them. It also adds a few new database fields. Your existing account and data are kept. To upgrade:

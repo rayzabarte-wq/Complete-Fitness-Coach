@@ -8,3 +8,20 @@ export { exercisesRouter } from "./routes/exercises.js";
 export { sessionsRouter } from "./routes/sessions.js";
 export { workoutsRouter } from "./routes/workouts.js";
 export { golfRouter } from "./routes/golf.js";
+export { progressRouter } from "./routes/progress.js";
+
+// Training vocabulary and planning functions used outside this module:
+// profile.ts previews the split for each days-per-week choice, and the
+// Scheduler's week auto-fill places sessions using the split rotation and
+// projected per-muscle recovery.
+export {
+  splitForDays,
+  focusMuscles,
+  MIN_TRAINING_DAYS,
+  MAX_TRAINING_DAYS,
+  FOCUS_LABELS,
+  type Focus,
+  type Muscle,
+} from "./lib/training.js";
+export { loadExposures, readyTimes, isReadyBy, type TrainingExposure } from "./services/recovery.js";
+export { lastTrainedFocus, nextInRotation } from "./services/splitPlanner.js";

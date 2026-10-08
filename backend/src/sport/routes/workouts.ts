@@ -5,15 +5,16 @@ import { AuthedRequest } from "../../lib/requireAuth.js";
 
 export const workoutsRouter = Router();
 
-const patternSchema = z.enum(["PUSH", "PULL", "LEGS", "CORE"]);
+const patternSchema = z.enum(["PUSH", "PULL", "LEGS", "CORE", "UPPER", "LOWER", "FULL_BODY"]);
 
 // POST /workouts/plan/:pattern - generate a full session (all exercises,
-// weights/reps/sets, and rest intervals) for one movement pattern, based
-// on the signed-in user's own exercise history.
+// weights/reps/sets, and rest intervals) for one session focus (Push, Pull,
+// Legs, Core, Upper, Lower or Full body), based on the signed-in user's own
+// exercise history, current training block, and recovery.
 workoutsRouter.post("/plan/:pattern", async (req: AuthedRequest, res) => {
   const parsed = patternSchema.safeParse(req.params.pattern.toUpperCase());
   if (!parsed.success) {
-    return res.status(400).json({ error: "Pattern must be one of PUSH, PULL, LEGS, CORE" });
+    return res.status(400).json({ error: "Pattern must be one of PUSH, PULL, LEGS, CORE, UPPER, LOWER, FULL_BODY" });
   }
 
   try {

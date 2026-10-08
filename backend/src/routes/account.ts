@@ -10,18 +10,29 @@ import { isOutlookConnected, isStravaConnected } from "../scheduler/index.js";
 export const accountRouter = Router();
 
 // GET /account/export - every piece of data this account owns, as JSON.
-// Deliberately excludes passwordHash and totpSecret (security credentials,
+// Deliberately excludes passwordHash, totpSecret and ingestTokenHash (security credentials,
 // not something that should ever leave the server in an export) and the
 // raw Outlook/Strava OAuth tokens (same reasoning — connection status is
 // included, the tokens themselves aren't).
 accountRouter.get("/export", requireAuth, async (req: AuthedRequest, res) => {
   const userId = req.userId!;
 
-  const [user, sessions, recommendations, plannedSessions, nutritionLogs, trainingPlans, outlookConnected, stravaConnected] =
+  const [user, sessions, recommendations, plannedSessions, nutritionLogs, trainingPlans, outlookConnected, stravaConnected, consents, bodyMeasurements, bodyGoals, stepDays, trainingBlocks] =
     await Promise.all([
       prisma.user.findUniqueOrThrow({
         where: { id: userId },
-        select: { id: true, email: true, totpEnabled: true, createdAt: true },
+        select: {
+          id: true,
+          email: true,
+          totpEnabled: true,
+          createdAt: true,
+          birthYear: true,
+          sex: true,
+          heightCm: true,
+          trainingDaysPerWeek: true,
+          dailyStepGoal: true,
+          visibleSessionTypes: true,
+        },
       }),
       prisma.workoutSession.findMany({
         where: { userId },
@@ -42,6 +53,11 @@ accountRouter.get("/export", requireAuth, async (req: AuthedRequest, res) => {
       }),
       isOutlookConnected(userId),
       isStravaConnected(userId),
+      prisma.consentRecord.findMany({ where: { userId }, orderBy: { createdAt: "asc" } }),
+      prisma.bodyMeasurement.findMany({ where: { userId }, orderBy: { measuredAt: "asc" } }),
+      prisma.bodyGoal.findMany({ where: { userId }, include: { targets: { orderBy: { createdAt: "asc" } } }, orderBy: { createdAt: "asc" } }),
+      prisma.stepDay.findMany({ where: { userId }, orderBy: { date: "asc" } }),
+      prisma.trainingBlock.findMany({ where: { userId }, orderBy: { startedAt: "asc" } }),
     ]);
 
   res.json({
@@ -52,6 +68,11 @@ accountRouter.get("/export", requireAuth, async (req: AuthedRequest, res) => {
     plannedSessions,
     nutritionLogs,
     trainingPlans,
+    consentHistory: consents,
+    bodyMeasurements,
+    bodyGoals,
+    dailySteps: stepDays,
+    trainingBlocks,
     integrations: {
       outlookConnected,
       stravaConnected,
