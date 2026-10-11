@@ -1,0 +1,31 @@
+// GitHub Codespaces / Dev Containers setup: runs the whole app (database,
+// backend, frontend) in the cloud so nothing needs installing locally.
+// See "Run it from GitHub (Codespaces)" in SETUP.md.
+{
+  "name": "Complete Fitness Coach",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "app",
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+
+  // Asked for on the "create codespace" page and saved as a Codespaces
+  // secret, so the key never has to be typed into a file.
+  "secrets": {
+    "ANTHROPIC_API_KEY": {
+      "description": "Your Anthropic API key (starts with sk-ant-). Powers the AI coaching. You can leave it blank and add it later.",
+      "documentationUrl": "https://console.anthropic.com/settings/keys"
+    }
+  },
+
+  // Only the frontend needs to be reachable — it proxies /api to the
+  // backend (see frontend/vite.config.ts).
+  "forwardPorts": [5173],
+  "portsAttributes": {
+    "5173": { "label": "Fitness Coach app", "onAutoForward": "openBrowser" },
+    "3001": { "label": "Backend API", "onAutoForward": "silent" }
+  },
+
+  // One-time install + database setup, then start the app every time the
+  // codespace is opened.
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+  "postAttachCommand": "bash .devcontainer/start.sh"
+}

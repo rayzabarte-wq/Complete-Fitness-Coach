@@ -217,6 +217,16 @@ npm run dev                 # http://localhost:3001
 No local Postgres? `docker compose up -d` from the repo root starts one that
 matches `postgresql://strength:strength@localhost:5432/strength_app`.
 
+### Or: GitHub Codespaces
+
+`.devcontainer/` runs the whole stack in a codespace: Postgres alongside
+the app container, `setup.sh` installs dependencies, writes both `.env`
+files, migrates and seeds on create, and `start.sh` starts the backend and
+frontend on every attach. The frontend uses `VITE_API_URL="/api"` there,
+which the Vite dev server proxies to the backend (see `vite.config.ts`), so
+only port 5173 needs forwarding. `ANTHROPIC_API_KEY` comes from a Codespaces
+secret. Step-by-step: [SETUP.md](SETUP.md#run-it-from-github-codespaces).
+
 ### 2. Frontend
 
 ```bash

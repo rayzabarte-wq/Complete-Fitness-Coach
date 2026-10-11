@@ -4,6 +4,51 @@ A step-by-step guide for complete beginners. It works on **Mac** and **Windows**
 Plan on about 30–45 minutes the first time. After that, starting the app takes
 about 30 seconds (see [Starting the app again later](#starting-the-app-again-later)).
 
+> **Don't want to install anything?** You can run the app from GitHub instead,
+> in your web browser. See [Run it from GitHub (Codespaces)](#run-it-from-github-codespaces)
+> just below. You can skip the rest of this guide if you use that.
+
+## Run it from GitHub (Codespaces)
+
+GitHub Codespaces runs the whole app on GitHub's computers and you use it in your web browser. Nothing gets installed on your Mac. Personal GitHub accounts get about **60 hours a month free**.
+
+### First time (about 5 minutes)
+
+1. Open https://github.com/rayzabarte-wq/Complete-Fitness-Coach/tree/claude/strength-app-258-setup-l7wuii (sign in to GitHub if asked).
+2. Click the green **Code** button, then the **Codespaces** tab. Click the **…** (three dots), then **New with options**.
+3. On the next page:
+   - **Branch** should say `claude/strength-app-258-setup-l7wuii`.
+   - **Machine type:** the smallest (2-core) is fine.
+   - **ANTHROPIC_API_KEY:** paste your Anthropic API key (from https://console.anthropic.com/settings/keys). GitHub saves it as a private secret. You can leave it blank and [add it later](#adding-your-api-key-later); the app works without it, but the AI coaching buttons will show an error.
+4. Click **Create codespace**.
+5. A code editor opens in your browser. Wait while it sets everything up (installs, creates the database, loads exercises). This takes a few minutes the first time, and you'll see progress in the terminal panel at the bottom.
+6. When it's ready, the terminal says **"Starting..."**, and the app opens in a new browser tab. If it doesn't open on its own (pop-up blockers can stop it):
+   - Click the **PORTS** tab next to the terminal.
+   - Find port **5173** ("Fitness Coach app").
+   - Click the small **globe icon** next to it.
+7. Register with your email and a password of at least 10 characters. Then scan the 2FA QR code with an authenticator app on your phone (see [Step 6](#step-6-open-the-app-and-create-your-account)).
+
+**Leave the codespace's browser tab open** while you use the app. Closing it is fine when you're done.
+
+### Opening it again later
+
+Go to https://github.com/codespaces and click your codespace. The app starts automatically. Then click the globe icon next to port 5173 in the **PORTS** tab, as in step 6 above.
+
+### Adding your API key later
+
+1. Go to https://github.com/settings/codespaces and click **New secret**.
+2. **Name:** `ANTHROPIC_API_KEY`. **Value:** your key. Under **Repository access**, choose `rayzabarte-wq/Complete-Fitness-Coach`. Click **Add secret**.
+3. Go to https://github.com/codespaces, click **…** next to your codespace, choose **Stop codespace**, then open it again.
+
+### Good to know
+
+- **Your data lives in the codespace.** It's kept when the codespace stops, but it's lost if you delete the codespace. GitHub also **deletes codespaces automatically after 30 days of not being used**, so open it at least once a month if you want to keep your workouts.
+- **It stops itself** after 30 minutes without activity, so it doesn't use up your free hours. Opening it again takes under a minute.
+- **The app's web address is private.** It only works for you, signed in to GitHub. On your phone, sign in to GitHub in the browser first, then open the same address.
+- **Check your free hours** at https://github.com/settings/billing.
+
+---
+
 ## What you're setting up
 
 The app has three parts. All three run on your own computer:
