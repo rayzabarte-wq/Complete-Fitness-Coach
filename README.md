@@ -399,6 +399,7 @@ Open the failed service → **Deployments** → the failed deployment →
 | `Environment variable not found: DATABASE_URL` | Add `DATABASE_URL` = `${{Postgres.DATABASE_URL}}` to the backend. |
 | `JWT_SECRET is not set` | Add `JWT_SECRET` to the backend. |
 | App loads but login says "Failed to fetch" | Frontend's `VITE_API_URL` is missing or wrong. Fix it, then redeploy the frontend. |
+| Login shows a **405** error | Login is being sent to the frontend instead of the backend: `VITE_API_URL` is empty or points at the frontend's own URL. Set it to the **backend's** URL, then redeploy the frontend. |
 
 ## Workout planner
 

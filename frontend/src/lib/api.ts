@@ -1,6 +1,18 @@
 import { Equipment } from "./equipment.js";
 
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
+// Tolerates the common ways VITE_API_URL gets pasted in: a bare domain
+// without https:// (how Railway displays generated domains, which would
+// otherwise be fetched as a path on the frontend's own site), surrounding
+// whitespace, or a trailing slash. A leading "/" (e.g. "/api" in
+// Codespaces) is kept as a same-origin path.
+function normalizeApiUrl(raw: string | undefined): string {
+  let url = (raw ?? "").trim().replace(/\/+$/, "");
+  if (!url) return "http://localhost:3001";
+  if (!url.startsWith("/") && !/^https?:\/\//i.test(url)) url = `https://${url}`;
+  return url;
+}
+
+const API_URL = normalizeApiUrl(import.meta.env.VITE_API_URL);
 
 export interface Exercise {
   id: string;
