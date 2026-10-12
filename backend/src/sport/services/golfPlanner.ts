@@ -1,7 +1,5 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "../../lib/prisma.js";
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+import { askClaude } from "../../lib/claude.js";
 
 // Deliberately excludes GOLF_ROUND — a round isn't a practice session to
 // generate drills for, it's the real thing.
@@ -93,18 +91,9 @@ Design a practice session with specific drills, not just general advice. Each dr
 Respond with ONLY a JSON object, no other text, in this exact shape:
 {"focusSummary": "one sentence on the session's main focus", "drills": [{"name": string, "detail": string, "minutes": number}], "totalMinutes": number, "reasoning": "one or two sentences on why this structure, naming which feedback (last session or a recent round) it responds to, if any"}`;
 
-  const message = await anthropic.messages.create({
-    model: "claude-sonnet-5",
-    max_tokens: 1200,
-    messages: [{ role: "user", content: prompt }],
-  });
+  const answer = await askClaude(prompt);
 
-  const textBlock = message.content.find((block) => block.type === "text");
-  if (!textBlock || textBlock.type !== "text") {
-    throw new Error("No text response from Claude");
-  }
-
-  const rawText = textBlock.text.replace(/```json|```/g, "").trim();
+  const rawText = answer.replace(/```json|```/g, "").trim();
   const objectMatch = rawText.match(/\{[\s\S]*\}/);
   if (!objectMatch) {
     throw new Error(`Claude's response wasn't valid JSON: ${rawText.slice(0, 300)}`);

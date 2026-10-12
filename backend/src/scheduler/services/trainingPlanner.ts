@@ -1,8 +1,6 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "../../lib/prisma.js";
+import { askClaude } from "../../lib/claude.js";
 import type { Sport, TimeOfDay, SportPriority } from "@prisma/client";
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const SPORT_LABELS: Record<Sport, string> = {
   STRENGTH: "Strength",
@@ -29,19 +27,6 @@ function extractJson(rawText: string): unknown {
   } catch (err) {
     throw new Error(`Failed to parse Claude's response as JSON: ${(err as Error).message}`);
   }
-}
-
-async function askClaude(prompt: string, maxTokens: number): Promise<string> {
-  const message = await anthropic.messages.create({
-    model: "claude-sonnet-5",
-    max_tokens: maxTokens,
-    messages: [{ role: "user", content: prompt }],
-  });
-  const textBlock = message.content.find((block) => block.type === "text");
-  if (!textBlock || textBlock.type !== "text") {
-    throw new Error("No text response from Claude");
-  }
-  return textBlock.text;
 }
 
 // ---------------------------------------------------------------------------
@@ -93,7 +78,7 @@ Respond with ONLY a JSON array, no other text, in this exact shape:
 [{"sport": "STRENGTH", "approachText": "...", "weeklySessionTarget": 3, "sessionMinutes": 45}, ...]
 Use these exact sport codes: ${priorities.map((p) => p.sport).join(", ")}.`;
 
-  const rawText = await askClaude(prompt, 2000);
+  const rawText = await askClaude(prompt);
   const parsed = extractJson(rawText) as GeneratedApproach[];
   if (!Array.isArray(parsed)) {
     throw new Error("Expected a JSON array of sport approaches");
@@ -121,7 +106,7 @@ Figure out which day(s) of the week it applies to (0=Sunday, 1=Monday, 2=Tuesday
 Respond with ONLY a JSON object, no other text, in this exact shape:
 {"daysOfWeek": [1,2,3,4,5], "blockedTimeOfDay": ["MORNING"], "parseExplanation": "one short sentence stating what you understood, naming the actual days, so the person can confirm or correct it"}`;
 
-  const rawResponse = await askClaude(prompt, 500);
+  const rawResponse = await askClaude(prompt);
   const parsed = extractJson(rawResponse) as ParsedConstraint;
   return parsed;
 }
@@ -267,7 +252,7 @@ Apply ONLY the change(s) the request actually asks for. For any sport whose week
 Respond with ONLY a JSON object, no other text, in this exact shape:
 {"changeSummary": "one short sentence describing what changed, in plain terms", "approachUpdates": [{"sport": "RUN", "weeklySessionTarget": 2}]}`;
 
-  const rawText = await askClaude(prompt, 1200);
+  const rawText = await askClaude(prompt);
   const parsed = extractJson(rawText) as PlanAmendment;
   if (!Array.isArray(parsed.approachUpdates)) {
     throw new Error("Expected an amendment object with an approachUpdates array");

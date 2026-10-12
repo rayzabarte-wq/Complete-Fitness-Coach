@@ -1,12 +1,10 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "../../lib/prisma.js";
+import { askClaude } from "../../lib/claude.js";
 import { EQUIPMENT_CONFIG, Equipment } from "../lib/equipmentConfig.js";
 import { Focus, FOCUS_LABELS, focusMuscles, MUSCLE_LABELS } from "../lib/training.js";
 import { pickSessionExercises, BlockInfo } from "./exerciseSelection.js";
 import { getRecovery } from "./recovery.js";
 import { paceStatus, goalDirection, METRIC_LABELS, BodyMetric } from "../../services/goals.js";
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 export type MovementPattern = Focus;
 
@@ -145,20 +143,11 @@ For each exercise recommend weight (or band level), reps, sets, and a rest inter
 Respond with ONLY a JSON array, no other text, one object per exercise in the same order given, in this exact shape:
 [{"exerciseId": string, "suggestedWeightLb": number, "bandLevel": string | null, "suggestedReps": number, "suggestedSets": number, "restSeconds": number, "reasoning": "one short sentence"}]`;
 
-  const message = await anthropic.messages.create({
-    model: "claude-sonnet-5",
-    max_tokens: 2000,
-    messages: [{ role: "user", content: prompt }],
-  });
-
-  const textBlock = message.content.find((block) => block.type === "text");
-  if (!textBlock || textBlock.type !== "text") {
-    throw new Error("No text response from Claude");
-  }
+  const answer = await askClaude(prompt);
 
   // Claude is asked for JSON-only, but strip fences and grab the array
   // itself as a safety net in case any stray text sneaks in around it.
-  const rawText = textBlock.text.replace(/```json|```/g, "").trim();
+  const rawText = answer.replace(/```json|```/g, "").trim();
   const arrayMatch = rawText.match(/\[[\s\S]*\]/);
   if (!arrayMatch) {
     throw new Error(`Claude's response wasn't valid JSON: ${rawText.slice(0, 300)}`);
