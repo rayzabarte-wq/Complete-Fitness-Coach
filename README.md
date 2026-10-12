@@ -239,39 +239,80 @@ The frontend talks to the backend via `VITE_API_URL` (see `frontend/.env.example
 
 ## Deploying (Railway)
 
-Railway is the recommended host — one project can run the backend, the
-Postgres database, and (optionally) serve the built frontend. Realistic
-cost for this app's size is around **$5/month** (Railway's Hobby plan —
-see [railway.com/pricing](https://railway.com/pricing) for current
-pricing, since this can change).
+Railway is the recommended host. One project runs the Postgres database,
+the backend, and the frontend as three services. Realistic cost for this
+app's size is around **$5/month** (Railway's Hobby plan; see
+[railway.com/pricing](https://railway.com/pricing) for current pricing,
+since this can change).
 
-1. Create a new Railway project → **Add a Postgres database** (Railway
-   gives you a `DATABASE_URL` automatically).
-2. **Deploy the `backend/` folder** as a service (Railway auto-detects
-   Node). Set these env vars — see `backend/.env.example` for the full
-   annotated list:
-   - `DATABASE_URL` (from the Postgres plugin)
-   - `ANTHROPIC_API_KEY`
-   - `JWT_SECRET`
-   - `FRONTEND_URL` (your frontend's Railway URL — see step 4)
-   - `PORT`
-   - `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`,
-     `MICROSOFT_REDIRECT_URI` (optional — Outlook sync)
-   - `STRAVA_CLIENT_ID`, `STRAVA_CLIENT_SECRET`, `STRAVA_REDIRECT_URI`
-     (optional — Strava sync)
-   - `LOCATION_LAT`, `LOCATION_LON` (optional — weather fallback if device
-     location is denied)
-3. Run `npx prisma migrate deploy` against the Railway database (Railway's
-   shell, or a one-off deploy command).
-4. **Deploy the `frontend/` folder** as a second service (or build it and
-   serve as static files from the backend — up to you). Set
-   `VITE_API_URL` to your backend's Railway URL.
-5. If using Outlook or Strava sync, update `MICROSOFT_REDIRECT_URI` /
-   `STRAVA_REDIRECT_URI` (and the callback URLs registered with Azure/
-   Strava) to point at your deployed backend URL instead of localhost.
-6. On your phone, open the frontend URL in Safari → Share → **Add to Home
-   Screen** to get an app-like icon (PWA behavior comes from
-   `frontend/public/manifest.json`, already included).
+> **Important:** this repo holds two apps (`backend/` and `frontend/`), so
+> each Railway service must have its **Root Directory** set. Without it,
+> Railway builds the repo root and fails with *"Railpack could not
+> determine how to build the app."*
+
+### 1. Database
+
+In your Railway project: **+ Create → Database → PostgreSQL**.
+
+### 2. Backend service
+
+**+ Create → GitHub Repo** → pick this repo. Then in the service's
+**Settings**:
+
+- **Source → Root Directory:** `/backend`
+- **Source → Branch:** the branch you want to deploy
+- **Deploy → Pre-deploy Command:** `npx prisma migrate deploy && npm run seed`
+  (creates/updates the tables and loads the exercise catalog on every
+  deploy; both steps are safe to repeat)
+- **Networking → Generate Domain.** Copy the URL; the frontend needs it.
+
+In **Variables** (see `backend/.env.example` for the full annotated list):
+
+| Variable | Value |
+|---|---|
+| `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` (Railway fills it in from the database service) |
+| `JWT_SECRET` | Long random string: `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"` |
+| `ANTHROPIC_API_KEY` | Your Anthropic API key |
+| `FRONTEND_URL` | The frontend's Railway URL (add after step 3) |
+
+Don't set `PORT`; Railway provides it. Optional: `MICROSOFT_*` (Outlook
+sync), `STRAVA_*` (Strava sync), `LOCATION_LAT`/`LOCATION_LON` (weather
+fallback).
+
+### 3. Frontend service
+
+**+ Create → GitHub Repo** → same repo. In **Settings**:
+
+- **Source → Root Directory:** `/frontend`
+- **Source → Branch:** same branch as the backend
+- **Networking → Generate Domain.** This is the address you open to use the app.
+
+In **Variables**: `VITE_API_URL` = the backend's URL from step 2, e.g.
+`https://your-backend.up.railway.app` (no trailing slash). It's baked in
+at build time, so redeploy the frontend if it ever changes.
+
+### 4. Finish up
+
+- Set the backend's `FRONTEND_URL` to the frontend's URL (step 2 table).
+- If using Outlook or Strava sync, point `MICROSOFT_REDIRECT_URI` /
+  `STRAVA_REDIRECT_URI` (and the callback URLs registered with Azure/
+  Strava) at the backend URL instead of localhost.
+- Open the frontend URL, register, and set up 2FA.
+- On your phone, open the frontend URL in Safari → Share → **Add to Home
+  Screen** to get an app-like icon (PWA behavior comes from
+  `frontend/public/manifest.json`, already included).
+
+### If a deploy fails
+
+Open the failed service → **Deployments** → the failed deployment →
+**Build Logs** (or **Deploy Logs** if it built but won't start):
+
+| Log says | Fix |
+|---|---|
+| `Railpack could not determine how to build the app` | Root Directory isn't set (see above). |
+| `Environment variable not found: DATABASE_URL` | Add `DATABASE_URL` = `${{Postgres.DATABASE_URL}}` to the backend. |
+| `JWT_SECRET is not set` | Add `JWT_SECRET` to the backend. |
+| App loads but login says "Failed to fetch" | Frontend's `VITE_API_URL` is missing or wrong. Fix it, then redeploy the frontend. |
 
 ## Workout planner
 
