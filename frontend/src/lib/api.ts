@@ -11,7 +11,12 @@ export interface Exercise {
   equipment: Equipment;
   movementPattern: "PUSH" | "PULL" | "LEGS" | "CORE";
   defaultSets: number;
+  primaryMuscle: Muscle | null;
+  secondaryMuscles: Muscle[];
+  variationTag: string | null;
 }
+
+export type Muscle = "CHEST" | "SHOULDERS" | "TRICEPS" | "BACK" | "BICEPS" | "QUADS" | "HAMSTRINGS" | "GLUTES" | "CORE";
 
 export interface SetInput {
   exerciseId: string;
@@ -23,7 +28,9 @@ export interface SetInput {
   setOrder: number;
 }
 
-export type MovementPattern = "PUSH" | "PULL" | "LEGS" | "CORE";
+// PUSH/PULL/LEGS/CORE are exercise patterns; UPPER/LOWER/FULL_BODY are
+// session focuses used by the upper/lower and full-body splits.
+export type MovementPattern = "PUSH" | "PULL" | "LEGS" | "CORE" | "UPPER" | "LOWER" | "FULL_BODY";
 
 export interface PlannedExercise {
   exerciseId: string;
@@ -35,12 +42,25 @@ export interface PlannedExercise {
   suggestedSets: number;
   restSeconds: number;
   reasoning: string;
+  selectionNote: string;
+  isCoreFinisher: boolean;
+}
+
+export interface BlockInfo {
+  startedAt: string;
+  endsAt: string;
+  week: number;
+  totalWeeks: number;
+  isNew: boolean;
+  swaps: { at: string; out: string; in: string; why: string }[];
 }
 
 export interface WorkoutPlan {
   movementPattern: MovementPattern;
   exercises: PlannedExercise[];
   estimatedMinutes: number;
+  block: BlockInfo;
+  recoveringMuscles: string[];
 }
 
 export type ReadinessLevel = "LOW" | "MEDIUM" | "HIGH";
@@ -54,6 +74,8 @@ export interface LogSessionInput {
   soreness?: ReadinessLevel;
   energyLevel?: ReadinessLevel;
   sets: SetInput[];
+  focus?: MovementPattern;
+  plannedSessionId?: string;
 }
 
 export type SessionType =
@@ -91,6 +113,7 @@ export interface PlannedSession {
   actualMinutes: number | null;
   actualSource: ActualTimeSource | null;
   stravaActivityId: string | null;
+  autoPlanned: boolean;
 }
 
 export interface StravaActivity {
@@ -264,6 +287,184 @@ export interface DayForecast {
   precipProbability: number;
   windMaxMph: number;
   outdoorRecommended: boolean;
+}
+
+// --- Strength-first additions: profile, consent, body, goals, steps, ------
+// --- progress, day summaries ----------------------------------------------
+
+export interface Split {
+  key: string;
+  label: string;
+  rotation: MovementPattern[];
+  explanation: string;
+}
+
+export interface Profile {
+  email: string;
+  birthYear: number | null;
+  age: number | null;
+  sex: "MALE" | "FEMALE" | null;
+  heightCm: number | null;
+  trainingDaysPerWeek: number;
+  split: Split;
+  splitOptions: { days: number; split: Split }[];
+  dailyStepGoal: number | null;
+  consentReviewed: boolean;
+  hasIngestToken: boolean;
+}
+
+export type ConsentPurpose = "PROFILE" | "BODY_DATA" | "BENCHMARKING" | "PRODUCT_ANALYTICS";
+
+export interface ConsentInfo {
+  textVersion: string;
+  reviewed: boolean;
+  purposes: {
+    purpose: ConsentPurpose;
+    title: string;
+    description: string;
+    withdrawEffect: string;
+    granted: boolean | null;
+    updatedAt: string | null;
+  }[];
+  history: { purpose: ConsentPurpose; granted: boolean; textVersion: string; at: string }[];
+}
+
+export type BodyMetric = "BODY_FAT_PCT" | "MUSCLE_MASS_KG" | "BODY_WEIGHT_KG";
+export type RevisionReason = "INJURY_OR_ILLNESS" | "LIFE_EVENT" | "TOO_AMBITIOUS" | "TOO_EASY" | "CHANGED_PRIORITIES" | "OTHER";
+
+export interface BodyMeasurement {
+  id: string;
+  measuredAt: string;
+  weightKg: number | null;
+  bodyFatPct: number | null;
+  muscleMassKg: number | null;
+  source: "MANUAL" | "RENPHO" | "APPLE_HEALTH";
+}
+
+export interface GoalTargetVersion {
+  anchorDate: string;
+  anchorValue: number;
+  targetValue: number;
+  targetDate: string;
+  reason: RevisionReason | null;
+  note: string | null;
+  createdAt: string;
+  revisionDirection: "EASIER" | "HARDER" | "SIMILAR" | null;
+}
+
+export interface BodyGoal {
+  id: string;
+  metric: BodyMetric;
+  status: "ACTIVE" | "ACHIEVED" | "CLOSED";
+  startValue: number;
+  startDate: string;
+  closedAt: string | null;
+  direction: 1 | -1;
+  targets: GoalTargetVersion[];
+  readings: { date: string; value: number }[];
+  pace: {
+    state: "AHEAD" | "ON_TRACK" | "BEHIND" | "REACHED" | "NO_DATA";
+    label: string;
+    gap: number | null;
+    latest: { date: string; value: number } | null;
+    projectedAtTarget: number | null;
+  };
+}
+
+export interface QuarterReview {
+  quarter: string;
+  goalsSet: number;
+  goalsAchieved: number;
+  revisions: {
+    goalId: string;
+    metric: BodyMetric;
+    at: string;
+    direction: "EASIER" | "HARDER" | "SIMILAR";
+    reason: RevisionReason | null;
+    targetChange: string;
+    dateChangeDays: number;
+  }[];
+  summary: string[];
+}
+
+export interface Benchmarks {
+  available: boolean;
+  reason: string | null;
+  benchmarks: { metric: string; value: number; category: string; rangeText: string; source: string }[];
+}
+
+export type BodySummary = Record<BodyMetric, { count: number; first: number | null; last: number | null; average: number | null }>;
+
+export interface StepsResponse {
+  goal: number | null;
+  days: { date: string; steps: number; source: string; hitGoal: boolean | null }[];
+  daysWithData: number;
+  average: number | null;
+  daysHitGoal: number | null;
+}
+
+export interface MuscleRecovery {
+  muscle: Muscle;
+  status: "READY" | "RECOVERING" | "UNTRAINED";
+  lastTrainedAt: string | null;
+  readyAt: string | null;
+  percentRecovered: number;
+  hoursUntilReady: number;
+}
+
+export interface TodaySuggestion {
+  split: Split;
+  nextFocus: MovementPattern;
+  suggestedFocus: MovementPattern | null;
+  reason: string;
+  recovery: MuscleRecovery[];
+}
+
+export interface Balance {
+  days: number;
+  recovery: MuscleRecovery[];
+  coverage: { muscle: Muscle; sets: number; weeklySets: number; variations: { tag: string; label: string; sets: number }[] }[];
+}
+
+export interface StrengthSeries {
+  id: string;
+  name: string;
+  pattern: string;
+  unit: "e1RM lb" | "reps";
+  points: { date: string; value: number; bestSet: string }[];
+}
+
+export interface StrengthSummary {
+  sessions: number;
+  sets: number;
+  volumeLb: number;
+  averageRpe: number | null;
+  hitTargetPercent: number | null;
+  setsByMuscle: Partial<Record<Muscle, number>>;
+  bestLifts: Record<string, { name: string; value: number }>;
+}
+
+export interface DaySummary {
+  date: string;
+  steps: number | null;
+  stepGoal: number | null;
+  hitStepGoal: boolean | null;
+  workouts: { id: string; focus: MovementPattern | null; setCount: number; minutes: number | null; exercises: { name: string; sets: string[] }[] }[];
+  scan: { weightKg: number | null; bodyFatPct: number | null; muscleMassKg: number | null; source: string } | null;
+}
+
+export interface AutofillResult {
+  strengthAdded: number;
+  restAdded: number;
+  splitLabel: string;
+  notes: string[];
+}
+
+function qs(params: Record<string, string | number | undefined>): string {
+  const p = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) if (v !== undefined) p.set(k, String(v));
+  const s = p.toString();
+  return s ? `?${s}` : "";
 }
 
 const TOKEN_KEY = "strength_app_token";
@@ -494,4 +695,48 @@ export const api = {
   // formatLocalDateKey) so the week/month periods line up with the
   // person's own calendar day rather than the server's.
   getDashboard: (planId: string, todayKey: string) => request<Dashboard>(`/plan/${planId}/dashboard?today=${todayKey}`),
+
+  // --- Profile, consent ----------------------------------------------------
+  getProfile: () => request<Profile>("/profile"),
+  updateProfile: (data: Partial<Pick<Profile, "birthYear" | "sex" | "heightCm" | "trainingDaysPerWeek" | "dailyStepGoal">>) =>
+    request<void>("/profile", { method: "PATCH", body: JSON.stringify(data) }),
+  createIngestToken: () => request<{ token: string }>("/profile/ingest-token", { method: "POST" }),
+  revokeIngestToken: () => request<void>("/profile/ingest-token", { method: "DELETE" }),
+  getConsent: () => request<ConsentInfo>("/consent"),
+  saveConsent: (choices: Partial<Record<ConsentPurpose, boolean>>) =>
+    request<{ state: Record<ConsentPurpose, boolean | null> }>("/consent", { method: "POST", body: JSON.stringify({ choices }) }),
+  // The backend URL, for the Apple Health / Renpho setup instructions.
+  apiUrl: API_URL,
+
+  // --- Body data & goals ----------------------------------------------------
+  getMeasurements: (from?: string, to?: string) => request<BodyMeasurement[]>(`/body/measurements${qs({ from, to })}`),
+  addMeasurement: (data: { measuredAt?: string; weightKg?: number; bodyFatPct?: number; muscleMassKg?: number }) =>
+    request("/body/measurements", { method: "POST", body: JSON.stringify(data) }),
+  deleteMeasurement: (id: string) => request<void>(`/body/measurements/${id}`, { method: "DELETE" }),
+  getBodySummary: (from: string, to: string) => request<BodySummary>(`/body/summary${qs({ from, to })}`),
+  getGoals: () => request<BodyGoal[]>("/body/goals"),
+  createGoal: (data: { metric: BodyMetric; targetValue: number; targetDate: string; startValue?: number }) =>
+    request<{ id: string }>("/body/goals", { method: "POST", body: JSON.stringify(data) }),
+  reviseGoal: (id: string, data: { targetValue?: number; targetDate?: string; reason: RevisionReason; note?: string }) =>
+    request(`/body/goals/${id}/revise`, { method: "POST", body: JSON.stringify(data) }),
+  setGoalStatus: (id: string, status: "ACTIVE" | "ACHIEVED" | "CLOSED") =>
+    request<void>(`/body/goals/${id}`, { method: "PATCH", body: JSON.stringify({ status }) }),
+  getQuarterReview: (quarter?: string) => request<QuarterReview>(`/body/review${qs({ quarter })}`),
+  getBenchmarks: () => request<Benchmarks>("/body/benchmarks"),
+
+  // --- Steps ----------------------------------------------------------------
+  getSteps: (from: string, to: string) => request<StepsResponse>(`/steps${qs({ from, to })}`),
+  setSteps: (date: string, steps: number) => request<void>(`/steps/${date}`, { method: "PUT", body: JSON.stringify({ steps }) }),
+
+  // --- Strength progress ----------------------------------------------------
+  getToday: () => request<TodaySuggestion>("/progress/today"),
+  getBalance: (days = 28) => request<Balance>(`/progress/balance?days=${days}`),
+  getStrengthSeries: (from?: string, to?: string) => request<StrengthSeries[]>(`/progress/strength${qs({ from, to })}`),
+  getStrengthSummary: (from: string, to: string) => request<StrengthSummary>(`/progress/strength/summary${qs({ from, to })}`),
+
+  // --- Calendar day view + auto-fill -----------------------------------------
+  getDaySummaries: (from: string, to: string) =>
+    request<DaySummary[]>(`/calendar/days${qs({ from, to, tzOffset: new Date().getTimezoneOffset() })}`),
+  autofillWeek: (start: string, today: string) =>
+    request<AutofillResult>("/calendar/autofill", { method: "POST", body: JSON.stringify({ start, today }) }),
 };

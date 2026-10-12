@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import { api, SetInput, PlannedExercise, ReadinessLevel } from "../lib/api.js";
 import { usePlan } from "../lib/planContext.js";
 import { EQUIPMENT_CONFIG, weightOptions } from "../lib/equipment.js";
+import { FOCUS_LABELS } from "../lib/activity.js";
 
 interface SetRow {
   weightLb: number;
@@ -28,8 +28,10 @@ const READINESS_OPTIONS: { value: ReadinessLevel; label: string }[] = [
   { value: "HIGH", label: "High" },
 ];
 
+/** The live, set-by-set strength log for the currently generated workout.
+ * Rendered by the Log tab's Strength view once a session has been built. */
 export default function LogWorkout() {
-  const { plan } = usePlan();
+  const { plan, setPlan, plannedSessionId, setPlannedSessionId } = usePlan();
   const [rows, setRows] = useState<Record<string, SetRow[]>>({});
   const [startedAt, setStartedAt] = useState<string | null>(null);
   const [sleepQuality, setSleepQuality] = useState<ReadinessLevel | null>(null);
@@ -54,16 +56,7 @@ export default function LogWorkout() {
     setSavedSessionId(null);
   }, [plan]);
 
-  if (!plan) {
-    return (
-      <div className="card" style={{ textAlign: "center" }}>
-        <p className="text-dim">No workout generated yet.</p>
-        <Link to="/workout" className="button-primary" style={{ display: "inline-block", textDecoration: "none", marginTop: 4 }}>
-          Pick Push, Pull, Legs, or Core
-        </Link>
-      </div>
-    );
-  }
+  if (!plan) return null;
 
   function updateRow(exerciseId: string, index: number, patch: Partial<SetRow>) {
     setRows((prev) => {
@@ -113,6 +106,8 @@ export default function LogWorkout() {
         soreness: soreness ?? undefined,
         energyLevel: energyLevel ?? undefined,
         sets,
+        focus: plan!.movementPattern,
+        plannedSessionId: plannedSessionId ?? undefined,
       });
       setSavedSessionId(session.id);
     } catch (err: any) {
@@ -122,27 +117,43 @@ export default function LogWorkout() {
     }
   }
 
-  function startNewSession() {
-    const reset: Record<string, SetRow[]> = {};
-    for (const ex of plan!.exercises) {
-      reset[ex.exerciseId] = Array.from({ length: ex.suggestedSets }, () => makeDefaultRow(ex));
-    }
-    setRows(reset);
-    setStartedAt(new Date().toISOString());
-    setSleepQuality(null);
-    setSoreness(null);
-    setEnergyLevel(null);
+  function finishSession() {
     setSavedSessionId(null);
+    setPlannedSessionId(null);
+    setPlan(null);
   }
 
   if (savedSessionId) {
-    return <FeedbackPrompt sessionId={savedSessionId} onDone={startNewSession} />;
+    return <FeedbackPrompt sessionId={savedSessionId} onDone={finishSession} />;
   }
 
   return (
     <div>
-      <div className="text-dim" style={{ fontSize: 13, marginBottom: 10 }}>
-        {plan.movementPattern} DAY · ~{plan.estimatedMinutes} min
+      <div className="card" style={{ marginBottom: 12, borderLeft: "4px solid #2a78d6" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+          <strong style={{ color: "var(--navy)", fontSize: 16 }}>{FOCUS_LABELS[plan.movementPattern] ?? plan.movementPattern} day</strong>
+          <span className="text-dim" style={{ fontSize: 13 }}>~{plan.estimatedMinutes} min</span>
+        </div>
+        {plan.block && (
+          <div className="text-dim" style={{ fontSize: 12, marginTop: 4 }}>
+            {plan.block.isNew
+              ? `New ${plan.block.totalWeeks}-week block: exercises rotated to cover the angles you've done least.`
+              : `Week ${plan.block.week} of ${plan.block.totalWeeks} in this block. Same exercises, so you can keep adding load.`}
+          </div>
+        )}
+        {plan.block?.swaps.length > 0 && (
+          <div className="text-dim" style={{ fontSize: 12, marginTop: 4 }}>
+            Swapped this block: {plan.block.swaps.map((s) => `${s.out} → ${s.in}`).join("; ")} (stopped progressing).
+          </div>
+        )}
+        {plan.recoveringMuscles?.length > 0 && (
+          <div style={{ fontSize: 12, marginTop: 6, color: "var(--accent)" }}>
+            Still recovering: {plan.recoveringMuscles.join(", ")}. Loads are held back a little for those.
+          </div>
+        )}
+        <button className="button-quiet" style={{ marginTop: 8 }} onClick={finishSession}>
+          Discard this workout
+        </button>
       </div>
 
       <ReadinessCheckIn
@@ -223,7 +234,7 @@ function ReadinessRow({
               border: "none",
               cursor: "pointer",
               background: value === opt.value ? "var(--accent)" : "var(--border)",
-              color: value === opt.value ? "#0e1512" : "var(--text-dim)",
+              color: value === opt.value ? "var(--on-accent)" : "var(--text-dim)",
               fontWeight: value === opt.value ? 700 : 400,
             }}
           >
@@ -277,7 +288,7 @@ function FeedbackPrompt({ sessionId, onDone }: { sessionId: string; onDone: () =
         </p>
       )}
       <button className="button-primary" onClick={onDone} style={{ marginTop: 16, width: "100%" }}>
-        Log another session
+        Done
       </button>
     </div>
   );
@@ -305,6 +316,16 @@ function ExerciseCard({
         </span>
       </div>
 
+      {exercise.selectionNote && (
+        <div className="text-dim" style={{ fontSize: 12, marginTop: 4, fontStyle: "italic" }}>
+          {exercise.selectionNote}
+        </div>
+      )}
+      {exercise.reasoning && (
+        <div className="text-dim" style={{ fontSize: 12, marginTop: 2 }}>
+          {exercise.reasoning}
+        </div>
+      )}
       <div
         className="text-dim"
         style={{ fontSize: 12, marginTop: 4, paddingBottom: 8, borderBottom: "1px solid var(--border)" }}
@@ -381,7 +402,7 @@ function ExerciseCard({
                 aria-label={row.logged ? "Edit set" : "Log set"}
                 style={{
                   background: row.logged ? "var(--accent)" : "var(--border)",
-                  color: row.logged ? "#0e1512" : "var(--text-dim)",
+                  color: row.logged ? "var(--on-accent)" : "var(--text-dim)",
                   border: "none",
                   borderRadius: 6,
                   height: 32,
@@ -411,7 +432,7 @@ function ExerciseCard({
                       border: "none",
                       cursor: "pointer",
                       background: row.rpe === n ? "var(--accent)" : "var(--border)",
-                      color: row.rpe === n ? "#0e1512" : "var(--text-dim)",
+                      color: row.rpe === n ? "var(--on-accent)" : "var(--text-dim)",
                     }}
                   >
                     {n}

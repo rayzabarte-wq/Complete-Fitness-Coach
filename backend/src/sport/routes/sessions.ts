@@ -35,6 +35,12 @@ const createSessionSchema = z.object({
   soreness: readinessSchema.optional(),
   energyLevel: readinessSchema.optional(),
   sets: z.array(setInputSchema).min(1),
+  // Which session focus this was (Push, Upper, ...), so the split rotation
+  // and auto-fill know where you are.
+  focus: z.enum(["PUSH", "PULL", "LEGS", "CORE", "UPPER", "LOWER", "FULL_BODY"]).optional(),
+  // The calendar entry this workout was started from, if any — it's marked
+  // done with the actual duration once the workout is saved.
+  plannedSessionId: z.string().optional(),
 });
 
 // Shared include shape for loading everything the Outlook event payload
@@ -84,7 +90,7 @@ sessionsRouter.post("/", async (req: AuthedRequest, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.flatten() });
   }
-  const { date, notes, startedAt, endedAt, sleepQuality, soreness, energyLevel, sets } = parsed.data;
+  const { date, notes, startedAt, endedAt, sleepQuality, soreness, energyLevel, sets, focus, plannedSessionId } = parsed.data;
   const userId = req.userId!;
 
   const exerciseIds = [...new Set(sets.map((s) => s.exerciseId))];
@@ -107,6 +113,7 @@ sessionsRouter.post("/", async (req: AuthedRequest, res) => {
       userId,
       date: date ? new Date(date) : undefined,
       notes,
+      focus,
       startedAt: startedAt ? new Date(startedAt) : undefined,
       endedAt: endedAt ? new Date(endedAt) : undefined,
       sleepQuality,
@@ -141,6 +148,20 @@ sessionsRouter.post("/", async (req: AuthedRequest, res) => {
       where: { id: latestRecommendation.id },
       data: { followedAsGiven },
     });
+  }
+
+  // Close off the calendar entry this workout came from, if any (scoped to
+  // this user so another account's entry can't be touched by guessing an ID).
+  if (plannedSessionId) {
+    const planned = await prisma.plannedSession.findFirst({ where: { id: plannedSessionId, userId } });
+    if (planned) {
+      const minutes =
+        startedAt && endedAt ? Math.max(1, Math.round((new Date(endedAt).getTime() - new Date(startedAt).getTime()) / 60000)) : undefined;
+      await prisma.plannedSession.update({
+        where: { id: planned.id },
+        data: { completed: true, ...(minutes ? { actualMinutes: minutes, actualSource: "MANUAL" as const } : {}) },
+      });
+    }
   }
 
   // Sync to Outlook, if this user has it connected. Failure here shouldn't

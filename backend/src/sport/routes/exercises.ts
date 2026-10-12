@@ -12,6 +12,10 @@ const createExerciseSchema = z.object({
   equipment: z.enum(["DUMBBELL", "BARBELL", "EZ_BAR", "BAND", "BODYWEIGHT"]),
   movementPattern: z.enum(["PUSH", "PULL", "LEGS", "CORE"]),
   defaultSets: z.number().int().min(1).max(10).optional(),
+  // Recovery + variation tagging (see schema.prisma's Exercise model).
+  primaryMuscle: z.enum(["CHEST", "SHOULDERS", "TRICEPS", "BACK", "BICEPS", "QUADS", "HAMSTRINGS", "GLUTES", "CORE"]).optional(),
+  secondaryMuscles: z.array(z.enum(["CHEST", "SHOULDERS", "TRICEPS", "BACK", "BICEPS", "QUADS", "HAMSTRINGS", "GLUTES", "CORE"])).optional(),
+  variationTag: z.string().regex(/^[A-Z_]+$/).optional(),
 });
 
 // GET /exercises - list the shared exercise catalog. Not scoped per-user —

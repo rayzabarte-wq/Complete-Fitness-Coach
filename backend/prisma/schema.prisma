@@ -26,8 +26,37 @@ model User {
   // Which workout types show up in the Calendar tab's day view and its
   // "schedule a session" type picker — set from Settings. REST is exempt
   // from this and always available, since hiding rest days doesn't make
-  // sense as a preference. Defaults to everything visible.
-  visibleSessionTypes SessionType[] @default([STRENGTH, SWIM, GOLF_RANGE, GOLF_ROUND, GOLF_SHORT_GAME, GOLF_PUTTING, RUN_RECOVERY, RUN_TEMPO, RUN_FARTLEK, RUN_INTERVALS, RUN_LONG_RUN, WALK_WALK, WALK_HIKE, CYCLING_EASY, CYCLING_LONG, CYCLING_HILLS, CYCLING_TURBO_EASY, CYCLING_TURBO_LONG, CYCLING_TURBO_HILLS])
+  // sense as a preference. Defaults to STRENGTH only: the first release is
+  // a strength app, with every other sport kept in the code but switched
+  // off until the person ticks it back on in Settings.
+  visibleSessionTypes SessionType[] @default([STRENGTH])
+
+  // --- Profile (only stored with PROFILE consent — see ConsentRecord) ----
+  // Kept to the fields public reference data is keyed on, so the app can
+  // benchmark against population norms. Birth year rather than full date
+  // of birth: enough for age bands, less personal.
+  birthYear Int?
+  sex       Sex?
+  heightCm  Float?
+
+  // --- Training settings --------------------------------------------------
+  // How many strength days a week the person commits to. Drives which split
+  // the app uses so every muscle still gets ~2 sessions a week (see
+  // sport/services/splits.ts): 2-3 full body, 4 upper/lower, 5 push/pull/
+  // legs/upper/lower, 6 push/pull/legs x2.
+  trainingDaysPerWeek Int @default(4)
+  // Target AVERAGE daily steps — progress compares the rolling average to
+  // it; the calendar ticks individual days that reached it.
+  dailyStepGoal Int?
+
+  // Set once the sign-up consent step has been answered (either way), so
+  // it's only shown once. Individual choices live in ConsentRecord.
+  consentReviewedAt DateTime?
+
+  // SHA-256 of a personal upload token used by an iPhone Shortcut (Apple
+  // Health steps/body data) or the Renpho sync script to post data without
+  // a login session. Only the hash is stored; the token is shown once.
+  ingestTokenHash String? @unique
 
   sessions         WorkoutSession[]
   recommendations  Recommendation[]
@@ -36,6 +65,16 @@ model User {
   microsoftAccount MicrosoftAccount?
   stravaAccount    StravaAccount?
   trainingPlans    TrainingPlan[]
+  consents         ConsentRecord[]
+  bodyMeasurements BodyMeasurement[]
+  bodyGoals        BodyGoal[]
+  stepDays         StepDay[]
+  trainingBlocks   TrainingBlock[]
+}
+
+enum Sex {
+  MALE
+  FEMALE
 }
 
 enum ExerciseCategory {
@@ -63,11 +102,31 @@ enum Equipment {
 }
 
 // Used to group exercises into full-session workouts (Push / Pull / Legs /
-// Core) rather than picking one exercise at a time.
+// Core) rather than picking one exercise at a time. UPPER, LOWER and
+// FULL_BODY are session focuses only (used by the upper/lower and full-body
+// splits) — an exercise is always tagged with one of the first four.
 enum MovementPattern {
   PUSH
   PULL
   LEGS
+  CORE
+  UPPER
+  LOWER
+  FULL_BODY
+}
+
+// The fixed muscle list the per-muscle recovery clocks run on. Deliberately
+// short (9) — granular enough to sequence sessions sensibly, simple enough
+// to tag every exercise by hand.
+enum Muscle {
+  CHEST
+  SHOULDERS
+  TRICEPS
+  BACK
+  BICEPS
+  QUADS
+  HAMSTRINGS
+  GLUTES
   CORE
 }
 
@@ -92,6 +151,16 @@ model Exercise {
   defaultSets     Int               @default(3)
   createdAt       DateTime          @default(now())
 
+  // Recovery tagging: one primary muscle (gets the full recovery window
+  // when trained) and any secondary muscles (a shorter window). Nullable
+  // only so older custom exercises stay valid until tagged.
+  primaryMuscle    Muscle?
+  secondaryMuscles Muscle[] @default([])
+  // Which region/angle of the muscle this movement emphasises, e.g.
+  // "CHEST_INCLINE" vs "CHEST_HORIZONTAL" — what the variation engine
+  // tallies to make sure no part of a muscle is chronically neglected.
+  variationTag     String?
+
   sets            SetEntry[]
   recommendations Recommendation[]
 }
@@ -103,6 +172,9 @@ model WorkoutSession {
 
   date      DateTime   @default(now())
   notes     String?
+  // Which session focus this was (Push, Upper, Full body, ...). Lets the
+  // auto-fill continue the split rotation from where you actually are.
+  focus     MovementPattern?
 
   // Actual session duration, captured client-side: startedAt when the Log
   // screen opens with a generated plan, endedAt when the workout is saved.
@@ -281,6 +353,11 @@ model PlannedSession {
   actualMinutes    Int?
   actualSource     ActualTimeSource?
   stravaActivityId String? // set when actualSource is STRAVA, for reference
+
+  // True when the week auto-fill created this entry rather than the
+  // person. Re-running auto-fill replaces only future, not-yet-completed
+  // auto-planned entries — anything added or edited by hand is left alone.
+  autoPlanned Boolean @default(false)
 
   @@index([userId, date])
 }
@@ -501,4 +578,177 @@ model ScheduleConstraint {
   createdAt DateTime @default(now())
 
   @@index([planId])
+}
+
+// ---------------------------------------------------------------------------
+// Consent. Append-only: every grant or withdrawal is a new row, so there's a
+// full record of what was agreed and when. The current state for a purpose
+// is its most recent row. Purposes are kept separate on purpose — agreeing
+// to the app storing your profile is not agreeing to benchmarking, and
+// neither is agreeing to analytics.
+enum ConsentPurpose {
+  PROFILE           // store age, sex and height
+  BODY_DATA         // store body-composition scans and daily steps
+  BENCHMARKING      // compare your data with public reference ranges
+  PRODUCT_ANALYTICS // reserved for future anonymous usage analytics
+}
+
+model ConsentRecord {
+  id     String @id @default(cuid())
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+
+  purpose ConsentPurpose
+  granted Boolean
+  // Version of the wording the person saw (see backend/src/routes/
+  // consent.ts) — if the wording changes, earlier answers stay attributable
+  // to what was actually shown at the time.
+  textVersion String
+  createdAt   DateTime @default(now())
+
+  @@index([userId, purpose, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Body composition. One row per scan / weigh-in. Every metric is optional
+// because sources differ (a plain scale gives weight only). Body weight and
+// muscle mass are stored in kg.
+enum MeasurementSource {
+  MANUAL
+  RENPHO
+  APPLE_HEALTH
+}
+
+model BodyMeasurement {
+  id     String @id @default(cuid())
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+
+  measuredAt   DateTime
+  weightKg     Float?
+  bodyFatPct   Float?
+  muscleMassKg Float?
+  source       MeasurementSource @default(MANUAL)
+  // Identifier from the source (e.g. the Renpho measurement timestamp/id) so
+  // re-running an import never creates duplicates.
+  externalId   String?
+  createdAt    DateTime @default(now())
+
+  @@unique([userId, source, externalId])
+  @@index([userId, measuredAt])
+}
+
+// ---------------------------------------------------------------------------
+// Body goals: a metric, a target value and a target date. The target can be
+// revised — each version is kept as a GoalTarget row, so the chart can show
+// the current pace line in full and earlier ones faintly, and the quarterly
+// review can look at how goals were recalibrated.
+enum BodyMetric {
+  BODY_FAT_PCT
+  MUSCLE_MASS_KG
+  BODY_WEIGHT_KG
+}
+
+enum GoalStatus {
+  ACTIVE
+  ACHIEVED
+  CLOSED
+}
+
+// Why a target was changed — lets the quarterly review describe revisions
+// fairly (an injury isn't the same as quietly lowering the bar).
+enum RevisionReason {
+  INJURY_OR_ILLNESS
+  LIFE_EVENT
+  TOO_AMBITIOUS
+  TOO_EASY
+  CHANGED_PRIORITIES
+  OTHER
+}
+
+model BodyGoal {
+  id     String @id @default(cuid())
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+
+  metric     BodyMetric
+  // Where the goal started — the first pace line runs from here.
+  startValue Float
+  startDate  DateTime
+  status     GoalStatus @default(ACTIVE)
+  closedAt   DateTime?
+  createdAt  DateTime   @default(now())
+
+  targets GoalTarget[]
+
+  @@index([userId, status])
+}
+
+// One version of a goal's target. The first is created with the goal; each
+// revision adds another. A version's pace line runs from (anchorDate,
+// anchorValue) to (targetDate, targetValue): for the first version that's
+// the goal's start, for a revision it's where you actually were when you
+// revised.
+model GoalTarget {
+  id     String   @id @default(cuid())
+  goal   BodyGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  goalId String
+
+  anchorDate  DateTime
+  anchorValue Float
+  targetValue Float
+  targetDate  DateTime
+  // Null on the first version; set on every revision.
+  reason      RevisionReason?
+  note        String?
+  createdAt   DateTime @default(now())
+
+  @@index([goalId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Daily steps — one row per calendar day. Imported from Apple Health via an
+// iPhone Shortcut (or typed in by hand).
+enum StepSource {
+  MANUAL
+  APPLE_HEALTH
+}
+
+model StepDay {
+  id     String @id @default(cuid())
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+
+  // UTC midnight of the calendar day (same convention as PlannedSession).
+  date      DateTime
+  steps     Int
+  source    StepSource @default(APPLE_HEALTH)
+  updatedAt DateTime   @updatedAt
+
+  @@unique([userId, date])
+}
+
+// ---------------------------------------------------------------------------
+// Exercise variation, block-based. For each session focus (Push, Upper, ...)
+// the app keeps a set of exercises stable for a block of a few weeks so the
+// load can actually progress, then rotates to complementary variations
+// covering the regions that got the least work. An exercise is swapped out
+// mid-block only if progress on it stalls. See sport/services/
+// exerciseSelection.ts.
+model TrainingBlock {
+  id     String @id @default(cuid())
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+
+  focus       MovementPattern
+  startedAt   DateTime @default(now())
+  endsAt      DateTime
+  exerciseIds String[]
+  closedAt    DateTime?
+  // Human-readable history of changes inside the block, e.g.
+  // [{ "at": "...", "out": "Barbell Bench Press", "in": "Ring Dip",
+  //    "why": "stalled for 3 sessions" }]
+  swapLog     Json     @default("[]")
+
+  @@index([userId, focus, closedAt])
 }

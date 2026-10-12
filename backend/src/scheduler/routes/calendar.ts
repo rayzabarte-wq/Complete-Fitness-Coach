@@ -4,6 +4,8 @@ import { prisma } from "../../lib/prisma.js";
 import { getTenDayForecast, isWeatherConfigured } from "../services/weather.js";
 import { getActivitiesForDate } from "../services/stravaSync.js";
 import { AuthedRequest } from "../../lib/requireAuth.js";
+import { addDays, dateToDayKey, dayKeyToDate, isDayKey } from "../../lib/dates.js";
+import { autofillWeek } from "../services/strengthAutofill.js";
 
 export const calendarRouter = Router();
 
@@ -30,7 +32,7 @@ const sessionTypeSchema = z.enum([
   "REST",
 ]);
 
-const movementPatternSchema = z.enum(["PUSH", "PULL", "LEGS", "CORE"]);
+const movementPatternSchema = z.enum(["PUSH", "PULL", "LEGS", "CORE", "UPPER", "LOWER", "FULL_BODY"]);
 
 const createPlannedSessionSchema = z
   .object({
@@ -60,6 +62,94 @@ calendarRouter.get("/", async (req: AuthedRequest, res) => {
     orderBy: { date: "asc" },
   });
   res.json(sessions);
+});
+
+const autofillSchema = z.object({
+  // First day of the 7-day window, and today, both as the person's LOCAL
+  // calendar day (YYYY-MM-DD) — days before today are never planned.
+  start: z.string().refine(isDayKey),
+  today: z.string().refine(isDayKey),
+});
+
+// POST /calendar/autofill - lay out the week's strength sessions (and rest
+// days) from the split and recovery. See services/strengthAutofill.ts.
+calendarRouter.post("/autofill", async (req: AuthedRequest, res) => {
+  const parsed = autofillSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+  try {
+    res.json(await autofillWeek(req.userId!, parsed.data.start, parsed.data.today));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err instanceof Error ? err.message : "Auto-fill failed" });
+  }
+});
+
+// GET /calendar/days?from=YYYY-MM-DD&to=YYYY-MM-DD&tzOffset=-60 - what
+// actually happened each day, for the calendar's simplified day view and its
+// drill-down: steps (and whether they reached the goal), strength workouts
+// logged, and any body scan. tzOffset is the browser's
+// Date.getTimezoneOffset(), used to put timestamped entries (workouts,
+// scans) on the person's local day.
+calendarRouter.get("/days", async (req: AuthedRequest, res) => {
+  const fromKey = req.query.from;
+  const toKey = req.query.to;
+  if (!isDayKey(fromKey) || !isDayKey(toKey)) {
+    return res.status(400).json({ error: "from and to must be YYYY-MM-DD" });
+  }
+  const offsetMin = Number(req.query.tzOffset ?? 0) || 0;
+  const from = dayKeyToDate(fromKey);
+  const to = dayKeyToDate(toKey);
+  // Timestamps are shifted by the offset to land on local days; widen the
+  // query by a day each side so nothing near midnight is missed.
+  const [steps, workouts, scans, user] = await Promise.all([
+    prisma.stepDay.findMany({ where: { userId: req.userId, date: { gte: from, lt: to } } }),
+    prisma.workoutSession.findMany({
+      where: { userId: req.userId, date: { gte: addDays(from, -1), lt: addDays(to, 1) } },
+      include: { sets: { include: { exercise: true }, orderBy: { setOrder: "asc" } } },
+      orderBy: { date: "asc" },
+    }),
+    prisma.bodyMeasurement.findMany({
+      where: { userId: req.userId, measuredAt: { gte: addDays(from, -1), lt: addDays(to, 1) } },
+      orderBy: { measuredAt: "asc" },
+    }),
+    prisma.user.findUniqueOrThrow({ where: { id: req.userId }, select: { dailyStepGoal: true } }),
+  ]);
+  const localKey = (d: Date) => dateToDayKey(new Date(d.getTime() - offsetMin * 60_000));
+
+  const out = new Map<string, any>();
+  for (let d = from; d < to; d = addDays(d, 1)) {
+    out.set(dateToDayKey(d), { date: dateToDayKey(d), steps: null, stepGoal: user.dailyStepGoal, hitStepGoal: null, workouts: [], scan: null });
+  }
+  for (const s of steps) {
+    const day = out.get(dateToDayKey(s.date));
+    if (!day) continue;
+    day.steps = s.steps;
+    day.hitStepGoal = user.dailyStepGoal != null ? s.steps >= user.dailyStepGoal : null;
+  }
+  for (const w of workouts) {
+    const day = out.get(localKey(w.date));
+    if (!day) continue;
+    const exercises = new Map<string, { name: string; sets: string[] }>();
+    for (const set of w.sets) {
+      const e = exercises.get(set.exerciseId) ?? exercises.set(set.exerciseId, { name: set.exercise.name, sets: [] }).get(set.exerciseId)!;
+      const load = set.bandLevel ? `${set.bandLevel} band` : set.weightLb > 0 ? `${set.weightLb}lb` : "BW";
+      e.sets.push(`${load} × ${set.reps}${set.rpe ? ` @${set.rpe}` : ""}`);
+    }
+    day.workouts.push({
+      id: w.id,
+      focus: w.focus,
+      setCount: w.sets.length,
+      minutes: w.startedAt && w.endedAt ? Math.round((w.endedAt.getTime() - w.startedAt.getTime()) / 60000) : null,
+      exercises: [...exercises.values()],
+    });
+  }
+  for (const m of scans) {
+    const day = out.get(localKey(m.measuredAt));
+    if (day) day.scan = { weightKg: m.weightKg, bodyFatPct: m.bodyFatPct, muscleMassKg: m.muscleMassKg, source: m.source };
+  }
+  res.json([...out.values()]);
 });
 
 // POST /calendar - schedule a new session for the signed-in user.
@@ -131,6 +221,9 @@ calendarRouter.patch("/:id", async (req: AuthedRequest, res) => {
       estimatedMinutes: resolvedType === "REST" ? null : estimatedMinutes,
       notes,
       completed,
+      // A hand edit makes it the person's own entry: re-running auto-fill
+      // will no longer replace it.
+      ...(date || type || movementPattern || estimatedMinutes || notes !== undefined ? { autoPlanned: false } : {}),
       ...(actualMinutes !== undefined
         ? { actualMinutes, actualSource: "MANUAL" as const, stravaActivityId: null }
         : {}),

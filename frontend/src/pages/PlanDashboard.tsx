@@ -94,7 +94,7 @@ function ToggleButton({ active, onClick, label }: { active: boolean; onClick: ()
       style={{
         flex: 1,
         background: active ? "var(--accent)" : "transparent",
-        color: active ? "#0e1512" : "var(--text)",
+        color: active ? "var(--on-accent)" : "var(--text)",
         border: active ? "none" : "1px solid var(--border)",
         borderRadius: 8,
         padding: "8px 10px",

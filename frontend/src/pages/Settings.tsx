@@ -1,8 +1,276 @@
 import { useEffect, useState } from "react";
-import { api, auth, SessionType } from "../lib/api.js";
-import { SESSION_TYPE_TREE, ALL_SESSION_TYPES } from "../lib/sessionTypes.js";
+import { Link, useNavigate } from "react-router-dom";
+import { api, auth, Profile, SessionType } from "../lib/api.js";
+import { SESSION_TYPE_TREE } from "../lib/sessionTypes.js";
+import { ConsentSettings } from "../components/Consent.js";
 
-export default function Settings() {
+// Settings lives behind the gear icon rather than a tab: it's a
+// set-and-forget place, not somewhere you go daily.
+export default function Settings({ onLoggedOut }: { onLoggedOut: () => void }) {
+  const navigate = useNavigate();
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [version, setVersion] = useState(0);
+  useEffect(() => {
+    api.getProfile().then(setProfile);
+  }, [version]);
+  const reload = () => setVersion((v) => v + 1);
+
+  return (
+    <div>
+      <button onClick={() => navigate(-1)} className="button-quiet" style={{ marginBottom: 10 }}>
+        ‹ Back
+      </button>
+      <h2 style={{ margin: "0 0 4px", fontSize: 20 }}>Settings</h2>
+      {profile && (
+        <p className="text-dim" style={{ fontSize: 13, marginTop: 0 }}>
+          Signed in as {profile.email}
+        </p>
+      )}
+
+      <div className="section-title">Training</div>
+      {profile && <TrainingSection profile={profile} onSaved={reload} />}
+
+      <div className="section-title">Profile</div>
+      {profile && <ProfileSection profile={profile} onSaved={reload} />}
+
+      <div className="section-title" id="privacy">
+        Privacy &amp; consent
+      </div>
+      <div className="card">
+        <ConsentSettings onChanged={reload} />
+      </div>
+
+      <div className="section-title" id="import">
+        Data import
+      </div>
+      {profile && <DataImportSection profile={profile} onChanged={reload} />}
+
+      <div className="section-title">Connections</div>
+      <OutlookSection />
+      <StravaSection />
+
+      <div className="section-title">Workout types</div>
+      <WorkoutTypesSection />
+
+      <div className="section-title">Planning</div>
+      <div className="card">
+        <strong>3-month training plan</strong>
+        <p className="text-dim" style={{ fontSize: 13, marginTop: 6 }}>
+          The multi-sport quarterly planner (priorities, approaches, weekly framework). The strength auto-fill on the Calendar works without it.
+        </p>
+        <Link to="/plan" className="button-secondary" style={{ display: "block", textAlign: "center", textDecoration: "none", marginTop: 8 }}>
+          Open the 3-month plan
+        </Link>
+      </div>
+
+      <div className="section-title">Your data</div>
+      <YourDataSection />
+
+      <button
+        className="button-secondary"
+        style={{ width: "100%", marginTop: 16 }}
+        onClick={() => {
+          auth.clearToken();
+          onLoggedOut();
+        }}
+      >
+        Log out
+      </button>
+    </div>
+  );
+}
+
+function TrainingSection({ profile, onSaved }: { profile: Profile; onSaved: () => void }) {
+  const [days, setDays] = useState(profile.trainingDaysPerWeek);
+  const [saving, setSaving] = useState(false);
+  const option = profile.splitOptions.find((o) => o.days === days);
+
+  async function save(n: number) {
+    setDays(n);
+    setSaving(true);
+    try {
+      await api.updateProfile({ trainingDaysPerWeek: n });
+      onSaved();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="card">
+      <strong>Strength days per week</strong>
+      <div style={{ display: "flex", gap: 6, marginTop: 8 }} role="radiogroup" aria-label="Strength days per week">
+        {profile.splitOptions.map((o) => (
+          <button
+            key={o.days}
+            role="radio"
+            aria-checked={days === o.days}
+            onClick={() => save(o.days)}
+            disabled={saving}
+            style={{
+              flex: 1,
+              padding: "8px 0",
+              borderRadius: 8,
+              border: days === o.days ? "none" : "1px solid var(--border)",
+              background: days === o.days ? "var(--accent)" : "var(--surface)",
+              color: days === o.days ? "var(--on-accent)" : "var(--text)",
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            {o.days}
+          </button>
+        ))}
+      </div>
+      {option && (
+        <>
+          <div style={{ fontSize: 14, fontWeight: 600, marginTop: 10, color: "var(--navy)" }}>Split: {option.split.label}</div>
+          <p className="text-dim" style={{ fontSize: 13, margin: "4px 0 0" }}>
+            {option.split.explanation}
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
+function ProfileSection({ profile, onSaved }: { profile: Profile; onSaved: () => void }) {
+  const [birthYear, setBirthYear] = useState(profile.birthYear ? String(profile.birthYear) : "");
+  const [sex, setSex] = useState<"" | "MALE" | "FEMALE">(profile.sex ?? "");
+  const [height, setHeight] = useState(profile.heightCm ? String(profile.heightCm) : "");
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save() {
+    setError(null);
+    setMessage(null);
+    try {
+      await api.updateProfile({
+        birthYear: birthYear ? Number(birthYear) : null,
+        sex: sex || null,
+        heightCm: height ? Number(height) : null,
+      });
+      setMessage("Saved.");
+      onSaved();
+    } catch (e: any) {
+      setError(typeof e.message === "string" ? e.message : "Couldn't save");
+    }
+  }
+
+  return (
+    <div className="card">
+      <p className="text-dim" style={{ fontSize: 13, marginTop: 0 }}>
+        Used to compare your numbers with published healthy ranges for your age and sex. Needs "Store my profile" switched on below.
+      </p>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
+        <label style={{ fontSize: 12 }}>
+          Birth year
+          <input inputMode="numeric" value={birthYear} onChange={(e) => setBirthYear(e.target.value.replace(/[^0-9]/g, ""))} style={{ width: "100%", padding: 6 }} />
+        </label>
+        <label style={{ fontSize: 12 }}>
+          Sex
+          <select value={sex} onChange={(e) => setSex(e.target.value as "" | "MALE" | "FEMALE")} style={{ width: "100%", padding: 6 }}>
+            <option value="">—</option>
+            <option value="MALE">Male</option>
+            <option value="FEMALE">Female</option>
+          </select>
+        </label>
+        <label style={{ fontSize: 12 }}>
+          Height (cm)
+          <input inputMode="decimal" value={height} onChange={(e) => setHeight(e.target.value)} style={{ width: "100%", padding: 6 }} />
+        </label>
+      </div>
+      {error && <p style={{ color: "var(--danger)", fontSize: 13 }}>{error}</p>}
+      {message && <p className="text-dim" style={{ fontSize: 13 }}>{message}</p>}
+      <button className="button-primary" onClick={save} style={{ width: "100%", marginTop: 8 }}>
+        Save profile
+      </button>
+    </div>
+  );
+}
+
+function DataImportSection({ profile, onChanged }: { profile: Profile; onChanged: () => void }) {
+  const [token, setToken] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function create() {
+    setError(null);
+    try {
+      const r = await api.createIngestToken();
+      setToken(r.token);
+      onChanged();
+    } catch (e: any) {
+      setError(typeof e.message === "string" ? e.message : "Couldn't create a token");
+    }
+  }
+
+  async function revoke() {
+    await api.revokeIngestToken();
+    setToken(null);
+    onChanged();
+  }
+
+  const code = { fontFamily: "ui-monospace, Menlo, monospace", fontSize: 12, background: "var(--surface-2)", padding: "2px 4px", borderRadius: 4, wordBreak: "break-all" as const };
+
+  return (
+    <div className="card">
+      <strong>Upload token</strong>
+      <p className="text-dim" style={{ fontSize: 13, marginTop: 6 }}>
+        A personal key that lets an iPhone Shortcut (Apple Health steps) and the Renpho sync script send data to the app without your password. Keep it private. You can revoke it at any time.
+      </p>
+      {token ? (
+        <div style={{ padding: 8, border: "1px solid var(--accent)", borderRadius: 8 }}>
+          <div style={{ fontSize: 12, color: "var(--accent)", marginBottom: 4 }}>Copy this now. It won't be shown again.</div>
+          <div style={code}>{token}</div>
+        </div>
+      ) : (
+        <div className="text-dim" style={{ fontSize: 13 }}>{profile.hasIngestToken ? "A token is active." : "No token yet."}</div>
+      )}
+      {error && <p style={{ color: "var(--danger)", fontSize: 13 }}>{error}</p>}
+      <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+        <button className="button-primary" onClick={create} style={{ flex: 1 }}>
+          {profile.hasIngestToken ? "Replace token" : "Create token"}
+        </button>
+        {profile.hasIngestToken && (
+          <button className="button-secondary" onClick={revoke} style={{ flex: 1 }}>
+            Revoke
+          </button>
+        )}
+      </div>
+
+      <details style={{ marginTop: 12 }}>
+        <summary style={{ cursor: "pointer", fontSize: 14, fontWeight: 600, color: "var(--navy)" }}>Apple Health steps (iPhone Shortcut)</summary>
+        <ol style={{ fontSize: 13, paddingLeft: 18, lineHeight: 1.5 }}>
+          <li>Open the Shortcuts app and create a new shortcut.</li>
+          <li>
+            Add <em>Find Health Samples</em>: type Steps, start date is today, group by Day.
+          </li>
+          <li>
+            Add <em>Calculate Statistics</em> (Sum) on the samples.
+          </li>
+          <li>
+            Add <em>Get Contents of URL</em>: <span style={code}>{api.apiUrl}/ingest/steps</span>, method POST, header <span style={code}>Authorization: Bearer YOUR_TOKEN</span>, JSON body{" "}
+            <span style={code}>{'{"date": "YYYY-MM-DD", "steps": <Sum>}'}</span> (use <em>Format Date</em> with format yyyy-MM-dd for the date).
+          </li>
+          <li>In Automation, run it daily (for example at 23:30) with "Run immediately" switched on.</li>
+        </ol>
+        <p className="text-dim" style={{ fontSize: 12 }}>Your Garmin's steps reach Apple Health through Garmin Connect's Apple Health sharing, so this picks those up too.</p>
+      </details>
+
+      <details style={{ marginTop: 8 }}>
+        <summary style={{ cursor: "pointer", fontSize: 14, fontWeight: 600, color: "var(--navy)" }}>Renpho body scans</summary>
+        <p style={{ fontSize: 13 }}>
+          Run <span style={code}>tools/renpho_sync.py</span> from the project folder on your computer. It signs in to Renpho with your Renpho login (kept on your machine, never sent to this app) and uploads new scans here. See SETUP.md, "Renpho sync", for the one-time setup.
+        </p>
+        <p className="text-dim" style={{ fontSize: 12 }}>
+          Renpho has no official API, so the script uses an unofficial one, which is fine for your own account. For a public version of the app, the plan is to use Apple Health (Renpho can write scans there) plus manual entry instead.
+        </p>
+      </details>
+    </div>
+  );
+}
+
+function OutlookSection() {
   const [connected, setConnected] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -81,12 +349,6 @@ export default function Settings() {
           </a>
         )}
       </div>
-
-      <StravaSection />
-
-      <WorkoutTypesSection />
-
-      <YourDataSection />
     </div>
   );
 }
@@ -172,7 +434,7 @@ function WorkoutTypesSection() {
     api
       .getPreferences()
       .then((p) => setVisible(p.visibleSessionTypes))
-      .catch(() => setVisible(ALL_SESSION_TYPES));
+      .catch(() => setVisible(["STRENGTH"]));
   }, []);
 
   async function save(next: SessionType[]) {
@@ -200,13 +462,12 @@ function WorkoutTypesSection() {
   }
 
   return (
-    <div className="card" style={{ marginTop: 12 }}>
+    <div className="card">
       <strong>Calendar workout types</strong>
       <p className="text-dim" style={{ fontSize: 13, marginTop: 6 }}>
-        Choose which workout types appear in the Calendar tab — both in the
-        "schedule a session" picker and in the day view itself. Unchecking
-        a type hides it from the calendar without deleting anything already
-        scheduled.
+        The app is strength-only for now: everything else is switched off
+        but kept. Tick a type to bring it back into the Calendar and the Log
+        tab. Unticking hides it without deleting anything already scheduled.
       </p>
 
       {!visible ? (
@@ -330,12 +591,12 @@ function YourDataSection() {
   }
 
   return (
-    <div className="card" style={{ marginTop: 12 }}>
+    <div className="card">
       <strong>Your data</strong>
       <p className="text-dim" style={{ fontSize: 13, marginTop: 6 }}>
-        Download everything this account has stored — workouts, recommendations,
-        scheduled sessions, and nutrition logs — as a JSON file. Account
-        deletion is permanent and removes all of it immediately.
+        Download everything this account has stored (workouts, scans, goals,
+        steps, profile, consent history and scheduled sessions) as a JSON
+        file. Account deletion is permanent and removes all of it immediately.
       </p>
 
       <button
