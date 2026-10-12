@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { api, SetInput, PlannedExercise, ReadinessLevel } from "../lib/api.js";
+import { useEffect, useRef, useState } from "react";
+import { api, SetInput, PlannedExercise, ReadinessLevel, WorkoutProgress } from "../lib/api.js";
 import { usePlan } from "../lib/planContext.js";
 import { EQUIPMENT_CONFIG, weightOptions } from "../lib/equipment.js";
 import { FOCUS_LABELS } from "../lib/activity.js";
@@ -28,37 +28,83 @@ const READINESS_OPTIONS: { value: ReadinessLevel; label: string }[] = [
   { value: "HIGH", label: "High" },
 ];
 
-/** The live, set-by-set strength log for the currently generated workout.
- * Rendered by the Log tab's Strength view once a session has been built. */
-export default function LogWorkout() {
-  const { plan, setPlan, plannedSessionId, setPlannedSessionId } = usePlan();
+/** The live, set-by-set strength log for the workout in progress.
+ * Rendered by the Log tab's Strength view once a session has been built.
+ * Everything entered is saved to the server as you go (see
+ * lib/planContext.tsx), so the workout can be continued on another device. */
+export default function LogWorkout({ onSaved }: { onSaved: (sessionId: string) => void }) {
+  const { plan, clearPlan, plannedSessionId, remoteProgress, remoteVersion, saveProgress } = usePlan();
   const [rows, setRows] = useState<Record<string, SetRow[]>>({});
   const [startedAt, setStartedAt] = useState<string | null>(null);
   const [sleepQuality, setSleepQuality] = useState<ReadinessLevel | null>(null);
   const [soreness, setSoreness] = useState<ReadinessLevel | null>(null);
   const [energyLevel, setEnergyLevel] = useState<ReadinessLevel | null>(null);
   const [saving, setSaving] = useState(false);
-  const [savedSessionId, setSavedSessionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  // True when this device has changes the server doesn't have yet.
+  const dirtyRef = useRef(false);
 
+  // (Re)load whenever the workout arrives or is replaced from the server:
+  // saved progress if there is any, otherwise a fresh start.
   useEffect(() => {
     if (!plan) return;
+    const saved = remoteProgress;
     const initial: Record<string, SetRow[]> = {};
     for (const ex of plan.exercises) {
-      initial[ex.exerciseId] = Array.from({ length: ex.suggestedSets }, () => makeDefaultRow(ex));
+      initial[ex.exerciseId] = saved?.rows[ex.exerciseId] ?? Array.from({ length: ex.suggestedSets }, () => makeDefaultRow(ex));
     }
     setRows(initial);
-    // A fresh plan means a fresh session — reset timing and check-in state.
-    setStartedAt(new Date().toISOString());
-    setSleepQuality(null);
-    setSoreness(null);
-    setEnergyLevel(null);
-    setSavedSessionId(null);
-  }, [plan]);
+    setStartedAt(saved?.startedAt ?? new Date().toISOString());
+    setSleepQuality(saved?.sleepQuality ?? null);
+    setSoreness(saved?.soreness ?? null);
+    setEnergyLevel(saved?.energyLevel ?? null);
+    setSyncError(null);
+    // A brand-new workout saves its start time straight away, so another
+    // device picks up the same one.
+    dirtyRef.current = !saved;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remoteVersion]);
+
+  // Save progress shortly after each change...
+  const progress: WorkoutProgress = { rows, startedAt, sleepQuality, soreness, energyLevel };
+  const progressRef = useRef(progress);
+  progressRef.current = progress;
+
+  async function flush() {
+    if (!dirtyRef.current || Object.keys(progressRef.current.rows).length === 0) return;
+    dirtyRef.current = false;
+    try {
+      await saveProgress(progressRef.current);
+      setSyncError(null);
+    } catch {
+      dirtyRef.current = true;
+      setSyncError("Couldn't save your progress to your account. It's kept on this device; check your connection.");
+    }
+  }
+
+  useEffect(() => {
+    if (!dirtyRef.current) return;
+    const timer = setTimeout(flush, 600);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, startedAt, sleepQuality, soreness, energyLevel]);
+
+  // ...and immediately when the app goes to the background (switching to
+  // another device usually starts with putting this one down).
+  useEffect(() => {
+    const onHide = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    document.addEventListener("visibilitychange", onHide);
+    return () => document.removeEventListener("visibilitychange", onHide);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saveProgress]);
 
   if (!plan) return null;
 
   function updateRow(exerciseId: string, index: number, patch: Partial<SetRow>) {
+    dirtyRef.current = true;
     setRows((prev) => {
       const next = [...(prev[exerciseId] ?? [])];
       next[index] = { ...next[index], ...patch };
@@ -109,7 +155,10 @@ export default function LogWorkout() {
         focus: plan!.movementPattern,
         plannedSessionId: plannedSessionId ?? undefined,
       });
-      setSavedSessionId(session.id);
+      // Saving ends the workout on the server too (on every device).
+      dirtyRef.current = false;
+      clearPlan();
+      onSaved(session.id);
     } catch (err: any) {
       setError(err.message ?? "Failed to save session");
     } finally {
@@ -117,14 +166,9 @@ export default function LogWorkout() {
     }
   }
 
-  function finishSession() {
-    setSavedSessionId(null);
-    setPlannedSessionId(null);
-    setPlan(null);
-  }
-
-  if (savedSessionId) {
-    return <FeedbackPrompt sessionId={savedSessionId} onDone={finishSession} />;
+  function discardWorkout() {
+    dirtyRef.current = false;
+    clearPlan();
   }
 
   return (
@@ -151,7 +195,7 @@ export default function LogWorkout() {
             Still recovering: {plan.recoveringMuscles.join(", ")}. Loads are held back a little for those.
           </div>
         )}
-        <button className="button-quiet" style={{ marginTop: 8 }} onClick={finishSession}>
+        <button className="button-quiet" style={{ marginTop: 8 }} onClick={discardWorkout}>
           Discard this workout
         </button>
       </div>
@@ -161,6 +205,7 @@ export default function LogWorkout() {
         soreness={soreness}
         energyLevel={energyLevel}
         onChange={(field, value) => {
+          dirtyRef.current = true;
           if (field === "sleepQuality") setSleepQuality(value);
           if (field === "soreness") setSoreness(value);
           if (field === "energyLevel") setEnergyLevel(value);
@@ -177,6 +222,7 @@ export default function LogWorkout() {
         />
       ))}
 
+      {syncError && <p className="text-dim" style={{ fontSize: 12 }}>{syncError}</p>}
       {error && <p style={{ color: "var(--danger)" }}>{error}</p>}
 
       <button className="button-primary" onClick={saveWorkout} disabled={saving} style={{ width: "100%", marginTop: 8 }}>
@@ -246,7 +292,7 @@ function ReadinessRow({
   );
 }
 
-function FeedbackPrompt({ sessionId, onDone }: { sessionId: string; onDone: () => void }) {
+export function FeedbackPrompt({ sessionId, onDone }: { sessionId: string; onDone: () => void }) {
   const [submitted, setSubmitted] = useState(false);
 
   async function handleFeedback(thumbsUp: boolean) {

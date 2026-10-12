@@ -129,6 +129,9 @@ sessionsRouter.post("/", async (req: AuthedRequest, res) => {
     include: { sets: true },
   });
 
+  // The workout is done: it's no longer "in progress" on any device.
+  await prisma.activeWorkout.deleteMany({ where: { userId } });
+
   // Mark whether the most recent Recommendation per exercise (for this
   // user) was actually followed: at least one logged set matched the
   // suggested weight (or band level) and met or exceeded the suggested reps.

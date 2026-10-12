@@ -423,6 +423,20 @@ Open the failed service → **Deployments** → the failed deployment →
 
 ## Workout planner
 
+**Workouts follow you across devices.** A generated workout is saved to
+the account on the server (`ActiveWorkout`, one per account), not kept in
+the browser. Build it on your phone and open the Log tab on your laptop
+(or refresh the page) and the same workout is there, with everything
+entered so far: sets, reps, weights, ticks and the readiness check-in.
+Progress saves about half a second after each change, and immediately
+when the app goes to the background. The app re-checks the server when it
+comes back to the foreground. Saving or discarding the workout ends it on
+every device. If an older device edits a workout that's since been
+replaced, it gets a 409 and switches to the current one instead of
+overwriting it. API: `GET /workouts/active`, `PUT /workouts/active/progress`,
+`DELETE /workouts/active`; generating with `POST /workouts/plan/:focus`
+replaces the active workout.
+
 The Workout tab has four buttons — Push, Pull, Legs, Core. Tapping one
 generates a complete session in a single call: every exercise for that
 pattern (compounds first), with weight/band level, reps, sets, and a rest

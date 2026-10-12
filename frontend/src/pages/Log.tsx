@@ -5,7 +5,7 @@ import { usePlan } from "../lib/planContext.js";
 import { formatLocalDateKey } from "../lib/location.js";
 import { ACTIVITY_COLORS, ACTIVITY_LABELS, ActivityKey, activityForSessionType, FOCUS_LABELS } from "../lib/activity.js";
 import { fullLabelFor } from "../lib/sessionTypes.js";
-import LogWorkout from "./LogWorkout.js";
+import LogWorkout, { FeedbackPrompt } from "./LogWorkout.js";
 
 // The Log tab. "Log" behaves differently per sport:
 // - Strength is ACTIVE: build a session, then enter it live, set by set.
@@ -62,19 +62,21 @@ export default function Log() {
 const ALL_FOCUSES: MovementPattern[] = ["PUSH", "PULL", "LEGS", "UPPER", "LOWER", "FULL_BODY", "CORE"];
 
 function StrengthLog() {
-  const { plan, setPlan, setPlannedSessionId } = usePlan();
+  const { plan, setPlan, loaded } = usePlan();
   const [params, setParams] = useSearchParams();
   const [today, setToday] = useState<TodaySuggestion | null>(null);
   const [loading, setLoading] = useState<MovementPattern | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
+  // Set once a workout is saved, to ask how it went. Kept here rather than
+  // in LogWorkout, which unmounts as soon as the workout ends.
+  const [feedbackSessionId, setFeedbackSessionId] = useState<string | null>(null);
 
   async function build(focus: MovementPattern, plannedId: string | null) {
     setLoading(focus);
     setError(null);
     try {
-      const result = await api.generatePlan(focus);
-      setPlannedSessionId(plannedId);
+      const result = await api.generatePlan(focus, plannedId);
       setPlan(result);
     } catch (err: any) {
       setError(err.message ?? "Failed to build the workout");
@@ -98,7 +100,11 @@ function StrengthLog() {
     if (!plan) api.getToday().then(setToday).catch(() => setToday(null));
   }, [plan]);
 
-  if (plan) return <LogWorkout />;
+  if (feedbackSessionId) {
+    return <FeedbackPrompt sessionId={feedbackSessionId} onDone={() => setFeedbackSessionId(null)} />;
+  }
+  if (plan) return <LogWorkout onSaved={setFeedbackSessionId} />;
+  if (!loaded && loading === null) return <p className="text-dim">Loading…</p>;
 
   const rotation = today ? [...new Set(today.split.rotation)] : [];
   const others = ALL_FOCUSES.filter((f) => !rotation.includes(f));

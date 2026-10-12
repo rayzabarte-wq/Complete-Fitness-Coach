@@ -73,6 +73,25 @@ export interface WorkoutPlan {
   estimatedMinutes: number;
   block: BlockInfo;
   recoveringMuscles: string[];
+  /** Identifies this generated workout on the server (it changes each time
+   * a new one is built), so progress saves go to the right workout. */
+  workoutId: string;
+  plannedSessionId: string | null;
+}
+
+/** What's been entered so far in the workout in progress — saved to the
+ * server so it follows the person across devices. */
+export interface WorkoutProgress {
+  rows: Record<string, { weightLb: number; bandLevel: string; reps: string; rpe: number | null; logged: boolean }[]>;
+  startedAt: string | null;
+  sleepQuality: ReadinessLevel | null;
+  soreness: ReadinessLevel | null;
+  energyLevel: ReadinessLevel | null;
+}
+
+export interface ActiveWorkout extends WorkoutPlan {
+  progress: WorkoutProgress | null;
+  updatedAt: string;
 }
 
 export type ReadinessLevel = "LOW" | "MEDIUM" | "HIGH";
@@ -522,8 +541,10 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     }
     const err = new Error(errorMessage(body.error, res.status)) as Error & {
       requires2fa?: boolean;
+      status?: number;
     };
     err.requires2fa = body.requires2fa;
+    err.status = res.status;
     throw err;
   }
   if (res.status === 204) {
@@ -574,8 +595,18 @@ export const api = {
   getExerciseHistory: (exerciseId: string, limit = 10) =>
     request(`/sessions/exercise/${exerciseId}?limit=${limit}`),
 
-  generatePlan: (pattern: MovementPattern) =>
-    request<WorkoutPlan>(`/workouts/plan/${pattern}`, { method: "POST" }),
+  generatePlan: (pattern: MovementPattern, plannedSessionId?: string | null) =>
+    request<WorkoutPlan>(`/workouts/plan/${pattern}`, {
+      method: "POST",
+      body: JSON.stringify({ plannedSessionId: plannedSessionId ?? null }),
+    }),
+  getActiveWorkout: () => request<ActiveWorkout | null>("/workouts/active"),
+  saveWorkoutProgress: (workoutId: string, progress: WorkoutProgress) =>
+    request<{ updatedAt: string }>("/workouts/active/progress", {
+      method: "PUT",
+      body: JSON.stringify({ workoutId, progress }),
+    }),
+  discardActiveWorkout: () => request<void>("/workouts/active", { method: "DELETE" }),
 
   getOutlookStatus: () => request<{ connected: boolean }>("/integrations/outlook/status"),
 
