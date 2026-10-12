@@ -41,6 +41,8 @@ const createSessionSchema = z.object({
   // The calendar entry this workout was started from, if any — it's marked
   // done with the actual duration once the workout is saved.
   plannedSessionId: z.string().optional(),
+  // The generated daily workout this was logged from (marked saved).
+  workoutId: z.string().optional(),
 });
 
 // Shared include shape for loading everything the Outlook event payload
@@ -90,7 +92,7 @@ sessionsRouter.post("/", async (req: AuthedRequest, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.flatten() });
   }
-  const { date, notes, startedAt, endedAt, sleepQuality, soreness, energyLevel, sets, focus, plannedSessionId } = parsed.data;
+  const { date, notes, startedAt, endedAt, sleepQuality, soreness, energyLevel, sets, focus, plannedSessionId, workoutId } = parsed.data;
   const userId = req.userId!;
 
   const exerciseIds = [...new Set(sets.map((s) => s.exerciseId))];
@@ -129,8 +131,10 @@ sessionsRouter.post("/", async (req: AuthedRequest, res) => {
     include: { sets: true },
   });
 
-  // The workout is done: it's no longer "in progress" on any device.
-  await prisma.activeWorkout.deleteMany({ where: { userId } });
+  // Mark the day's generated workout as done, on every device.
+  if (workoutId) {
+    await prisma.dailyWorkout.updateMany({ where: { userId, workoutId }, data: { savedSessionId: session.id } });
+  }
 
   // Mark whether the most recent Recommendation per exercise (for this
   // user) was actually followed: at least one logged set matched the

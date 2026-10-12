@@ -14,35 +14,44 @@ const patternSchema = z.enum(["PUSH", "PULL", "LEGS", "CORE", "UPPER", "LOWER", 
 // weights/reps/sets, and rest intervals) for one session focus (Push, Pull,
 // Legs, Core, Upper, Lower or Full body), based on the signed-in user's own
 // exercise history, current training block, and recovery.
+const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "date must be YYYY-MM-DD");
+
+const generateBodySchema = z.object({
+  // The person's local date, so "today's workout" follows their time zone.
+  date: dateSchema,
+  plannedSessionId: z.string().nullish(),
+});
+
 workoutsRouter.post("/plan/:pattern", async (req: AuthedRequest, res) => {
   const parsed = patternSchema.safeParse(req.params.pattern.toUpperCase());
   if (!parsed.success) {
     return res.status(400).json({ error: "Pattern must be one of PUSH, PULL, LEGS, CORE, UPPER, LOWER, FULL_BODY" });
   }
 
-  const body = z.object({ plannedSessionId: z.string().nullish() }).safeParse(req.body ?? {});
-  const plannedSessionId = body.success ? body.data.plannedSessionId ?? null : null;
+  const body = generateBodySchema.safeParse(req.body ?? {});
+  if (!body.success) {
+    return res.status(400).json({ error: body.error.flatten() });
+  }
+  const { date, plannedSessionId = null } = body.data;
 
   try {
+    // The one place Claude is called for a strength workout: building the
+    // day's workout, or explicitly regenerating it (which replaces it, and
+    // anything logged in it so far). Everything else reuses the saved one.
     const plan = await generateWorkoutPlan(req.userId!, parsed.data as MovementPattern);
-    // Becomes the account's active workout (replacing any earlier one), so
-    // it can be opened from any device until it's saved or discarded.
-    const active = await prisma.activeWorkout.upsert({
-      where: { userId: req.userId! },
-      create: {
-        userId: req.userId!,
-        workoutId: randomUUID(),
-        plan: plan as unknown as Prisma.InputJsonValue,
-        plannedSessionId,
-      },
-      update: {
-        workoutId: randomUUID(),
-        plan: plan as unknown as Prisma.InputJsonValue,
-        plannedSessionId,
-        progress: Prisma.DbNull,
-      },
+    const data = {
+      workoutId: randomUUID(),
+      plan: plan as unknown as Prisma.InputJsonValue,
+      plannedSessionId,
+      progress: Prisma.DbNull,
+      savedSessionId: null,
+    };
+    const daily = await prisma.dailyWorkout.upsert({
+      where: { userId_date: { userId: req.userId!, date } },
+      create: { userId: req.userId!, date, ...data },
+      update: data,
     });
-    res.status(201).json({ ...plan, workoutId: active.workoutId, plannedSessionId: active.plannedSessionId });
+    res.status(201).json(dailyWorkoutResponse(daily));
   } catch (err) {
     console.error(err);
     // Surfacing the actual error (rather than a generic message) makes
@@ -51,27 +60,40 @@ workoutsRouter.post("/plan/:pattern", async (req: AuthedRequest, res) => {
   }
 });
 
-function activeWorkoutResponse(active: {
+function dailyWorkoutResponse(daily: {
+  date: string;
   workoutId: string;
   plan: Prisma.JsonValue;
   plannedSessionId: string | null;
   progress: Prisma.JsonValue;
+  savedSessionId: string | null;
+  createdAt: Date;
   updatedAt: Date;
 }) {
   return {
-    ...(active.plan as object),
-    workoutId: active.workoutId,
-    plannedSessionId: active.plannedSessionId,
-    progress: active.progress,
-    updatedAt: active.updatedAt,
+    ...(daily.plan as object),
+    date: daily.date,
+    workoutId: daily.workoutId,
+    plannedSessionId: daily.plannedSessionId,
+    progress: daily.progress,
+    savedSessionId: daily.savedSessionId,
+    createdAt: daily.createdAt,
+    updatedAt: daily.updatedAt,
   };
 }
 
-// GET /workouts/active - the workout currently in progress for this
-// account, if any (null otherwise), with whatever's been entered so far.
-workoutsRouter.get("/active", async (req: AuthedRequest, res) => {
-  const active = await prisma.activeWorkout.findUnique({ where: { userId: req.userId! } });
-  res.json(active ? activeWorkoutResponse(active) : null);
+// GET /workouts/day/:date - the workout already built for that day (with
+// whatever's been entered so far), or null. Never calls Claude, so opening
+// or refreshing the app on any device is free.
+workoutsRouter.get("/day/:date", async (req: AuthedRequest, res) => {
+  const date = dateSchema.safeParse(req.params.date);
+  if (!date.success) {
+    return res.status(400).json({ error: date.error.flatten() });
+  }
+  const daily = await prisma.dailyWorkout.findUnique({
+    where: { userId_date: { userId: req.userId!, date: date.data } },
+  });
+  res.json(daily ? dailyWorkoutResponse(daily) : null);
 });
 
 const progressSchema = z.object({
@@ -81,27 +103,25 @@ const progressSchema = z.object({
   progress: z.record(z.unknown()).refine((p) => JSON.stringify(p).length <= 100_000, "Progress is too large"),
 });
 
-// PUT /workouts/active/progress - save what's been entered so far. Only
-// applies if workoutId still matches, so a device showing an older
-// workout can't overwrite a newer one's progress (409 tells it to reload).
-workoutsRouter.put("/active/progress", async (req: AuthedRequest, res) => {
+// PUT /workouts/day/:date/progress - save what's been entered so far. Only
+// applies if workoutId still matches and the workout hasn't been saved, so
+// a device showing an older version can't overwrite a regenerated one (409
+// tells it to reload).
+workoutsRouter.put("/day/:date/progress", async (req: AuthedRequest, res) => {
+  const date = dateSchema.safeParse(req.params.date);
   const parsed = progressSchema.safeParse(req.body);
-  if (!parsed.success) {
-    return res.status(400).json({ error: parsed.error.flatten() });
+  if (!date.success || !parsed.success) {
+    return res.status(400).json({ error: (date.success ? parsed : date).error!.flatten() });
   }
-  const updated = await prisma.activeWorkout.updateMany({
-    where: { userId: req.userId!, workoutId: parsed.data.workoutId },
+  const updated = await prisma.dailyWorkout.updateMany({
+    where: { userId: req.userId!, date: date.data, workoutId: parsed.data.workoutId, savedSessionId: null },
     data: { progress: parsed.data.progress as Prisma.InputJsonValue },
   });
   if (updated.count === 0) {
-    return res.status(409).json({ error: "This workout was replaced or finished on another device." });
+    return res.status(409).json({ error: "This workout was regenerated or saved on another device." });
   }
-  const active = await prisma.activeWorkout.findUniqueOrThrow({ where: { userId: req.userId! } });
-  res.json({ updatedAt: active.updatedAt });
-});
-
-// DELETE /workouts/active - discard the workout in progress.
-workoutsRouter.delete("/active", async (req: AuthedRequest, res) => {
-  await prisma.activeWorkout.deleteMany({ where: { userId: req.userId! } });
-  res.status(204).end();
+  const daily = await prisma.dailyWorkout.findUniqueOrThrow({
+    where: { userId_date: { userId: req.userId!, date: date.data } },
+  });
+  res.json({ updatedAt: daily.updatedAt });
 });

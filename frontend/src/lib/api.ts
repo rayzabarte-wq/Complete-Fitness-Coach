@@ -89,14 +89,22 @@ export interface WorkoutProgress {
   energyLevel: ReadinessLevel | null;
 }
 
-export interface ActiveWorkout extends WorkoutPlan {
+/** The workout built for one day — saved on the server, so any device can
+ * open it without calling the AI again. */
+export interface DailyWorkout extends WorkoutPlan {
+  date: string;
   progress: WorkoutProgress | null;
+  /** Set once the workout has been saved as a logged session. */
+  savedSessionId: string | null;
+  createdAt: string;
   updatedAt: string;
 }
 
 export type ReadinessLevel = "LOW" | "MEDIUM" | "HIGH";
 
 export interface LogSessionInput {
+  /** The generated daily workout this was logged from, if any. */
+  workoutId?: string;
   date?: string;
   notes?: string;
   startedAt?: string;
@@ -595,18 +603,19 @@ export const api = {
   getExerciseHistory: (exerciseId: string, limit = 10) =>
     request(`/sessions/exercise/${exerciseId}?limit=${limit}`),
 
-  generatePlan: (pattern: MovementPattern, plannedSessionId?: string | null) =>
-    request<WorkoutPlan>(`/workouts/plan/${pattern}`, {
+  /** Builds (or rebuilds) the day's workout with the AI. */
+  generatePlan: (pattern: MovementPattern, date: string, plannedSessionId?: string | null) =>
+    request<DailyWorkout>(`/workouts/plan/${pattern}`, {
       method: "POST",
-      body: JSON.stringify({ plannedSessionId: plannedSessionId ?? null }),
+      body: JSON.stringify({ date, plannedSessionId: plannedSessionId ?? null }),
     }),
-  getActiveWorkout: () => request<ActiveWorkout | null>("/workouts/active"),
-  saveWorkoutProgress: (workoutId: string, progress: WorkoutProgress) =>
-    request<{ updatedAt: string }>("/workouts/active/progress", {
+  /** The workout already built for that day, if any. No AI call. */
+  getDailyWorkout: (date: string) => request<DailyWorkout | null>(`/workouts/day/${date}`),
+  saveWorkoutProgress: (date: string, workoutId: string, progress: WorkoutProgress) =>
+    request<{ updatedAt: string }>(`/workouts/day/${date}/progress`, {
       method: "PUT",
       body: JSON.stringify({ workoutId, progress }),
     }),
-  discardActiveWorkout: () => request<void>("/workouts/active", { method: "DELETE" }),
 
   getOutlookStatus: () => request<{ connected: boolean }>("/integrations/outlook/status"),
 

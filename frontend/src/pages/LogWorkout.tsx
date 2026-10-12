@@ -33,7 +33,8 @@ const READINESS_OPTIONS: { value: ReadinessLevel; label: string }[] = [
  * Everything entered is saved to the server as you go (see
  * lib/planContext.tsx), so the workout can be continued on another device. */
 export default function LogWorkout({ onSaved }: { onSaved: (sessionId: string) => void }) {
-  const { plan, clearPlan, plannedSessionId, remoteProgress, remoteVersion, saveProgress } = usePlan();
+  const { plan, closeWorkout, markSaved, remoteProgress, remoteVersion, saveProgress } = usePlan();
+  const plannedSessionId = plan?.plannedSessionId ?? null;
   const [rows, setRows] = useState<Record<string, SetRow[]>>({});
   const [startedAt, setStartedAt] = useState<string | null>(null);
   const [sleepQuality, setSleepQuality] = useState<ReadinessLevel | null>(null);
@@ -154,10 +155,11 @@ export default function LogWorkout({ onSaved }: { onSaved: (sessionId: string) =
         sets,
         focus: plan!.movementPattern,
         plannedSessionId: plannedSessionId ?? undefined,
+        workoutId: plan!.workoutId,
       });
-      // Saving ends the workout on the server too (on every device).
+      // Today's workout is now marked done (on every device).
       dirtyRef.current = false;
-      clearPlan();
+      markSaved(session.id);
       onSaved(session.id);
     } catch (err: any) {
       setError(err.message ?? "Failed to save session");
@@ -166,9 +168,11 @@ export default function LogWorkout({ onSaved }: { onSaved: (sessionId: string) =
     }
   }
 
-  function discardWorkout() {
-    dirtyRef.current = false;
-    clearPlan();
+  // Leaves the workout (it stays saved for today, progress included) and
+  // goes back to the build page.
+  async function backToBuildPage() {
+    await flush();
+    closeWorkout();
   }
 
   return (
@@ -195,8 +199,8 @@ export default function LogWorkout({ onSaved }: { onSaved: (sessionId: string) =
             Still recovering: {plan.recoveringMuscles.join(", ")}. Loads are held back a little for those.
           </div>
         )}
-        <button className="button-quiet" style={{ marginTop: 8 }} onClick={discardWorkout}>
-          Discard this workout
+        <button className="button-quiet" style={{ marginTop: 8 }} onClick={backToBuildPage}>
+          ‹ Back (your progress is kept)
         </button>
       </div>
 

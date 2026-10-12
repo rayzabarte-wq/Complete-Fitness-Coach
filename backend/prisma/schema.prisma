@@ -76,26 +76,35 @@ model User {
   stepDays         StepDay[]
   trainingBlocks   TrainingBlock[]
   passwordResetTokens PasswordResetToken[]
-  activeWorkout       ActiveWorkout?
+  dailyWorkouts       DailyWorkout[]
 }
 
-// The AI-generated strength workout the person is currently doing (at most
-// one per account), kept on the server rather than in the browser so it can
-// be opened from any device: build it on a phone, carry on from a laptop.
+// The AI-generated strength workout for one day (at most one per account
+// per day), kept on the server so it's built once and then opened from any
+// device: build it on a phone, carry on from a laptop, refresh freely.
+// Claude is only called again when the person explicitly regenerates.
 // "progress" holds what's been entered so far (sets, reps, weights, the
-// readiness check-in) so that follows too. Cleared when the workout is
-// saved as a WorkoutSession or discarded. See sport/routes/workouts.ts.
-model ActiveWorkout {
-  userId String @id
+// readiness check-in) so that follows too. Past days are kept as a record
+// of what was generated. See sport/routes/workouts.ts.
+model DailyWorkout {
+  id     String @id @default(cuid())
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  // Changes every time a new workout is generated, so a device still
-  // showing an older workout can't overwrite the new one's progress.
+  userId String
+  // The person's local calendar date, YYYY-MM-DD (sent by the app, so
+  // "today" follows their time zone rather than the server's).
+  date String
+  // Changes every time the day's workout is (re)generated, so a device
+  // still showing an older version can't overwrite the new one's progress.
   workoutId        String
   plan             Json
   plannedSessionId String?
   progress         Json?
+  // Set once the workout has been saved as a WorkoutSession.
+  savedSessionId   String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+
+  @@unique([userId, date])
 }
 
 // One-time "forgot password" links (see routes/auth.ts). Only a SHA-256 of

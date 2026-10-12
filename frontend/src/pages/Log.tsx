@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { api, MovementPattern, PlannedSession, SessionType, StepsResponse, TodaySuggestion } from "../lib/api.js";
+import { api, DailyWorkout, MovementPattern, PlannedSession, SessionType, StepsResponse, TodaySuggestion } from "../lib/api.js";
 import { usePlan } from "../lib/planContext.js";
 import { formatLocalDateKey } from "../lib/location.js";
 import { ACTIVITY_COLORS, ACTIVITY_LABELS, ActivityKey, activityForSessionType, FOCUS_LABELS } from "../lib/activity.js";
@@ -62,7 +62,7 @@ export default function Log() {
 const ALL_FOCUSES: MovementPattern[] = ["PUSH", "PULL", "LEGS", "UPPER", "LOWER", "FULL_BODY", "CORE"];
 
 function StrengthLog() {
-  const { plan, setPlan, loaded } = usePlan();
+  const { today: todaysWorkout, plan, loaded, date, setBuilt, openWorkout } = usePlan();
   const [params, setParams] = useSearchParams();
   const [today, setToday] = useState<TodaySuggestion | null>(null);
   const [loading, setLoading] = useState<MovementPattern | null>(null);
@@ -71,13 +71,17 @@ function StrengthLog() {
   // Set once a workout is saved, to ask how it went. Kept here rather than
   // in LogWorkout, which unmounts as soon as the workout ends.
   const [feedbackSessionId, setFeedbackSessionId] = useState<string | null>(null);
+  // A focus waiting for the person to confirm replacing today's workout.
+  const [confirmReplace, setConfirmReplace] = useState<{ focus: MovementPattern; plannedId: string | null } | null>(null);
 
+  // Calls the AI. Only reached from an explicit Build/Regenerate tap (or a
+  // calendar start when nothing's been built today) — never on page load.
   async function build(focus: MovementPattern, plannedId: string | null) {
+    setConfirmReplace(null);
     setLoading(focus);
     setError(null);
     try {
-      const result = await api.generatePlan(focus, plannedId);
-      setPlan(result);
+      setBuilt(await api.generatePlan(focus, date, plannedId));
     } catch (err: any) {
       setError(err.message ?? "Failed to build the workout");
     } finally {
@@ -85,20 +89,30 @@ function StrengthLog() {
     }
   }
 
-  // Started from a calendar entry: /log?focus=UPPER&planned=<id>
+  // Building when today's workout already exists replaces it — ask first.
+  function requestBuild(focus: MovementPattern, plannedId: string | null = null) {
+    if (todaysWorkout) setConfirmReplace({ focus, plannedId });
+    else build(focus, plannedId);
+  }
+
+  // Started from a calendar entry: /log?focus=UPPER&planned=<id>. Waits for
+  // today's workout to load: if one is already built for that focus it's
+  // opened (no AI call); if a different one exists, the person chooses.
   useEffect(() => {
+    if (!loaded) return;
     const focus = params.get("focus") as MovementPattern | null;
-    if (focus && ALL_FOCUSES.includes(focus) && !plan) {
-      const planned = params.get("planned");
-      setParams({}, { replace: true });
-      build(focus, planned);
-    }
+    if (!focus || !ALL_FOCUSES.includes(focus)) return;
+    const planned = params.get("planned");
+    setParams({}, { replace: true });
+    if (!todaysWorkout) build(focus, planned);
+    else if (todaysWorkout.movementPattern === focus && !todaysWorkout.savedSessionId) openWorkout();
+    else setConfirmReplace({ focus, plannedId: planned });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [loaded]);
 
   useEffect(() => {
     if (!plan) api.getToday().then(setToday).catch(() => setToday(null));
-  }, [plan]);
+  }, [plan, todaysWorkout?.savedSessionId]);
 
   if (feedbackSessionId) {
     return <FeedbackPrompt sessionId={feedbackSessionId} onDone={() => setFeedbackSessionId(null)} />;
@@ -111,29 +125,69 @@ function StrengthLog() {
 
   return (
     <div>
-      <div className="card" style={{ borderLeft: `4px solid ${ACTIVITY_COLORS.STRENGTH}` }}>
-        <div className="text-dim" style={{ fontSize: 12 }}>{today ? `Your split: ${today.split.label}` : "Loading your split…"}</div>
-        {today && (
-          <>
-            <div style={{ fontSize: 20, fontWeight: 700, color: "var(--navy)", marginTop: 4 }}>
-              {today.suggestedFocus ? `Today: ${FOCUS_LABELS[today.suggestedFocus]}` : "Today: rest"}
-            </div>
-            <p className="text-dim" style={{ fontSize: 13, margin: "4px 0 10px" }}>
-              {today.reason}
-            </p>
-            {today.suggestedFocus && (
-              <button className="button-primary" style={{ width: "100%" }} disabled={loading !== null} onClick={() => build(today.suggestedFocus!, null)}>
-                {loading === today.suggestedFocus ? "Building your session…" : `Build ${FOCUS_LABELS[today.suggestedFocus]} session`}
-              </button>
-            )}
-          </>
-        )}
-      </div>
+      {todaysWorkout && (
+        <TodaysWorkoutCard
+          workout={todaysWorkout}
+          busy={loading !== null}
+          onOpen={openWorkout}
+          onRegenerate={() => setConfirmReplace({ focus: todaysWorkout.movementPattern, plannedId: todaysWorkout.plannedSessionId })}
+        />
+      )}
 
-      <div className="section-title">Or choose a session</div>
+      {confirmReplace && todaysWorkout && (
+        <div className="card" style={{ borderLeft: "4px solid var(--accent)" }}>
+          <strong style={{ color: "var(--navy)" }}>
+            {confirmReplace.focus === todaysWorkout.movementPattern
+              ? `Regenerate today's ${FOCUS_LABELS[confirmReplace.focus]} workout?`
+              : `Replace today's ${FOCUS_LABELS[todaysWorkout.movementPattern]} workout with ${FOCUS_LABELS[confirmReplace.focus]}?`}
+          </strong>
+          <p className="text-dim" style={{ fontSize: 13, margin: "6px 0 10px" }}>
+            The AI builds a new workout for today. It replaces the current one on all your devices
+            {todaysWorkout.savedSessionId ? " (the session you already saved stays in your history)." : ", along with anything logged in it but not saved."}
+          </p>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="button-primary" style={{ flex: 1 }} onClick={() => build(confirmReplace.focus, confirmReplace.plannedId)}>
+              Yes, build a new one
+            </button>
+            <button className="button-secondary" style={{ flex: 1 }} onClick={() => setConfirmReplace(null)}>
+              Keep today's
+            </button>
+          </div>
+        </div>
+      )}
+
+      {loading && (
+        <div className="card">
+          <p style={{ margin: 0 }}>Building your {FOCUS_LABELS[loading]} session…</p>
+          <p className="text-dim" style={{ fontSize: 12, margin: "4px 0 0" }}>This usually takes 10-30 seconds.</p>
+        </div>
+      )}
+
+      {!todaysWorkout && (
+        <div className="card" style={{ borderLeft: `4px solid ${ACTIVITY_COLORS.STRENGTH}` }}>
+          <div className="text-dim" style={{ fontSize: 12 }}>{today ? `Your split: ${today.split.label}` : "Loading your split…"}</div>
+          {today && (
+            <>
+              <div style={{ fontSize: 20, fontWeight: 700, color: "var(--navy)", marginTop: 4 }}>
+                {today.suggestedFocus ? `Today: ${FOCUS_LABELS[today.suggestedFocus]}` : "Today: rest"}
+              </div>
+              <p className="text-dim" style={{ fontSize: 13, margin: "4px 0 10px" }}>
+                {today.reason}
+              </p>
+              {today.suggestedFocus && (
+                <button className="button-primary" style={{ width: "100%" }} disabled={loading !== null} onClick={() => requestBuild(today.suggestedFocus!)}>
+                  {`Build ${FOCUS_LABELS[today.suggestedFocus]} session`}
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      <div className="section-title">{todaysWorkout ? "Or build a different session instead" : "Or choose a session"}</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
         {[...rotation, ...(showAll ? others : [])].map((f) => (
-          <button key={f} className="button-secondary" disabled={loading !== null} onClick={() => build(f, null)} style={{ opacity: loading && loading !== f ? 0.6 : 1 }}>
+          <button key={f} className="button-secondary" disabled={loading !== null} onClick={() => requestBuild(f)} style={{ opacity: loading && loading !== f ? 0.6 : 1 }}>
             {loading === f ? "Building…" : FOCUS_LABELS[f]}
           </button>
         ))}
@@ -146,6 +200,47 @@ function StrengthLog() {
       {error && <p style={{ color: "var(--danger)" }}>{error}</p>}
 
       <RecentStrength />
+    </div>
+  );
+}
+
+/** Today's already-built workout: open it (no AI call) or regenerate it. */
+function TodaysWorkoutCard({
+  workout,
+  busy,
+  onOpen,
+  onRegenerate,
+}: {
+  workout: DailyWorkout;
+  busy: boolean;
+  onOpen: () => void;
+  onRegenerate: () => void;
+}) {
+  const label = FOCUS_LABELS[workout.movementPattern] ?? workout.movementPattern;
+  const built = new Date(workout.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const setsLogged = workout.progress
+    ? Object.values(workout.progress.rows).reduce((n, rows) => n + rows.filter((r) => r.logged).length, 0)
+    : 0;
+  const saved = !!workout.savedSessionId;
+
+  return (
+    <div className="card" style={{ borderLeft: `4px solid ${ACTIVITY_COLORS.STRENGTH}` }}>
+      <div className="text-dim" style={{ fontSize: 12 }}>Today's workout · built at {built}</div>
+      <div style={{ fontSize: 20, fontWeight: 700, color: "var(--navy)", marginTop: 4 }}>
+        {label} day {saved && "✓"}
+      </div>
+      <p className="text-dim" style={{ fontSize: 13, margin: "4px 0 10px" }}>
+        {workout.exercises.length} exercises · ~{workout.estimatedMinutes} min
+        {saved ? " · saved to your history" : setsLogged > 0 ? ` · ${setsLogged} set${setsLogged === 1 ? "" : "s"} logged so far` : ""}
+      </p>
+      {!saved && (
+        <button className="button-primary" style={{ width: "100%" }} disabled={busy} onClick={onOpen}>
+          {setsLogged > 0 ? "Continue today's workout" : "Open today's workout"}
+        </button>
+      )}
+      <button className="button-quiet" style={{ marginTop: 8 }} disabled={busy} onClick={onRegenerate}>
+        Regenerate {label} workout
+      </button>
     </div>
   );
 }
