@@ -487,6 +487,22 @@ export const auth = {
   clearToken: () => localStorage.removeItem(TOKEN_KEY),
 };
 
+// Validation failures come back as zod's flattened error object
+// ({ formErrors, fieldErrors }) rather than a string — turn those into a
+// readable sentence instead of "[object Object]".
+function errorMessage(error: unknown, status: number): string {
+  if (typeof error === "string" && error) return error;
+  if (error && typeof error === "object") {
+    const { formErrors = [], fieldErrors = {} } = error as {
+      formErrors?: string[];
+      fieldErrors?: Record<string, string[] | undefined>;
+    };
+    const messages = [...formErrors, ...Object.values(fieldErrors).flatMap((m) => m ?? [])];
+    if (messages.length > 0) return messages.join(" ");
+  }
+  return `Request failed: ${status}`;
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const token = auth.getToken();
   const res = await fetch(`${API_URL}${path}`, {
@@ -504,7 +520,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     if (res.status === 401 && !body.requires2fa) {
       auth.clearToken();
     }
-    const err = new Error(body.error ?? `Request failed: ${res.status}`) as Error & {
+    const err = new Error(errorMessage(body.error, res.status)) as Error & {
       requires2fa?: boolean;
     };
     err.requires2fa = body.requires2fa;

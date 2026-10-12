@@ -98,7 +98,7 @@ export default function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
                 style={{ width: "100%", padding: 10, marginBottom: 8 }}
               />
               <input
-                placeholder="Password"
+                placeholder="Password (at least 10 characters)"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}

@@ -1,5 +1,10 @@
 import "dotenv/config";
-import express from "express";
+import express, { type ErrorRequestHandler } from "express";
+// Express 4 doesn't catch errors thrown in async route handlers: without
+// this, one failed database call (e.g. the database being briefly
+// unreachable) crashes the whole server. Must be imported right after
+// express, before any routers are created.
+import "express-async-errors";
 import cors from "cors";
 // Two modules, two clear boundaries: Sport (deep AI coaching — Strength,
 // Golf) and Scheduler (session scheduling, weather, calendar/activity
@@ -68,6 +73,19 @@ app.use("/profile", requireAuth, profileRouter);
 app.use("/consent", requireAuth, consentRouter);
 app.use("/body", requireAuth, bodyRouter);
 app.use("/steps", requireAuth, stepsRouter);
+
+// Last-resort handler for anything a route didn't catch itself: log it and
+// answer with a readable JSON error instead of crashing or hanging.
+const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
+  console.error(err);
+  if (res.headersSent) return;
+  const message =
+    err?.name === "PrismaClientInitializationError"
+      ? "The app can't reach its database right now. Please try again in a minute."
+      : "Something went wrong on the server. Please try again.";
+  res.status(500).json({ error: message });
+};
+app.use(errorHandler);
 
 const port = Number(process.env.PORT ?? 3001);
 app.listen(port, () => {
