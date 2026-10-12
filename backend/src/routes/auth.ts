@@ -12,6 +12,8 @@ import {
   issueSessionToken,
 } from "../services/auth.js";
 import QRCode from "qrcode";
+import { createHash, randomBytes } from "node:crypto";
+import { sendEmail } from "../services/email.js";
 
 export const authRouter = Router();
 
@@ -120,4 +122,150 @@ authRouter.post("/2fa/verify", requireAuth, async (req: AuthedRequest, res) => {
 
   await prisma.user.update({ where: { id: user.id }, data: { totpEnabled: true } });
   res.json({ totpEnabled: true });
+});
+
+// ---------------------------------------------------------------------------
+// Forgotten password: email a one-time link that expires after 3 minutes.
+// ---------------------------------------------------------------------------
+
+const RESET_TTL_MINUTES = 3;
+const RESET_TTL_MS = RESET_TTL_MINUTES * 60 * 1000;
+
+const resetLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many reset requests. Try again in a few minutes." },
+});
+
+const resetAttemptLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many attempts. Try again in a few minutes." },
+});
+
+function hashResetToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+// The link always points at FRONTEND_URL, never at a URL taken from the
+// request (Origin/Host headers can be forged to send the victim a link to
+// an attacker's site that captures the token).
+function frontendUrl(): string {
+  const url = process.env.FRONTEND_URL?.trim().replace(/\/+$/, "");
+  if (url) return url;
+  if (process.env.NODE_ENV === "production") {
+    console.error("[auth] FRONTEND_URL is not set — password reset links will point at localhost.");
+  }
+  return "http://localhost:5173";
+}
+
+async function sendPasswordResetEmail(email: string): Promise<void> {
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user) return;
+
+  const token = randomBytes(32).toString("base64url");
+  const expiresAt = new Date(Date.now() + RESET_TTL_MS);
+  // Only the newest link works: requesting another one replaces it.
+  await prisma.$transaction([
+    prisma.passwordResetToken.deleteMany({ where: { userId: user.id, usedAt: null } }),
+    prisma.passwordResetToken.create({ data: { userId: user.id, tokenHash: hashResetToken(token), expiresAt } }),
+  ]);
+
+  const link = `${frontendUrl()}/?reset=${encodeURIComponent(token)}`;
+  await sendEmail({
+    to: user.email,
+    subject: "Reset your Complete Fitness Coach password",
+    text:
+      `Someone (hopefully you) asked to reset the password for your Complete Fitness Coach account.\n\n` +
+      `Open this link to choose a new password:\n${link}\n\n` +
+      `The link expires in ${RESET_TTL_MINUTES} minutes and can only be used once.\n\n` +
+      `If you didn't ask for this, you can ignore this email — your password won't change.`,
+    html:
+      `<p>Someone (hopefully you) asked to reset the password for your Complete Fitness Coach account.</p>` +
+      `<p><a href="${link}" style="display:inline-block;padding:10px 16px;background:#b5442d;color:#fff;border-radius:6px;text-decoration:none">Choose a new password</a></p>` +
+      `<p>Or copy this link into your browser:<br>${link}</p>` +
+      `<p><strong>The link expires in ${RESET_TTL_MINUTES} minutes</strong> and can only be used once.</p>` +
+      `<p>If you didn't ask for this, you can ignore this email — your password won't change.</p>`,
+  });
+}
+
+const forgotPasswordSchema = z.object({ email: z.string().email() });
+
+// POST /auth/forgot-password - always gives the same answer, whether or not
+// the email has an account, so it can't be used to discover who's
+// registered. The lookup and email happen after responding, so response
+// timing doesn't give it away either.
+authRouter.post("/forgot-password", resetLimiter, async (req, res) => {
+  const parsed = forgotPasswordSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+
+  res.json({
+    message: `If there's an account for that email, we've sent a link to reset the password. It expires in ${RESET_TTL_MINUTES} minutes.`,
+  });
+
+  sendPasswordResetEmail(parsed.data.email).catch((err) => {
+    console.error("[auth] Failed to send password reset email:", err);
+  });
+});
+
+const resetTokenSchema = z.object({ token: z.string().min(1) });
+
+// POST /auth/reset-password/check - lets the reset page say straight away
+// whether the link still works, and count down to when it expires.
+authRouter.post("/reset-password/check", resetAttemptLimiter, async (req, res) => {
+  const parsed = resetTokenSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+  const record = await prisma.passwordResetToken.findUnique({ where: { tokenHash: hashResetToken(parsed.data.token) } });
+  const msLeft = record && !record.usedAt ? record.expiresAt.getTime() - Date.now() : 0;
+  // secondsLeft rather than just a timestamp, so the countdown isn't thrown
+  // off by a phone whose clock is wrong.
+  res.json({ valid: msLeft > 0, secondsLeft: Math.max(0, Math.floor(msLeft / 1000)) });
+});
+
+const resetPasswordSchema = z.object({
+  token: z.string().min(1),
+  password: z.string().min(10, "Use at least 10 characters"),
+});
+
+// POST /auth/reset-password - sets the new password if the link is still
+// valid, then signs out every existing session. It doesn't log the person
+// in: they log in normally afterwards, so 2FA still applies.
+authRouter.post("/reset-password", resetAttemptLimiter, async (req, res) => {
+  const parsed = resetPasswordSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+
+  const now = new Date();
+  const record = await prisma.passwordResetToken.findUnique({ where: { tokenHash: hashResetToken(parsed.data.token) } });
+  // Claim the token atomically, so two requests racing with the same link
+  // can't both succeed.
+  const claimed = record
+    ? await prisma.passwordResetToken.updateMany({
+        where: { id: record.id, usedAt: null, expiresAt: { gt: now } },
+        data: { usedAt: now },
+      })
+    : { count: 0 };
+  if (!record || claimed.count !== 1) {
+    return res.status(400).json({
+      error: "This reset link has expired or has already been used. Please request a new one.",
+      resetLinkInvalid: true,
+    });
+  }
+
+  const passwordHash = await hashPassword(parsed.data.password);
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: record.userId }, data: { passwordHash, sessionsValidAfter: now } }),
+    prisma.passwordResetToken.deleteMany({ where: { userId: record.userId, usedAt: null } }),
+  ]);
+
+  res.json({ message: "Your password has been changed. You can now log in with your new password." });
 });

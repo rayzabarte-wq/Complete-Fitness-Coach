@@ -544,6 +544,15 @@ export const api = {
   login: (email: string, password: string, code?: string) =>
     request<LoginResponse>("/auth/login", { method: "POST", body: JSON.stringify({ email, password, code }) }),
 
+  forgotPassword: (email: string) =>
+    request<{ message: string }>("/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) }),
+  checkResetToken: (token: string) =>
+    request<{ valid: boolean; secondsLeft: number }>("/auth/reset-password/check", {
+      method: "POST",
+      body: JSON.stringify({ token }),
+    }),
+  resetPassword: (token: string, password: string) =>
+    request<{ message: string }>("/auth/reset-password", { method: "POST", body: JSON.stringify({ token, password }) }),
   setup2fa: () => request<{ secret: string; qrDataUrl: string }>("/auth/2fa/setup", { method: "POST" }),
 
   verify2fa: (code: string) =>

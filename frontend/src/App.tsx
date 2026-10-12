@@ -15,7 +15,12 @@ import { ConsentOnboarding } from "./components/Consent.js";
 // trends) — with Settings behind a gear icon in the header.
 
 export default function App() {
-  const [loggedIn, setLoggedIn] = useState(!!auth.getToken());
+  const [loggedIn, setLoggedIn] = useState(() => {
+    // Opening a password reset link always shows the reset page, even on a
+    // device that's still logged in (resetting signs every session out).
+    if (new URLSearchParams(window.location.search).has("reset")) auth.clearToken();
+    return !!auth.getToken();
+  });
   const [consentReviewed, setConsentReviewed] = useState<boolean | null>(null);
 
   useEffect(() => {

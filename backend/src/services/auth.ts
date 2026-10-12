@@ -34,9 +34,9 @@ export function issueSessionToken(userId: string): string {
   return jwt.sign({ sub: userId }, JWT_SECRET, { expiresIn: SESSION_TTL });
 }
 
-export function verifySessionToken(token: string): { sub: string } | null {
+export function verifySessionToken(token: string): { sub: string; iat?: number } | null {
   try {
-    return jwt.verify(token, JWT_SECRET) as { sub: string };
+    return jwt.verify(token, JWT_SECRET) as { sub: string; iat?: number };
   } catch {
     return null;
   }

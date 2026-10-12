@@ -349,4 +349,5 @@ Version 259 adds the **Schedule Builder**, where you choose the day and time of 
 | "Too many attempts. Try again in a few minutes." | The app locks login after 10 tries in 15 minutes as a safety feature. Wait 15 minutes. |
 | AI buttons show an error | Check `ANTHROPIC_API_KEY` in `backend/.env`, and check that your Anthropic account has credits. Restart the backend after editing `.env`. |
 | Lost your authenticator app | Easiest fix for a local setup: in the `backend` folder run `npx prisma studio`, open the **User** table, set `totpEnabled` to `false`, and save. |
+| Forgot your password | Click **Forgot password?** on the login screen and enter your email. Running on your own computer, no email is actually sent: the reset link appears in the **backend's terminal window** (Terminal 1), under `RESEND_API_KEY is not set`. Copy it into your browser within **3 minutes**. |
 | Want to look at your data | `cd backend`, then `npx prisma studio`. It opens a visual editor for the database in your browser. |

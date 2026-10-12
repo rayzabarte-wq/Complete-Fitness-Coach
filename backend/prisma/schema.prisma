@@ -58,6 +58,11 @@ model User {
   // a login session. Only the hash is stored; the token is shown once.
   ingestTokenHash String? @unique
 
+  // Session tokens issued before this moment are rejected (see
+  // lib/requireAuth.ts) — set on password reset, so resetting a forgotten
+  // password also signs out every device that was still logged in.
+  sessionsValidAfter DateTime?
+
   sessions         WorkoutSession[]
   recommendations  Recommendation[]
   plannedSessions  PlannedSession[]
@@ -70,6 +75,24 @@ model User {
   bodyGoals        BodyGoal[]
   stepDays         StepDay[]
   trainingBlocks   TrainingBlock[]
+  passwordResetTokens PasswordResetToken[]
+}
+
+// One-time "forgot password" links (see routes/auth.ts). Only a SHA-256 of
+// the token is stored, so a database leak can't be used to reset anyone's
+// password; the token itself only ever exists in the emailed link. Each is
+// valid for 3 minutes and single use, and requesting a new one deletes any
+// earlier unused ones.
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
 }
 
 enum Sex {

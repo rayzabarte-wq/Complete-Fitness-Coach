@@ -1,5 +1,17 @@
 import { useState } from "react";
 import { api, auth } from "../lib/api.js";
+import { ForgotPassword, ResetPassword } from "./PasswordReset.js";
+
+// A password reset email links to /?reset=<token>.
+function resetTokenFromUrl(): string | null {
+  return new URLSearchParams(window.location.search).get("reset");
+}
+
+function clearResetTokenFromUrl() {
+  const url = new URL(window.location.href);
+  url.searchParams.delete("reset");
+  window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+}
 
 export default function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
   const [email, setEmail] = useState("");
@@ -7,6 +19,8 @@ export default function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
   const [code, setCode] = useState("");
   const [needsCode, setNeedsCode] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mode, setMode] = useState<"login" | "forgot" | "reset">(() => (resetTokenFromUrl() ? "reset" : "login"));
+  const [resetToken] = useState(resetTokenFromUrl);
 
   // Shown once, right after a fresh /auth/register, so the account isn't
   // left without 2FA enabled.
@@ -53,6 +67,43 @@ export default function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
     } catch (err: any) {
       setError(err.message);
     }
+  }
+
+  function backToLogin() {
+    clearResetTokenFromUrl();
+    setError(null);
+    setNeedsCode(false);
+    setCode("");
+    setPassword("");
+    setMode("login");
+  }
+
+  const title = <h1 style={{ fontSize: 22, textAlign: "center", marginBottom: 16 }}>Complete Fitness Coach</h1>;
+
+  if (mode === "reset" && resetToken) {
+    return (
+      <div>
+        {title}
+        <ResetPassword
+          token={resetToken}
+          onPasswordChanged={clearResetTokenFromUrl}
+          onDone={backToLogin}
+          onRequestNewLink={() => {
+            clearResetTokenFromUrl();
+            setMode("forgot");
+          }}
+        />
+      </div>
+    );
+  }
+
+  if (mode === "forgot") {
+    return (
+      <div>
+        {title}
+        <ForgotPassword initialEmail={email} onBack={backToLogin} />
+      </div>
+    );
   }
 
   if (setupQr) {
@@ -120,6 +171,20 @@ export default function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
         </form>
 
         {error && <p style={{ color: "var(--danger)" }}>{error}</p>}
+
+        {!needsCode && (
+          <p style={{ fontSize: 13, marginTop: 12, marginBottom: 0 }}>
+            <button
+              onClick={() => {
+                setError(null);
+                setMode("forgot");
+              }}
+              style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", padding: 0 }}
+            >
+              Forgot password?
+            </button>
+          </p>
+        )}
 
         {!needsCode && (
           <p className="text-dim" style={{ fontSize: 13, marginTop: 12 }}>

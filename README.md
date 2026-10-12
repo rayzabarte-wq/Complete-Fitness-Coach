@@ -214,6 +214,22 @@ same kind of code Google Authenticator, Authy, or 1Password produce).
   at login and valid for 12 hours.
 - Login attempts are rate-limited (10 per 15 minutes) to slow down
   brute-forcing.
+- **Forgotten password:** "Forgot password?" on the login screen emails a
+  one-time link (`POST /auth/forgot-password`) that **expires after 3
+  minutes**. The link opens `/?reset=<token>`, which shows a countdown and
+  asks for the new password (`POST /auth/reset-password`). Details:
+  - The reply is the same whether or not the email has an account, so it
+    can't be used to find out who's registered.
+  - Only a SHA-256 hash of the token is stored; each link works once, and
+    requesting a new one cancels the old one.
+  - Resetting signs out every device that was logged in
+    (`User.sessionsValidAfter`, checked in `lib/requireAuth.ts`), and
+    doesn't log you in: you log in afterwards, so 2FA still applies.
+  - Requests are rate-limited (5 per 15 minutes per IP).
+  - Emails go through [Resend](https://resend.com) (`RESEND_API_KEY`,
+    `EMAIL_FROM`; see `backend/.env.example`). Without a key, the link is
+    printed in the backend log instead. The link points at `FRONTEND_URL`,
+    never at a URL taken from the request.
 
 If you're deploying this somewhere with a public URL and don't want
 open registration, that's a deliberate choice to make yourself — for
@@ -359,7 +375,9 @@ In **Variables** (see `backend/.env.example` for the full annotated list):
 | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` (Railway fills it in from the database service) |
 | `JWT_SECRET` | Long random string: `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"` |
 | `ANTHROPIC_API_KEY` | Your Anthropic API key |
-| `FRONTEND_URL` | The frontend's Railway URL (add after step 3) |
+| `FRONTEND_URL` | The frontend's Railway URL (add after step 3). Password reset emails link here, so it must be right. |
+| `RESEND_API_KEY` | For "forgot password" emails: create a free account at [resend.com](https://resend.com) → **API Keys** → **Create API Key**. Without it, reset links only appear in the backend's **Deploy Logs**. |
+| `EMAIL_FROM` | Optional. Leave unset to use Resend's test sender, which only delivers to the email you signed up to Resend with. To email other people, verify your own domain in Resend and set e.g. `Fitness Coach <coach@yourdomain.com>`. |
 
 Don't set `PORT`; Railway provides it. Optional: `MICROSOFT_*` (Outlook
 sync), `STRAVA_*` (Strava sync), `LOCATION_LAT`/`LOCATION_LON` (weather
@@ -398,6 +416,8 @@ Open the failed service → **Deployments** → the failed deployment →
 | `Railpack could not determine how to build the app` | Root Directory isn't set (see above). |
 | `Environment variable not found: DATABASE_URL` | Add `DATABASE_URL` = `${{Postgres.DATABASE_URL}}` to the backend. |
 | `JWT_SECRET is not set` | Add `JWT_SECRET` to the backend. |
+| Reset email never arrives | Check the backend's **Deploy Logs**: without `RESEND_API_KEY` the link is printed there. With a key but no verified domain, Resend only delivers to your own Resend sign-up email. Also check spam. |
+| Reset link opens localhost | The backend's `FRONTEND_URL` isn't set to the frontend's Railway URL. |
 | App loads but login says "Failed to fetch" | Frontend's `VITE_API_URL` is missing or wrong. Fix it, then redeploy the frontend. |
 | Login shows a **405** error | Login is being sent to the frontend instead of the backend: `VITE_API_URL` is empty or points at the frontend's own URL. Set it to the **backend's** URL, then redeploy the frontend. |
 
