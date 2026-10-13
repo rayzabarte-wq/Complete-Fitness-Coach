@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api, auth, Profile, SessionType } from "../lib/api.js";
+import { api, auth, Profile, SessionType, EquipmentInput } from "../lib/api.js";
+import { EquipmentSetting, buildWeights } from "../lib/equipment.js";
 import { SESSION_TYPE_TREE } from "../lib/sessionTypes.js";
 import { ConsentSettings } from "../components/Consent.js";
 
@@ -48,6 +49,9 @@ export default function Settings({ onLoggedOut }: { onLoggedOut: () => void }) {
       <div className="section-title">Connections</div>
       <OutlookSection />
       <StravaSection />
+
+      <div className="section-title">Equipment</div>
+      <EquipmentSection />
 
       <div className="section-title">Workout types</div>
       <WorkoutTypesSection />
@@ -496,6 +500,251 @@ function WorkoutTypesSection() {
         <p className="text-dim" style={{ fontSize: 11, marginTop: 6 }}>
           Saving...
         </p>
+      )}
+    </div>
+  );
+}
+
+interface EquipmentDraft {
+  equipment: EquipmentSetting["equipment"];
+  kind: EquipmentSetting["kind"];
+  label: string;
+  enabled: boolean;
+  minLb: string;
+  maxLb: string;
+  stepLb: string;
+  custom: string; // comma-separated, parsed on save
+  bandLevels: string[];
+}
+
+function toDraft(item: EquipmentSetting): EquipmentDraft {
+  return {
+    equipment: item.equipment,
+    kind: item.kind,
+    label: item.label,
+    enabled: item.enabled,
+    minLb: String(item.minLb),
+    maxLb: String(item.maxLb),
+    stepLb: String(item.stepLb),
+    custom: item.customWeightsLb.join(", "),
+    bandLevels: item.bandLevels,
+  };
+}
+
+/** Parses "10, 12.5 15" into numbers. Returns the bad tokens too, so the form can say what it couldn't read. */
+function parseCustomList(text: string): { values: number[]; bad: string[] } {
+  const tokens = text.split(/[\s,]+/).filter(Boolean);
+  const values: number[] = [];
+  const bad: string[] = [];
+  for (const t of tokens) {
+    const n = Number(t);
+    if (Number.isFinite(n) && n > 0) values.push(n);
+    else bad.push(t);
+  }
+  return { values, bad };
+}
+
+function previewText(weights: number[]): string {
+  if (weights.length === 0) return "No weights yet — check the min, max and step";
+  const shown = weights.length <= 12 ? weights.join(", ") : `${weights.slice(0, 8).join(", ")} … ${weights.slice(-3).join(", ")}`;
+  return `${weights.length} options: ${shown} lb`;
+}
+
+function EquipmentSection() {
+  const [drafts, setDrafts] = useState<EquipmentDraft[] | null>(null);
+  const [allBandLevels, setAllBandLevels] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api
+      .getEquipment()
+      .then((res) => {
+        setDrafts(res.items.map(toDraft));
+        setAllBandLevels(res.allBandLevels);
+      })
+      .catch(() => setError("Couldn't load your equipment"));
+  }, []);
+
+  function update(equipment: EquipmentDraft["equipment"], patch: Partial<EquipmentDraft>) {
+    setMessage(null);
+    setDrafts((cur) => cur && cur.map((d) => (d.equipment === equipment ? { ...d, ...patch } : d)));
+  }
+
+  async function handleSave() {
+    if (!drafts) return;
+    setError(null);
+    setMessage(null);
+
+    const items: EquipmentInput[] = [];
+    for (const d of drafts) {
+      if (!d.enabled) {
+        items.push({ equipment: d.equipment, enabled: false });
+        continue;
+      }
+      if (d.kind === "band") {
+        items.push({ equipment: d.equipment, enabled: d.enabled, bandLevels: d.bandLevels });
+        continue;
+      }
+      const { values, bad } = parseCustomList(d.custom);
+      if (bad.length > 0) {
+        setError(`${d.label}: couldn't read "${bad.join('", "')}" in the custom weights list — use numbers separated by commas.`);
+        return;
+      }
+      items.push({
+        equipment: d.equipment,
+        enabled: d.enabled,
+        minLb: d.kind === "bodyweight" ? 0 : Number(d.minLb),
+        maxLb: Number(d.maxLb),
+        stepLb: Number(d.stepLb),
+        customWeightsLb: values,
+      });
+    }
+
+    setSaving(true);
+    try {
+      const res = await api.saveEquipment(items);
+      setDrafts(res.items.map(toDraft));
+      setMessage("Saved. New workouts will use this equipment.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't save your equipment");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const inputStyle = {
+    width: 70,
+    padding: 6,
+    background: "var(--bg)",
+    color: "var(--text)",
+    border: "1px solid var(--border)",
+    borderRadius: 6,
+  } as const;
+
+  return (
+    <div className="card" style={{ marginTop: 12 }}>
+      <strong>Equipment &amp; weights</strong>
+      <p className="text-dim" style={{ fontSize: 13, marginTop: 6 }}>
+        Tell the app what you actually have. Workouts only include exercises you can do with the equipment switched on, and
+        suggested weights are always ones you can really load.
+      </p>
+
+      {!drafts ? (
+        <p className="text-dim" style={{ fontSize: 13, marginTop: 10 }}>
+          {error ?? "Loading..."}
+        </p>
+      ) : (
+        <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 12 }}>
+          {drafts.map((d) => {
+            const custom = parseCustomList(d.custom);
+            const weights = buildWeights(d.kind, Number(d.minLb), Number(d.maxLb), Number(d.stepLb), custom.values);
+            return (
+              <div key={d.equipment} style={{ borderTop: "1px solid var(--border)", paddingTop: 10 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
+                  <input
+                    type="checkbox"
+                    checked={d.enabled}
+                    onChange={(e) => update(d.equipment, { enabled: e.target.checked })}
+                    style={{ width: 18, height: 18 }}
+                  />
+                  {d.label}
+                </label>
+
+                {d.enabled && d.kind === "band" && (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginTop: 8, paddingLeft: 26 }}>
+                    {allBandLevels.map((lvl) => (
+                      <label key={lvl} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer" }}>
+                        <input
+                          type="checkbox"
+                          checked={d.bandLevels.includes(lvl)}
+                          onChange={(e) =>
+                            update(d.equipment, {
+                              bandLevels: e.target.checked ? [...d.bandLevels, lvl] : d.bandLevels.filter((l) => l !== lvl),
+                            })
+                          }
+                          style={{ width: 16, height: 16 }}
+                        />
+                        {lvl}
+                      </label>
+                    ))}
+                  </div>
+                )}
+
+                {d.enabled && d.kind !== "band" && (
+                  <div style={{ marginTop: 8, paddingLeft: 26, display: "flex", flexDirection: "column", gap: 8 }}>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", fontSize: 13 }}>
+                      {d.kind === "weighted" && (
+                        <label>
+                          Min{" "}
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            value={d.minLb}
+                            onChange={(e) => update(d.equipment, { minLb: e.target.value })}
+                            style={inputStyle}
+                          />
+                        </label>
+                      )}
+                      <label>
+                        {d.kind === "bodyweight" ? "Max added" : "Max"}{" "}
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          value={d.maxLb}
+                          onChange={(e) => update(d.equipment, { maxLb: e.target.value })}
+                          style={inputStyle}
+                        />
+                      </label>
+                      <label>
+                        Step{" "}
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          value={d.stepLb}
+                          onChange={(e) => update(d.equipment, { stepLb: e.target.value })}
+                          style={inputStyle}
+                        />
+                      </label>
+                      <span className="text-dim">lb</span>
+                    </div>
+                    <label style={{ fontSize: 13 }}>
+                      <span className="text-dim">Or list exact weights (overrides the range), e.g. 10, 12.5, 15, 20, 30</span>
+                      <input
+                        type="text"
+                        value={d.custom}
+                        onChange={(e) => update(d.equipment, { custom: e.target.value })}
+                        placeholder="Leave blank to use the range above"
+                        style={{ ...inputStyle, width: "100%", marginTop: 4 }}
+                      />
+                    </label>
+                    {d.kind === "bodyweight" && (
+                      <span className="text-dim" style={{ fontSize: 12 }}>
+                        Added weight is optional load on top of bodyweight (e.g. a dumbbell between your feet). Set Max to 0 if you
+                        don't add any.
+                      </span>
+                    )}
+                    <span className="text-dim" style={{ fontSize: 12 }}>
+                      {previewText(weights)}
+                    </span>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {error && <p style={{ color: "var(--danger)", fontSize: 13, margin: 0 }}>{error}</p>}
+          {message && (
+            <p className="text-dim" style={{ fontSize: 13, margin: 0 }}>
+              {message}
+            </p>
+          )}
+
+          <button className="button-primary" onClick={handleSave} disabled={saving} style={{ width: "100%" }}>
+            {saving ? "Saving..." : "Save equipment"}
+          </button>
+        </div>
       )}
     </div>
   );

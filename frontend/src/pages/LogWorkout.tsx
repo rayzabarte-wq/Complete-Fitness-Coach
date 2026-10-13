@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api, SetInput, PlannedExercise, ReadinessLevel, WorkoutProgress } from "../lib/api.js";
 import { usePlan } from "../lib/planContext.js";
-import { EQUIPMENT_CONFIG, weightOptions } from "../lib/equipment.js";
+import { Equipment, EquipmentSetting } from "../lib/equipment.js";
 import { FOCUS_LABELS } from "../lib/activity.js";
 
 interface SetRow {
@@ -49,6 +49,16 @@ export default function LogWorkout({ onSaved }: { onSaved: (sessionId: string) =
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   // True when this device has changes the server doesn't have yet.
   const dirtyRef = useRef(false);
+  // The signed-in user's own equipment (what weights/bands they can actually
+  // select), loaded from Settings > Equipment.
+  const [equipment, setEquipment] = useState<Record<Equipment, EquipmentSetting> | null>(null);
+
+  useEffect(() => {
+    api
+      .getEquipment()
+      .then((res) => setEquipment(Object.fromEntries(res.items.map((i) => [i.equipment, i])) as Record<Equipment, EquipmentSetting>))
+      .catch(() => setError("Couldn't load your equipment settings"));
+  }, []);
 
   // (Re)load whenever the workout arrives or is replaced from the server:
   // saved progress if there is any, otherwise a fresh start.
@@ -114,6 +124,7 @@ export default function LogWorkout({ onSaved }: { onSaved: (sessionId: string) =
   }, [saveProgress]);
 
   if (!plan) return null;
+  if (!equipment) return <p className="text-dim">{error ?? "Loading your equipment..."}</p>;
 
   function updateRow(exerciseId: string, index: number, patch: Partial<SetRow>) {
     dirtyRef.current = true;
@@ -238,6 +249,7 @@ export default function LogWorkout({ onSaved }: { onSaved: (sessionId: string) =
         <ExerciseCard
           key={exercise.exerciseId}
           exercise={exercise}
+          config={equipment[exercise.equipment]}
           rows={rows[exercise.exerciseId] ?? []}
           onChange={(i, patch) => updateRow(exercise.exerciseId, i, patch)}
           onToggle={(i) => toggleLogged(exercise.exerciseId, i)}
@@ -362,19 +374,30 @@ export function FeedbackPrompt({ sessionId, onDone }: { sessionId: string; onDon
   );
 }
 
+/** The user's loadable weights, plus the row's current value if their gear
+ * settings changed after this workout was generated (so the select never
+ * shows a value that isn't one of its options). */
+function weightChoices(config: EquipmentSetting, current: number): number[] {
+  return config.weightsLb.includes(current) ? config.weightsLb : [...config.weightsLb, current].sort((a, b) => a - b);
+}
+
+function bandOptions(config: EquipmentSetting, current: string): string[] {
+  return current && !config.bandLevels.includes(current) ? [...config.bandLevels, current] : config.bandLevels;
+}
+
 function ExerciseCard({
   exercise,
+  config,
   rows,
   onChange,
   onToggle,
 }: {
   exercise: PlannedExercise;
+  config: EquipmentSetting;
   rows: SetRow[];
   onChange: (index: number, patch: Partial<SetRow>) => void;
   onToggle: (index: number) => void;
 }) {
-  const config = EQUIPMENT_CONFIG[exercise.equipment];
-
   return (
     <div className="card" style={{ marginBottom: 12 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
@@ -433,7 +456,7 @@ function ExerciseCard({
                   disabled={row.logged}
                   style={{ padding: 6 }}
                 >
-                  {config.levels.map((lvl) => (
+                  {bandOptions(config, row.bandLevel).map((lvl) => (
                     <option key={lvl} value={lvl}>
                       {lvl}
                     </option>
@@ -447,7 +470,7 @@ function ExerciseCard({
                   style={{ padding: 6 }}
                 >
                   {config.kind === "bodyweight" && <option value={0}>Bodyweight</option>}
-                  {weightOptions(config)
+                  {weightChoices(config, row.weightLb)
                     .filter((v) => !(config.kind === "bodyweight" && v === 0))
                     .map((v) => (
                       <option key={v} value={v}>

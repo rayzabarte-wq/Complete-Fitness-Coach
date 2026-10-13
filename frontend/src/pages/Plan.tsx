@@ -7,6 +7,7 @@ import {
   SportApproach,
   FrameworkSlot,
   SlotConflict,
+  Milestone,
 } from "../lib/api.js";
 import PlanDashboard from "./PlanDashboard.js";
 import ScheduleBuilder from "./ScheduleBuilder.js";
@@ -145,7 +146,7 @@ export default function Plan() {
 
   async function handleApproveApproach(
     approach: SportApproach,
-    edits?: { approachText?: string; weeklySessionTarget?: number; sessionMinutes?: number }
+    edits?: { approachText?: string; weeklySessionTarget?: number; sessionMinutes?: number; milestones?: Milestone[] }
   ) {
     if (!plan) return;
     setBusy(true);
@@ -646,12 +647,20 @@ function ApproachCard({
 }: {
   approach: SportApproach;
   busy: boolean;
-  onApprove: (a: SportApproach, edits?: { approachText?: string; weeklySessionTarget?: number; sessionMinutes?: number }) => void;
+  onApprove: (
+    a: SportApproach,
+    edits?: { approachText?: string; weeklySessionTarget?: number; sessionMinutes?: number; milestones?: Milestone[] }
+  ) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(approach.approachText);
   const [target, setTarget] = useState(approach.weeklySessionTarget);
   const [minutes, setMinutes] = useState(approach.sessionMinutes);
+  const [milestones, setMilestones] = useState<Milestone[]>(approach.milestones ?? []);
+
+  function updateMilestone(i: number, patch: Partial<Milestone>) {
+    setMilestones((cur) => cur.map((m, idx) => (idx === i ? { ...m, ...patch } : m)));
+  }
 
   return (
     <div className="card">
@@ -691,11 +700,36 @@ function ApproachCard({
               />
             </label>
           </div>
+
+          {milestones.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <span className="text-dim" style={{ fontSize: 12 }}>
+                Milestones
+              </span>
+              {milestones.map((m, i) => (
+                <div key={i} style={{ display: "flex", gap: 6 }}>
+                  <input
+                    type="text"
+                    value={m.phase}
+                    onChange={(e) => updateMilestone(i, { phase: e.target.value })}
+                    style={{ flex: "0 0 40%", background: "var(--bg)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 6, padding: 6, fontSize: 12 }}
+                  />
+                  <input
+                    type="text"
+                    value={m.target}
+                    onChange={(e) => updateMilestone(i, { target: e.target.value })}
+                    style={{ flex: 1, background: "var(--bg)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 6, padding: 6, fontSize: 12 }}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+
           <button
             className="button-primary"
             disabled={busy}
             onClick={() => {
-              onApprove(approach, { approachText: text, weeklySessionTarget: target, sessionMinutes: minutes });
+              onApprove(approach, { approachText: text, weeklySessionTarget: target, sessionMinutes: minutes, milestones });
               setEditing(false);
             }}
           >
@@ -708,6 +742,16 @@ function ApproachCard({
           <p className="text-dim" style={{ fontSize: 13, margin: "0 0 10px" }}>
             {approach.weeklySessionTarget} sessions/week, ~{approach.sessionMinutes} min each
           </p>
+          {approach.milestones && approach.milestones.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, margin: "0 0 10px" }}>
+              {approach.milestones.map((m, i) => (
+                <div key={i} style={{ display: "flex", gap: 8, fontSize: 12 }}>
+                  <span style={{ flex: "0 0 40%", fontWeight: 600 }}>{m.phase}</span>
+                  <span className="text-dim">{m.target}</span>
+                </div>
+              ))}
+            </div>
+          )}
           {approach.status !== "APPROVED" && (
             <div style={{ display: "flex", gap: 8 }}>
               <button className="button-primary" disabled={busy} onClick={() => onApprove(approach)}>

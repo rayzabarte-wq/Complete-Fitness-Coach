@@ -176,20 +176,41 @@ health data under GDPR.
 
 ## Equipment
 
-The app only ever offers weights that are actually loadable on hand:
+What equipment you have, and which weights it can load, is configured per
+account under **Settings > Equipment & weights**. For each type you can
+switch it on or off and describe it:
 
-- **Adjustable dumbbells:** 5lb–45lb in 5lb increments
-- **Barbell:** 20lb–80lb in 5lb increments
-- **EZ bar:** 20lb–80lb in 10lb increments
-- **Elastic bands:** Light / Medium / Heavy / X-Heavy (no lb rating)
-- **Bodyweight** (chin-up bar / rings): optional added weight, 0lb–45lb in
-  5lb increments
+- **Dumbbells / Barbell / EZ bar:** a min, max and step (e.g. 5–45lb in
+  5lb steps) — or, for gear that isn't evenly spaced like a fixed-dumbbell
+  rack, an exact list of weights (`10, 12.5, 15, 20, 30`) that overrides the
+  range. A live preview shows exactly which weights that produces.
+- **Resistance bands:** which of Light / Medium / Heavy / X-Heavy you own.
+- **Bodyweight** (chin-up bar / rings): the most optional *added* weight you
+  use (0 if none), plus step or an exact list.
 
-This lives in `backend/src/lib/equipmentConfig.ts` (also enforced
-server-side — a logged set with an unloadable weight is rejected) and is
-mirrored in `frontend/src/lib/equipment.ts` to build the weight dropdowns.
-The AI recommender is told these constraints directly and its suggestion is
-snapped to the nearest loadable value as a safety net.
+What it drives:
+
+- **Which exercises you get.** Workout generation only picks exercises whose
+  equipment you've switched on (and says so clearly if that leaves nothing
+  for a movement pattern).
+- **Which weights are offered and suggested.** The AI is told your exact
+  loadable values, its suggestion is snapped to the nearest one as a safety
+  net, and the Log page's weight/band dropdowns come from your settings.
+- **Server-side validation.** A logged set with a weight you can't load is
+  rejected, checked against your own configuration.
+
+Accounts that haven't configured anything get the original defaults
+(dumbbells 5–45lb/5, barbell 20–80lb/5, EZ bar 20–80lb/10, all four band
+levels, bodyweight with up to 45lb added), so existing accounts behave as
+before. Defaults live in `backend/src/sport/lib/equipmentConfig.ts`; saved
+settings are the `UserEquipment` table (`GET`/`PUT /equipment`), included in
+the data export and deleted with the account. Switching a type off keeps its
+weights, so switching it back on restores them. Since this adds a table, apply
+the `user_equipment_and_milestones` migration (`npx prisma migrate deploy`, or `migrate dev` locally).
+
+Limits worth knowing: bench, chin-up bar and rings aren't tracked
+separately — "Bodyweight" is one switch covering exercises that need them —
+and weights are in pounds only.
 
 The `Log` page shows only the current generated session's exercises, with
 a weight/band selector, a reps field (pre-filled with the AI's suggested
@@ -770,10 +791,15 @@ walks through four steps:
    together in one call (so the total weekly load stays realistic instead
    of each sport being sized in isolation), a short narrative approach —
    phasing, focus, how it should progress — plus a weekly session count and
-   a typical session length. Where a weekly time-available figure was given,
-   session count × session length is kept at or under it. Each is reviewed
-   individually: approve as-is, or edit the text/count/length (which counts
-   as approving it). Every sport must be approved before moving on.
+   a typical session length, plus **phased milestones**: the 12 weeks broken
+   into roughly 3 phases, each with a short label and a specific, measurable
+   target (a number, time, distance, or skill check tied to the sport's
+   stated goal — e.g. "Weeks 1-4 — Base building: Squat 3x5 @ 185lb" through
+   to a final-phase target that visibly moves the needle on the goal). Where
+   a weekly time-available figure was given, session count × session length
+   is kept at or under it. Each approach is reviewed individually: approve
+   as-is, or edit the text/count/length/milestones (which counts as
+   approving it). Every sport must be approved before moving on.
 3. **Weekly schedule.** Once every approach is approved, the person builds
    their own schedule — not Claude. An earlier version had Claude propose
    the whole week's day/time layout, but that didn't place sessions the way

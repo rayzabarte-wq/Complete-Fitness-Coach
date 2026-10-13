@@ -70,6 +70,7 @@ model User {
   microsoftAccount MicrosoftAccount?
   stravaAccount    StravaAccount?
   trainingPlans    TrainingPlan[]
+  equipment        UserEquipment[]
   consents         ConsentRecord[]
   bodyMeasurements BodyMeasurement[]
   bodyGoals        BodyGoal[]
@@ -142,18 +143,41 @@ enum RepRangeStyle {
   HYPERTROPHY // 8-15 reps, progression via rep quality / RPE
 }
 
-// Matches the equipment actually on hand: an adjustable dumbbell set
-// (5-45lb, 5lb steps), a barbell (20-80lb, 5lb steps), an EZ bar
-// (20-80lb, 10lb steps), elastic bands, and bodyweight work on a chin-up
-// bar / rings. Increments and ranges per type live in
-// backend/src/lib/equipmentConfig.ts (and are mirrored on the frontend so
-// inputs only ever offer loadable values).
+// The kinds of equipment an exercise can need. What each person actually
+// HAS of each kind (on/off, loadable weights, band levels) is per-user —
+// see UserEquipment below. The defaults for someone who hasn't configured
+// anything live in backend/src/sport/lib/equipmentConfig.ts.
 enum Equipment {
   DUMBBELL
   BARBELL
   EZ_BAR
   BAND
   BODYWEIGHT
+}
+
+// One row per user per equipment type they've configured in Settings. No
+// row means "use the defaults" (see equipmentConfig.ts), so existing
+// accounts keep working without a data backfill. Null min/max/step fall
+// back to the defaults too. If customWeightsLb is non-empty it replaces the
+// min/max/step range entirely — for gear that isn't evenly spaced, like a
+// fixed-dumbbell rack (10, 12.5, 15, 20, 30...). For BODYWEIGHT the
+// weights are optional ADDED load (0 is always allowed); for BAND,
+// bandLevels is which resistance levels the person owns.
+model UserEquipment {
+  id     String @id @default(cuid())
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+
+  equipment       Equipment
+  enabled         Boolean   @default(true)
+  minLb           Float?
+  maxLb           Float?
+  stepLb          Float?
+  customWeightsLb Float[]   @default([])
+  bandLevels      String[]  @default([])
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([userId, equipment])
 }
 
 // Used to group exercises into full-session workouts (Push / Pull / Legs /
@@ -540,6 +564,11 @@ model SportApproach {
   approachText        String
   weeklySessionTarget Int
   sessionMinutes      Int            @default(45)
+  // Phased milestones across the 12 weeks, e.g. [{"phase": "Weeks 1-4 —
+  // Base building", "target": "Squat 3x5 @ 185lb, consistent depth"}, ...].
+  // Optional because approaches created before this field existed, or
+  // edited by hand without touching milestones, may not have any.
+  milestones          Json?
   status              ApproachStatus @default(PROPOSED)
 
   @@unique([planId, sport])

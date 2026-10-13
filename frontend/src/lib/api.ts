@@ -1,4 +1,4 @@
-import { Equipment } from "./equipment.js";
+import { Equipment, EquipmentResponse } from "./equipment.js";
 
 // Tolerates the common ways VITE_API_URL gets pasted in: a bare domain
 // without https:// (how Railway displays generated domains, which would
@@ -29,6 +29,16 @@ export interface Exercise {
 }
 
 export type Muscle = "CHEST" | "SHOULDERS" | "TRICEPS" | "BACK" | "BICEPS" | "QUADS" | "HAMSTRINGS" | "GLUTES" | "CORE";
+
+export interface EquipmentInput {
+  equipment: Equipment;
+  enabled: boolean;
+  minLb?: number;
+  maxLb?: number;
+  stepLb?: number;
+  customWeightsLb?: number[];
+  bandLevels?: string[];
+}
 
 export interface SetInput {
   exerciseId: string;
@@ -210,12 +220,18 @@ export interface SportPriority {
   weeklyMinutesAvailable: number | null;
 }
 
+export interface Milestone {
+  phase: string;
+  target: string;
+}
+
 export interface SportApproach {
   id: string;
   sport: Sport;
   approachText: string;
   weeklySessionTarget: number;
   sessionMinutes: number;
+  milestones: Milestone[] | null;
   status: ApproachStatus;
 }
 
@@ -612,6 +628,11 @@ export const api = {
 
   getExercises: () => request<Exercise[]>("/exercises"),
 
+  getEquipment: () => request<EquipmentResponse>("/equipment"),
+
+  saveEquipment: (items: EquipmentInput[]) =>
+    request<EquipmentResponse>("/equipment", { method: "PUT", body: JSON.stringify({ items }) }),
+
   createExercise: (data: Omit<Exercise, "id">) =>
     request<Exercise>("/exercises", { method: "POST", body: JSON.stringify(data) }),
 
@@ -754,7 +775,13 @@ export const api = {
   updateApproach: (
     planId: string,
     sport: Sport,
-    data: { status?: ApproachStatus; approachText?: string; weeklySessionTarget?: number; sessionMinutes?: number }
+    data: {
+      status?: ApproachStatus;
+      approachText?: string;
+      weeklySessionTarget?: number;
+      sessionMinutes?: number;
+      milestones?: Milestone[];
+    }
   ) => request<TrainingPlan>(`/plan/${planId}/approaches/${sport}`, { method: "PATCH", body: JSON.stringify(data) }),
 
   // How many session cards the schedule builder needs to show per sport,

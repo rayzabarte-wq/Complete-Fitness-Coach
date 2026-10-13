@@ -1,6 +1,8 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { Focus, FOCUS_SLOTS, FOCUS_SOURCE_PATTERNS, Muscle, MUSCLE_LABELS } from "../lib/training.js";
+import { Equipment } from "../lib/equipmentConfig.js";
+import { getUserEquipment, enabledEquipment } from "./userEquipment.js";
 
 // Block-based exercise variation.
 //
@@ -211,7 +213,17 @@ export function chooseReplacement(
 
 // --- Database-facing ------------------------------------------------------
 
-function toCatalog(rows: Awaited<ReturnType<typeof prisma.exercise.findMany>>): CatalogExercise[] {
+type ExerciseRows = Awaited<ReturnType<typeof prisma.exercise.findMany>>;
+
+/** Only the exercises this person can do with the equipment they've switched
+ * on in Settings > Equipment. */
+async function loadAvailableRows(userId: string): Promise<{ all: ExerciseRows; available: ExerciseRows }> {
+  const enabled = new Set(enabledEquipment(await getUserEquipment(userId)));
+  const all = await prisma.exercise.findMany();
+  return { all, available: all.filter((r) => enabled.has(r.equipment as Equipment)) };
+}
+
+function toCatalog(rows: ExerciseRows): CatalogExercise[] {
   return rows.map((e) => ({
     id: e.id,
     name: e.name,
@@ -271,8 +283,13 @@ export async function pickSessionExercises(
   focus: Focus,
   now = new Date()
 ): Promise<{ picks: SessionExercisePick[]; block: BlockInfo }> {
-  const catalog = toCatalog(await prisma.exercise.findMany());
+  // Selection only ever considers exercises doable with the equipment this
+  // person has. fullById also knows the ones they can't do, so a block that
+  // was built before they changed their gear can swap those out.
+  const { all, available } = await loadAvailableRows(userId);
+  const catalog = toCatalog(available);
   const byId = new Map(catalog.map((e) => [e.id, e]));
+  const fullById = new Map(toCatalog(all).map((e) => [e.id, e]));
   const history = await loadHistory(userId, new Date(now.getTime() - LOOKBACK_DAYS * 86400_000));
   const tagSets = tallyTags(history);
   const stalled = new Set(catalog.filter((e) => isStalled(exposureScores(history, e.id))).map((e) => e.id));
@@ -308,13 +325,22 @@ export async function pickSessionExercises(
     const swapLog = (block.swapLog as unknown as SwapLogEntry[]) ?? [];
     let changed = false;
     for (let i = 0; i < ids.length; i++) {
-      const ex = byId.get(ids[i]);
-      if (!ex || !stalled.has(ex.id)) continue;
+      const ex = fullById.get(ids[i]);
+      if (!ex) continue;
+      const unavailable = !byId.has(ex.id);
+      if (!unavailable && !stalled.has(ex.id)) continue;
       const replacement = chooseReplacement(ex, focus, catalog, new Set(ids), { tagSets, stalled, previousBlockIds: new Set() });
       if (!replacement) continue;
       ids[i] = replacement.id;
-      swapLog.push({ at: now.toISOString(), out: ex.name, in: replacement.name, why: `no progress on ${ex.name} over the last ${STALL_EXPOSURES} sessions` });
-      notes.set(replacement.id, `Swapped in for ${ex.name}, which stopped progressing`);
+      swapLog.push({
+        at: now.toISOString(),
+        out: ex.name,
+        in: replacement.name,
+        why: unavailable
+          ? `${ex.name} needs equipment you've switched off in Settings`
+          : `no progress on ${ex.name} over the last ${STALL_EXPOSURES} sessions`,
+      });
+      notes.set(replacement.id, unavailable ? `Swapped in for ${ex.name}, which needs equipment you no longer have switched on` : `Swapped in for ${ex.name}, which stopped progressing`);
       changed = true;
     }
     if (changed) {
@@ -364,7 +390,7 @@ export async function pickSessionExercises(
 /** Coverage of each muscle's variation tags over the last `days` days —
  * for the Progress → Balance view. */
 export async function getCoverage(userId: string, days = 28, now = new Date()) {
-  const catalog = toCatalog(await prisma.exercise.findMany());
+  const catalog = toCatalog((await loadAvailableRows(userId)).available);
   const history = await loadHistory(userId, new Date(now.getTime() - days * 86400_000));
   const tagSets = tallyTags(history);
   const tagsByMuscle = new Map<Muscle, Set<string>>();

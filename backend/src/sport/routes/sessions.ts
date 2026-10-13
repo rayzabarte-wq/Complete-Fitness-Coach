@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../../lib/prisma.js";
 import { validateSetLoad, Equipment } from "../lib/equipmentConfig.js";
+import { getUserEquipment } from "../services/userEquipment.js";
 // Outlook sync is a Scheduler capability — Sport reaches it only through
 // scheduler/index.ts's public interface, never by importing its internal
 // files directly. This is the seam a real split would cut along.
@@ -99,12 +100,15 @@ sessionsRouter.post("/", async (req: AuthedRequest, res) => {
   const exercises = await prisma.exercise.findMany({ where: { id: { in: exerciseIds } } });
   const exerciseById = new Map(exercises.map((e) => [e.id, e]));
 
+  // Checked against THIS user's own equipment settings, not a fixed set.
+  const equipmentConfig = await getUserEquipment(userId);
+
   for (const set of sets) {
     const exercise = exerciseById.get(set.exerciseId);
     if (!exercise) {
       return res.status(400).json({ error: `Unknown exerciseId: ${set.exerciseId}` });
     }
-    const loadError = validateSetLoad(exercise.equipment as Equipment, set.weightLb, set.bandLevel);
+    const loadError = validateSetLoad(equipmentConfig[exercise.equipment as Equipment], set.weightLb, set.bandLevel);
     if (loadError) {
       return res.status(400).json({ error: `${exercise.name}: ${loadError}` });
     }

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { AuthedRequest } from "../../lib/requireAuth.js";
 import {
@@ -8,6 +9,7 @@ import {
   findConstraintConflicts,
   generatePlanAmendment,
   getCurrentVersion,
+  type Milestone,
 } from "../services/trainingPlanner.js";
 import { buildDashboard } from "../services/dashboard.js";
 
@@ -210,6 +212,7 @@ planRouter.post("/:id/approaches/generate", async (req: AuthedRequest, res) => {
             approachText: a.approachText,
             weeklySessionTarget: a.weeklySessionTarget,
             sessionMinutes: a.sessionMinutes,
+            milestones: a.milestones as unknown as Prisma.InputJsonValue,
           },
         })
       ),
@@ -224,11 +227,14 @@ planRouter.post("/:id/approaches/generate", async (req: AuthedRequest, res) => {
 // PATCH /plan/:id/approaches/:sport - approve an approach as-is, or edit its
 // text/weekly target (an edit implicitly counts as approved, since the user
 // has taken ownership of the wording/number at that point).
+const milestoneSchema = z.object({ phase: z.string(), target: z.string() });
+
 const updateApproachSchema = z.object({
   status: z.enum(["PROPOSED", "APPROVED"]).optional(),
   approachText: z.string().optional(),
   weeklySessionTarget: z.number().int().positive().optional(),
   sessionMinutes: z.number().int().positive().optional(),
+  milestones: z.array(milestoneSchema).optional(),
 });
 
 planRouter.patch("/:id/approaches/:sport", async (req: AuthedRequest, res) => {
@@ -244,14 +250,15 @@ planRouter.patch("/:id/approaches/:sport", async (req: AuthedRequest, res) => {
   const existing = await prisma.sportApproach.findFirst({ where: { planId: plan.id, sport: sportParsed.data } });
   if (!existing) return res.status(404).json({ error: "Approach not found for this sport" });
 
-  const { status, approachText, weeklySessionTarget, sessionMinutes } = parsed.data;
+  const { status, approachText, weeklySessionTarget, sessionMinutes, milestones } = parsed.data;
   await prisma.sportApproach.update({
     where: { id: existing.id },
     data: {
       approachText,
       weeklySessionTarget,
       sessionMinutes,
-      status: status ?? (approachText || weeklySessionTarget || sessionMinutes ? "APPROVED" : undefined),
+      milestones: milestones as unknown as Prisma.InputJsonValue | undefined,
+      status: status ?? (approachText || weeklySessionTarget || sessionMinutes || milestones ? "APPROVED" : undefined),
     },
   });
 
@@ -461,6 +468,7 @@ planRouter.post("/:id/amend", async (req: AuthedRequest, res) => {
         approachText: a.approachText,
         weeklySessionTarget: a.weeklySessionTarget,
         sessionMinutes: a.sessionMinutes,
+        milestones: (a.milestones as unknown as Milestone[] | null) ?? null,
       })),
       requestText: parsed.data.requestText,
     });
@@ -473,7 +481,12 @@ planRouter.post("/:id/amend", async (req: AuthedRequest, res) => {
           const update = amendment.approachUpdates.find((u) => u.sport === existing.sport)!;
           return prisma.sportApproach.update({
             where: { id: existing.id },
-            data: { approachText: update.approachText, weeklySessionTarget: update.weeklySessionTarget, sessionMinutes: update.sessionMinutes },
+            data: {
+              approachText: update.approachText,
+              weeklySessionTarget: update.weeklySessionTarget,
+              sessionMinutes: update.sessionMinutes,
+              milestones: (update.milestones as unknown as Prisma.InputJsonValue | undefined) ?? undefined,
+            },
           });
         })
     );
