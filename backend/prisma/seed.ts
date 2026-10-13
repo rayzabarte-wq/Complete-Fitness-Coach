@@ -1,11 +1,12 @@
 import "dotenv/config";
-import { PrismaClient, Muscle } from "@prisma/client";
+import { PrismaClient, Muscle, Accessory } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-// Every exercise here is doable with: adjustable dumbbells (5-45lb),
-// barbell (20-80lb), EZ bar (20-80lb), a bench, elastic bands, a chin-up
-// bar, and rings suspended from the chin-up bar. No squat rack or machines.
+// Every exercise here is doable with the home-gym defaults: adjustable
+// dumbbells (5-45lb), barbell (20-80lb), EZ bar (20-80lb), a bench, elastic
+// bands, a chin-up bar, and rings. No squat rack or machines. Each
+// exercise's required accessories are in requiresFor() below.
 //
 // movementPattern groups them into Push / Pull / Legs / Core sessions.
 // primaryMuscle / secondaryMuscles drive the per-muscle recovery clocks.
@@ -27,7 +28,24 @@ type Seed = {
   primaryMuscle: Muscle;
   secondaryMuscles: Muscle[];
   variationTag: string;
+  requires?: Accessory[];
 };
+
+// Which tick-box accessories (bench, bar, rings) an exercise needs. Keyed by
+// name so the long catalog lines above stay untouched. A gym without the
+// accessory never gets the exercise.
+const BENCH_EXERCISES = [
+  "Barbell Bench Press", "Dumbbell Bench Press", "Dumbbell Incline Press", "Dumbbell Fly",
+  "EZ Bar Skull Crusher", "EZ Bar Close-Grip Bench Press", "Incline Dumbbell Curl",
+  "Dumbbell Pullover", "Dumbbell Hip Thrust", "Dumbbell Bulgarian Split Squat",
+];
+const PULL_UP_BAR_EXERCISES = ["Weighted Pull-Up", "Chin-Up", "Hanging Leg Raise"];
+function requiresFor(name: string): Accessory[] {
+  if (name.startsWith("Ring ")) return ["RINGS"];
+  if (BENCH_EXERCISES.includes(name)) return ["BENCH"];
+  if (PULL_UP_BAR_EXERCISES.includes(name)) return ["PULL_UP_BAR"];
+  return [];
+}
 
 const exercises: Seed[] = [
   // --- Push ---
@@ -83,13 +101,21 @@ const exercises: Seed[] = [
 
 async function main() {
   for (const ex of exercises) {
-    await prisma.exercise.upsert({
-      where: { name: ex.name },
-      // Existing rows only get the recovery/variation tags filled in —
-      // everything else about an existing catalog entry is left as is.
-      update: { primaryMuscle: ex.primaryMuscle, secondaryMuscles: ex.secondaryMuscles, variationTag: ex.variationTag },
-      create: ex,
-    });
+    const { requires: _ignored, ...data } = ex;
+    const requires = requiresFor(ex.name);
+    // Name is only unique per owner (user-added exercises can share a name),
+    // so find the shared catalog row (no owner) instead of upserting by name.
+    const existing = await prisma.exercise.findFirst({ where: { name: ex.name, userId: null } });
+    if (existing) {
+      // Existing rows only get the recovery/variation tags and requirements
+      // filled in — everything else about a catalog entry is left as is.
+      await prisma.exercise.update({
+        where: { id: existing.id },
+        data: { primaryMuscle: ex.primaryMuscle, secondaryMuscles: ex.secondaryMuscles, variationTag: ex.variationTag, requires },
+      });
+    } else {
+      await prisma.exercise.create({ data: { ...data, requires } });
+    }
   }
   console.log(`Seeded ${exercises.length} exercises.`);
 }

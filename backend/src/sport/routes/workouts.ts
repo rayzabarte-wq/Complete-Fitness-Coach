@@ -20,6 +20,8 @@ const generateBodySchema = z.object({
   // The person's local date, so "today's workout" follows their time zone.
   date: dateSchema,
   plannedSessionId: z.string().nullish(),
+  // Which gym profile to build for; defaults to the user's active gym.
+  gymId: z.string().optional(),
 });
 
 workoutsRouter.post("/plan/:pattern", async (req: AuthedRequest, res) => {
@@ -32,13 +34,13 @@ workoutsRouter.post("/plan/:pattern", async (req: AuthedRequest, res) => {
   if (!body.success) {
     return res.status(400).json({ error: body.error.flatten() });
   }
-  const { date, plannedSessionId = null } = body.data;
+  const { date, plannedSessionId = null, gymId } = body.data;
 
   try {
     // The one place Claude is called for a strength workout: building the
     // day's workout, or explicitly regenerating it (which replaces it, and
     // anything logged in it so far). Everything else reuses the saved one.
-    const plan = await generateWorkoutPlan(req.userId!, parsed.data as MovementPattern);
+    const plan = await generateWorkoutPlan(req.userId!, parsed.data as MovementPattern, gymId);
     const data = {
       workoutId: randomUUID(),
       plan: plan as unknown as Prisma.InputJsonValue,

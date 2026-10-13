@@ -20,7 +20,7 @@ strength-app/
 │       ├── sport/          Deep AI coaching — Strength, Golf
 │       │   ├── routes/     exercises, sessions (workout logging), workouts (plan generation), golf
 │       │   ├── services/   workoutPlanner.ts, golfPlanner.ts (Claude API)
-│       │   ├── lib/        equipmentConfig.ts (dumbbell/barbell/EZ bar increments)
+│       │   ├── lib/        equipmentConfig.ts (per-gym equipment defaults + weight resolution)
 │       │   └── index.ts    Sport's public interface — import only from here
 │       ├── scheduler/      Scheduling, weather, connector-sport data capture
 │       │   ├── routes/     calendar, outlook, strava
@@ -174,43 +174,56 @@ health data under GDPR.
 - `NutritionLog` — date, calories, protein/carbs/fat, notes (schema is in
   place now; UI comes later)
 
-## Equipment
+## Gyms & equipment
 
-What equipment you have, and which weights it can load, is configured per
-account under **Settings > Equipment & weights**. For each type you can
-switch it on or off and describe it:
+You can describe up to three places you train under **Settings > Gyms**: a
+**Home gym**, a **Regular gym** and a **Visiting gym** (travel, a friend's,
+a hotel). Each is its own profile with tick-boxes:
 
-- **Dumbbells / Barbell / EZ bar:** a min, max and step (e.g. 5–45lb in
-  5lb steps) — or, for gear that isn't evenly spaced like a fixed-dumbbell
-  rack, an exact list of weights (`10, 12.5, 15, 20, 30`) that overrides the
-  range. A live preview shows exactly which weights that produces.
-- **Resistance bands:** which of Light / Medium / Heavy / X-Heavy you own.
-- **Bodyweight** (chin-up bar / rings): the most optional *added* weight you
-  use (0 if none), plus step or an exact list.
+- **Equipment types:** Dumbbells, Barbell, EZ bar, Resistance bands,
+  Bodyweight. For the weighted ones set a min, max and step (e.g. 5–45lb in
+  5lb steps) — or an exact list for uneven gear like a fixed-dumbbell rack
+  (`10, 12.5, 15, 20, 30`). Bands: which of Light / Medium / Heavy / X-Heavy
+  it has. Bodyweight: the most optional *added* weight (0 if none).
+- **Also has:** Bench, Pull-up / chin-up bar, Gym rings. Exercises that need
+  one (`Exercise.requires`) are left out of gyms without it.
+- **Your own equipment:** name anything else ("Sled", "Landmine attachment"),
+  then tick it on the gyms that have it. **Your own exercises** can be linked
+  to that item (and to the accessories they need); they join your workouts
+  only at gyms that have everything they need.
+
+On the **Log** page a *Home / Regular gym / Visiting gym* switcher chooses
+which gym the next workout is built for. The choice is remembered
+(`User.activeGymId`), and the workout records the gym (`gymId`/`gymName`).
 
 What it drives:
 
-- **Which exercises you get.** Workout generation only picks exercises whose
-  equipment you've switched on (and says so clearly if that leaves nothing
-  for a movement pattern).
-- **Which weights are offered and suggested.** The AI is told your exact
-  loadable values, its suggestion is snapped to the nearest one as a safety
-  net, and the Log page's weight/band dropdowns come from your settings.
-- **Server-side validation.** A logged set with a weight you can't load is
-  rejected, checked against your own configuration.
+- **Which exercises you get** — only ones doable at that gym. The training
+  block is shared between gyms: an exercise the current gym can't do is
+  replaced for that session only, so the block is intact when you're back home.
+- **Which weights are offered and suggested.** The AI is told that gym's exact
+  loadable values, suggestions are snapped to the nearest one, and the Log
+  page's dropdowns come from the workout's gym.
+- **Server-side validation** of logged sets against that gym's equipment.
 
-Accounts that haven't configured anything get the original defaults
-(dumbbells 5–45lb/5, barbell 20–80lb/5, EZ bar 20–80lb/10, all four band
-levels, bodyweight with up to 45lb added), so existing accounts behave as
-before. Defaults live in `backend/src/sport/lib/equipmentConfig.ts`; saved
-settings are the `UserEquipment` table (`GET`/`PUT /equipment`), included in
-the data export and deleted with the account. Switching a type off keeps its
-weights, so switching it back on restores them. Since this adds a table, apply
-the `user_equipment_and_milestones` migration (`npx prisma migrate deploy`, or `migrate dev` locally).
+Starting points (editable) when a gym is first used: Home = 5–45lb dumbbells,
+20–80lb barbell/EZ bar, all bands, bench + bar + rings; Regular gym = 5–100lb
+dumbbells, 45–315lb barbell, bench + bar; Visiting gym = 5–50lb dumbbells,
+bodyweight and a bench only (barbell, EZ bar and bands unticked). Defaults live in
+`backend/src/sport/lib/equipmentConfig.ts`; profiles are the `GymProfile` /
+`GymEquipment` / `CustomEquipment` tables (`GET /gyms`, `PUT /gyms/:id`,
+`PUT /gyms/active`, `/gyms/custom-equipment`), and custom exercises are
+`Exercise` rows with a `userId` (`POST`/`DELETE /exercises`). All are included
+in the data export and deleted with the account.
 
-Limits worth knowing: bench, chin-up bar and rings aren't tracked
-separately — "Bodyweight" is one switch covering exercises that need them —
-and weights are in pounds only.
+Upgrading: apply the `gym_profiles` migration (`npx prisma migrate deploy`, or
+`migrate dev` locally) and re-run the seed (`npx prisma db seed`) so catalog
+exercises get their bench / bar / rings requirements. The migration turns
+any equipment settings saved earlier into each user's Home gym. It also
+adds a partial unique index for catalog names that `schema.prisma` can't
+express, so `migrate dev` may offer to "fix" it — decline that.
+
+Weights are in pounds only.
 
 The `Log` page shows only the current generated session's exercises, with
 a weight/band selector, a reps field (pre-filled with the AI's suggested

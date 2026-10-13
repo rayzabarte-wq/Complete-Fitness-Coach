@@ -1,5 +1,5 @@
-// Equipment is per-user now: what each person owns, and the weights it can
-// produce, comes from GET /equipment (resolved server-side — see
+// Equipment is per gym now (Home / Regular gym / Visiting): what each gym has,
+// and the weights it can produce, comes from GET /gyms (resolved server-side — see
 // backend/src/sport/lib/equipmentConfig.ts). The only logic mirrored here is
 // buildWeights, used for the live preview while editing in Settings.
 
@@ -21,10 +21,37 @@ export interface EquipmentSetting {
   weightsLb: number[];
 }
 
-export interface EquipmentResponse {
-  items: EquipmentSetting[];
-  allBandLevels: string[];
+export type GymKind = "HOME" | "PUBLIC_GYM" | "VISITING";
+export type Accessory = "BENCH" | "PULL_UP_BAR" | "RINGS";
+
+export interface Gym {
+  id: string;
+  kind: GymKind;
+  name: string;
+  accessories: Accessory[];
+  /** Ids of the user's CustomEquipment items this gym has. */
+  customEquipmentIds: string[];
+  equipment: EquipmentSetting[];
 }
+
+export interface CustomEquipment {
+  id: string;
+  name: string;
+}
+
+export interface GymsResponse {
+  gyms: Gym[];
+  activeGymId: string;
+  customEquipment: CustomEquipment[];
+  allBandLevels: string[];
+  allAccessories: { value: Accessory; label: string }[];
+}
+
+export const GYM_KIND_LABEL: Record<GymKind, string> = {
+  HOME: "Home gym",
+  PUBLIC_GYM: "Regular gym",
+  VISITING: "Visiting gym",
+};
 
 const MAX_WEIGHT_OPTIONS = 500;
 const round = (n: number) => Math.round(n * 1000) / 1000;

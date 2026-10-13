@@ -49,16 +49,21 @@ export default function LogWorkout({ onSaved }: { onSaved: (sessionId: string) =
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   // True when this device has changes the server doesn't have yet.
   const dirtyRef = useRef(false);
-  // The signed-in user's own equipment (what weights/bands they can actually
-  // select), loaded from Settings > Equipment.
+  // The equipment of the gym this workout was built for (what weights/bands
+  // can actually be selected), loaded from Settings > Gyms.
   const [equipment, setEquipment] = useState<Record<Equipment, EquipmentSetting> | null>(null);
+  const gymId = plan?.gymId;
 
   useEffect(() => {
     api
-      .getEquipment()
-      .then((res) => setEquipment(Object.fromEntries(res.items.map((i) => [i.equipment, i])) as Record<Equipment, EquipmentSetting>))
+      .getGyms()
+      .then((res) => {
+        // Workouts built before gyms existed have no gymId: use the active one.
+        const gym = res.gyms.find((g) => g.id === (gymId ?? res.activeGymId)) ?? res.gyms[0];
+        setEquipment(Object.fromEntries(gym.equipment.map((i) => [i.equipment, i])) as Record<Equipment, EquipmentSetting>);
+      })
       .catch(() => setError("Couldn't load your equipment settings"));
-  }, []);
+  }, [gymId]);
 
   // (Re)load whenever the workout arrives or is replaced from the server:
   // saved progress if there is any, otherwise a fresh start.
@@ -178,6 +183,7 @@ export default function LogWorkout({ onSaved }: { onSaved: (sessionId: string) =
         focus: plan!.movementPattern,
         plannedSessionId: plannedSessionId ?? undefined,
         workoutId: plan!.workoutId,
+        gymId: plan!.gymId,
       });
       // Today's workout is now marked done (on every device).
       dirtyRef.current = false;

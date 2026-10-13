@@ -5,7 +5,7 @@
 // into sport/routes or sport/services directly. This is the seam a
 // future split into a separately-deployed app would cut along.
 export { exercisesRouter } from "./routes/exercises.js";
-export { equipmentRouter } from "./routes/equipment.js";
+export { gymsRouter } from "./routes/gyms.js";
 export { sessionsRouter } from "./routes/sessions.js";
 export { workoutsRouter } from "./routes/workouts.js";
 export { golfRouter } from "./routes/golf.js";

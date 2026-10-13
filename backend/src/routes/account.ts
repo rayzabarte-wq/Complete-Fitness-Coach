@@ -58,7 +58,9 @@ accountRouter.get("/export", requireAuth, async (req: AuthedRequest, res) => {
       prisma.bodyGoal.findMany({ where: { userId }, include: { targets: { orderBy: { createdAt: "asc" } } }, orderBy: { createdAt: "asc" } }),
       prisma.stepDay.findMany({ where: { userId }, orderBy: { date: "asc" } }),
       prisma.trainingBlock.findMany({ where: { userId }, orderBy: { startedAt: "asc" } }),
-      prisma.userEquipment.findMany({ where: { userId }, orderBy: { equipment: "asc" } }),
+      prisma.gymProfile.findMany({ where: { userId }, include: { equipment: true }, orderBy: { kind: "asc" } }),
+      prisma.customEquipment.findMany({ where: { userId }, orderBy: { name: "asc" } }),
+      prisma.exercise.findMany({ where: { userId }, orderBy: { name: "asc" } }),
     ]);
 
   res.json({
@@ -69,7 +71,9 @@ accountRouter.get("/export", requireAuth, async (req: AuthedRequest, res) => {
     plannedSessions,
     nutritionLogs,
     trainingPlans,
-    equipmentSettings,
+    gyms,
+    customEquipment,
+    customExercises,
     consentHistory: consents,
     bodyMeasurements,
     bodyGoals,
@@ -170,6 +174,10 @@ accountRouter.delete("/", requireAuth, async (req: AuthedRequest, res) => {
   // logs, the Outlook connection, the Strava connection. Nothing further
   // to clean up here.
   await prisma.user.delete({ where: { id: req.userId } });
+  // Custom exercises carry a plain owner id (no relation, so history rows
+  // that point at them don't block account deletion) — remove them now that
+  // the user's sets are gone.
+  await prisma.exercise.deleteMany({ where: { userId: req.userId } });
 
   res.status(204).send();
 });
