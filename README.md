@@ -456,9 +456,26 @@ browser, shows it without another AI call:
   workout that's since been regenerated or saved gets a 409 and reloads
   instead of overwriting it.
 
+**Saved workouts, and reusing a missed one.** Every workout built in the
+last 30 days (plus any scheduled ahead) is listed under **Saved workouts**
+on the Log tab, each with a status badge: **Done ✓** (logged), **Missed**
+(built for a past day, never logged), **Scheduled** (a future day) or
+**Moved** (reused on another day). **Use today** (or **Repeat today** for a
+completed one) copies the saved workout to today, and **Another day…**
+schedules it for a later date, where it becomes that day's workout on every
+device. Neither calls the AI. If today's split calls for the session type
+you missed, a callout at the top offers it before the Build button. Using a
+saved workout on a day that already has one asks first. Copies start fresh
+(nothing logged); a missed original is marked Moved, a completed one stays
+Done. The Today card and the workout screen say "Saved to your account"
+(with when progress last saved) so it's clear nothing is lost.
+
 API: `POST /workouts/plan/:focus` (with `date`) builds or regenerates the
 day's workout; `GET /workouts/day/:date` and
-`PUT /workouts/day/:date/progress` read and save it.
+`PUT /workouts/day/:date/progress` read and save it;
+`GET /workouts/saved?today=` lists saved workouts; `POST /workouts/reuse`
+(`sourceId`, `date`) copies one to a day. Only the first of these calls
+the AI.
 
 The Workout tab has four buttons — Push, Pull, Legs, Core. Tapping one
 generates a complete session in a single call: every exercise for that

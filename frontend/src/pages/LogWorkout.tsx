@@ -43,6 +43,10 @@ export default function LogWorkout({ onSaved }: { onSaved: (sessionId: string) =
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
+  // What the person sees about saving: the workout and everything entered
+  // is stored on their account, so say so (and when it last happened).
+  const [syncState, setSyncState] = useState<"saved" | "saving" | "error">("saved");
+  const [savedAt, setSavedAt] = useState<Date | null>(null);
   // True when this device has changes the server doesn't have yet.
   const dirtyRef = useRef(false);
 
@@ -61,6 +65,8 @@ export default function LogWorkout({ onSaved }: { onSaved: (sessionId: string) =
     setSoreness(saved?.soreness ?? null);
     setEnergyLevel(saved?.energyLevel ?? null);
     setSyncError(null);
+    setSyncState("saved");
+    setSavedAt(new Date(plan.updatedAt ?? plan.createdAt));
     // A brand-new workout saves its start time straight away, so another
     // device picks up the same one.
     dirtyRef.current = !saved;
@@ -75,17 +81,22 @@ export default function LogWorkout({ onSaved }: { onSaved: (sessionId: string) =
   async function flush() {
     if (!dirtyRef.current || Object.keys(progressRef.current.rows).length === 0) return;
     dirtyRef.current = false;
+    setSyncState("saving");
     try {
       await saveProgress(progressRef.current);
       setSyncError(null);
+      setSyncState("saved");
+      setSavedAt(new Date());
     } catch {
       dirtyRef.current = true;
+      setSyncState("error");
       setSyncError("Couldn't save your progress to your account. It's kept on this device; check your connection.");
     }
   }
 
   useEffect(() => {
     if (!dirtyRef.current) return;
+    setSyncState("saving");
     const timer = setTimeout(flush, 600);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -181,6 +192,13 @@ export default function LogWorkout({ onSaved }: { onSaved: (sessionId: string) =
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
           <strong style={{ color: "var(--navy)", fontSize: 16 }}>{FOCUS_LABELS[plan.movementPattern] ?? plan.movementPattern} day</strong>
           <span className="text-dim" style={{ fontSize: 13 }}>~{plan.estimatedMinutes} min</span>
+        </div>
+        <div style={{ fontSize: 12, fontWeight: 600, marginTop: 4, color: syncState === "error" ? "var(--danger)" : "var(--good)" }}>
+          {syncState === "saving"
+            ? "Saving to your account…"
+            : syncState === "error"
+            ? "Not saved to your account yet. Check your connection."
+            : `✓ Saved to your account${savedAt ? ` · ${savedAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : ""}`}
         </div>
         {plan.block && (
           <div className="text-dim" style={{ fontSize: 12, marginTop: 4 }}>

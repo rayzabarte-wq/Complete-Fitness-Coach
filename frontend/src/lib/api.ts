@@ -91,6 +91,22 @@ export interface WorkoutProgress {
 
 /** The workout built for one day — saved on the server, so any device can
  * open it without calling the AI again. */
+export type SavedWorkoutStatus = "TODAY" | "DONE" | "MISSED" | "SCHEDULED" | "MOVED";
+
+/** One entry in the saved-workouts list: a workout built for some day. */
+export interface SavedWorkout {
+  id: string;
+  date: string;
+  status: SavedWorkoutStatus;
+  movementPattern: MovementPattern;
+  exerciseCount: number;
+  estimatedMinutes: number;
+  setsLogged: number;
+  /** For MOVED: the day it was reused on. */
+  reusedOnDate: string | null;
+  createdAt: string;
+}
+
 export interface DailyWorkout extends WorkoutPlan {
   date: string;
   progress: WorkoutProgress | null;
@@ -616,6 +632,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ date, plannedSessionId: plannedSessionId ?? null }),
     }),
+  /** Workouts built in the last 30 days (and any scheduled ahead). No AI call. */
+  getSavedWorkouts: (today: string) => request<SavedWorkout[]>(`/workouts/saved?today=${today}`),
+  /** Uses a saved workout on another day by copying it. No AI call. */
+  reuseWorkout: (sourceId: string, date: string) =>
+    request<DailyWorkout>("/workouts/reuse", { method: "POST", body: JSON.stringify({ sourceId, date }) }),
   /** The workout already built for that day, if any. No AI call. */
   getDailyWorkout: (date: string) => request<DailyWorkout | null>(`/workouts/day/${date}`),
   saveWorkoutProgress: (date: string, workoutId: string, progress: WorkoutProgress) =>

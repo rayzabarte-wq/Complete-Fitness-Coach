@@ -101,6 +101,9 @@ model DailyWorkout {
   progress         Json?
   // Set once the workout has been saved as a WorkoutSession.
   savedSessionId   String?
+  // Set when this (missed or scheduled) workout was reused on another day,
+  // so it's shown as "moved" instead of "missed". See POST /workouts/reuse.
+  reusedOnDate     String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 

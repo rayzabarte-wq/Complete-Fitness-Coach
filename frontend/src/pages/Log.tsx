@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { api, DailyWorkout, MovementPattern, PlannedSession, SessionType, StepsResponse, TodaySuggestion } from "../lib/api.js";
+import { api, DailyWorkout, SavedWorkout, MovementPattern, PlannedSession, SessionType, StepsResponse, TodaySuggestion } from "../lib/api.js";
 import { usePlan } from "../lib/planContext.js";
 import { formatLocalDateKey } from "../lib/location.js";
 import { ACTIVITY_COLORS, ACTIVITY_LABELS, ActivityKey, activityForSessionType, FOCUS_LABELS } from "../lib/activity.js";
@@ -74,6 +74,57 @@ function StrengthLog() {
   // A focus waiting for the person to confirm replacing today's workout.
   const [confirmReplace, setConfirmReplace] = useState<{ focus: MovementPattern; plannedId: string | null } | null>(null);
 
+  // Every workout built in the last 30 days (and any scheduled ahead): what
+  // makes a missed or past workout recallable. Loading it never calls the AI.
+  const [saved, setSaved] = useState<SavedWorkout[]>([]);
+  const [reusing, setReusing] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  // A saved workout waiting for the person to confirm replacing a day's workout.
+  const [confirmReuse, setConfirmReuse] = useState<{ item: SavedWorkout; date: string } | null>(null);
+
+  const loadSaved = useCallback(() => {
+    api.getSavedWorkouts(date).then(setSaved).catch(() => {});
+  }, [date]);
+
+  useEffect(() => {
+    if (loaded) loadSaved();
+  }, [loaded, loadSaved, todaysWorkout?.workoutId, todaysWorkout?.savedSessionId]);
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") loadSaved();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [loadSaved]);
+
+  // Uses a saved workout on a day by copying it: NO AI call. For today it
+  // opens straight away; for another day it's scheduled and will be that
+  // day's workout on every device.
+  async function reuse(item: SavedWorkout, targetDate: string) {
+    setConfirmReuse(null);
+    setReusing(item.id);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await api.reuseWorkout(item.id, targetDate);
+      if (targetDate === date) setBuilt(result);
+      else setNotice(`Scheduled for ${formatDay(targetDate, date)}. It'll be that day's workout on all your devices. No AI call needed.`);
+      loadSaved();
+    } catch (err: any) {
+      setError(err.message ?? "Couldn't use that workout");
+    } finally {
+      setReusing(null);
+    }
+  }
+
+  // Replacing a day that already has a workout asks first.
+  function requestReuse(item: SavedWorkout, targetDate: string) {
+    const existing = targetDate === date ? todaysWorkout : saved.find((w) => w.date === targetDate);
+    if (existing) setConfirmReuse({ item, date: targetDate });
+    else reuse(item, targetDate);
+  }
+
   // Calls the AI. Only reached from an explicit Build/Regenerate tap (or a
   // calendar start when nothing's been built today) — never on page load.
   async function build(focus: MovementPattern, plannedId: string | null) {
@@ -122,6 +173,10 @@ function StrengthLog() {
 
   const rotation = today ? [...new Set(today.split.rotation)] : [];
   const others = ALL_FOCUSES.filter((f) => !rotation.includes(f));
+  // The most recent missed workout that matches what today's split calls for.
+  const missedMatch = today?.suggestedFocus
+    ? saved.find((w) => w.status === "MISSED" && w.movementPattern === today.suggestedFocus) ?? null
+    : null;
 
   return (
     <div>
@@ -156,10 +211,52 @@ function StrengthLog() {
         </div>
       )}
 
+      {confirmReuse && (
+        <div className="card" style={{ borderLeft: "4px solid var(--accent)" }}>
+          <strong style={{ color: "var(--navy)" }}>
+            Use the saved {FOCUS_LABELS[confirmReuse.item.movementPattern]} workout from {formatDay(confirmReuse.item.date, date)} on{" "}
+            {formatDay(confirmReuse.date, date)}?
+          </strong>
+          <p className="text-dim" style={{ fontSize: 13, margin: "6px 0 10px" }}>
+            That day already has a workout, which this replaces (anything already saved to your history stays there). It copies the saved
+            workout, so no AI call is made.
+          </p>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="button-primary" style={{ flex: 1 }} onClick={() => reuse(confirmReuse.item, confirmReuse.date)}>
+              Yes, use it
+            </button>
+            <button className="button-secondary" style={{ flex: 1 }} onClick={() => setConfirmReuse(null)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {notice && (
+        <div className="card" style={{ borderLeft: "4px solid var(--good)" }}>
+          <p style={{ margin: 0, fontSize: 13 }}>✓ {notice}</p>
+        </div>
+      )}
+
       {loading && (
         <div className="card">
           <p style={{ margin: 0 }}>Building your {FOCUS_LABELS[loading]} session…</p>
           <p className="text-dim" style={{ fontSize: 12, margin: "4px 0 0" }}>This usually takes 10-30 seconds.</p>
+        </div>
+      )}
+
+      {!todaysWorkout && missedMatch && (
+        <div className="card" style={{ borderLeft: "4px solid var(--accent)" }}>
+          <strong style={{ color: "var(--navy)" }}>
+            You missed {FOCUS_LABELS[missedMatch.movementPattern]} on {formatDay(missedMatch.date, date)}
+          </strong>
+          <p className="text-dim" style={{ fontSize: 13, margin: "6px 0 10px" }}>
+            {missedMatch.exerciseCount} exercises · ~{missedMatch.estimatedMinutes} min. It's still saved on your account, so use it today
+            instead of building a new one. No AI call.
+          </p>
+          <button className="button-primary" style={{ width: "100%" }} disabled={reusing !== null || loading !== null} onClick={() => requestReuse(missedMatch, date)}>
+            {reusing === missedMatch.id ? "Opening…" : `Use the missed ${FOCUS_LABELS[missedMatch.movementPattern]} workout today`}
+          </button>
         </div>
       )}
 
@@ -199,8 +296,126 @@ function StrengthLog() {
       )}
       {error && <p style={{ color: "var(--danger)" }}>{error}</p>}
 
+      <SavedWorkouts items={saved.filter((w) => w.status !== "TODAY")} today={date} busy={reusing !== null || loading !== null} onUse={requestReuse} />
+
       <RecentStrength />
     </div>
+  );
+}
+
+const FOCUS_LABEL = (f: MovementPattern) => FOCUS_LABELS[f] ?? f;
+
+/** "Today (Tue, Oct 13)", "Yesterday (…)", "Tomorrow (…)" or "Mon, Oct 12". */
+function formatDay(key: string, todayKey: string): string {
+  const parse = (k: string) => {
+    const [y, m, d] = k.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  };
+  const day = parse(key);
+  const label = day.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+  const diff = Math.round((day.getTime() - parse(todayKey).getTime()) / 86400000);
+  if (diff === 0) return `Today (${label})`;
+  if (diff === -1) return `Yesterday (${label})`;
+  if (diff === 1) return `Tomorrow (${label})`;
+  return label;
+}
+
+function tomorrowKey(todayKey: string): string {
+  const [y, m, d] = todayKey.split("-").map(Number);
+  return formatLocalDateKey(new Date(y, m - 1, d + 1));
+}
+
+const BADGES: Record<SavedWorkout["status"], { label: string; bg: string; color: string }> = {
+  TODAY: { label: "Today", bg: "#e6edf7", color: "var(--navy)" },
+  DONE: { label: "Done ✓", bg: "#e3f1ea", color: "var(--good)" },
+  MISSED: { label: "Missed", bg: "var(--accent-soft)", color: "var(--accent)" },
+  SCHEDULED: { label: "Scheduled", bg: "#e6edf7", color: "var(--navy)" },
+  MOVED: { label: "Moved", bg: "#eceae4", color: "var(--text-dim)" },
+};
+
+/** Workouts built on earlier days (or scheduled ahead), newest first. Any of
+ * them can be used again today or on another day by copying it, so a missed
+ * session doesn't need another AI call. */
+function SavedWorkouts({
+  items,
+  today,
+  busy,
+  onUse,
+}: {
+  items: SavedWorkout[];
+  today: string;
+  busy: boolean;
+  onUse: (item: SavedWorkout, date: string) => void;
+}) {
+  const [showAll, setShowAll] = useState(false);
+  const [pickerFor, setPickerFor] = useState<string | null>(null);
+  const [picked, setPicked] = useState("");
+  if (items.length === 0) return null;
+
+  const shown = showAll ? items : items.slice(0, 5);
+  const earliest = tomorrowKey(today);
+
+  return (
+    <>
+      <div className="section-title">Saved workouts</div>
+      <div className="card">
+        <p className="text-dim" style={{ fontSize: 12, margin: "0 0 8px" }}>
+          Every workout you've built is saved on your account. Using one again copies it, so it doesn't call the AI.
+        </p>
+        {shown.map((w) => {
+          const badge = BADGES[w.status];
+          return (
+            <div key={w.id} style={{ padding: "10px 0", borderTop: "1px solid var(--border)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
+                <strong style={{ fontSize: 14 }}>{formatDay(w.date, today)}</strong>
+                <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 10, background: badge.bg, color: badge.color }}>
+                  {w.status === "MOVED" && w.reusedOnDate ? `Moved to ${formatDay(w.reusedOnDate, today)}` : badge.label}
+                </span>
+              </div>
+              <div className="text-dim" style={{ fontSize: 13, margin: "2px 0 8px" }}>
+                {FOCUS_LABEL(w.movementPattern)} · {w.exerciseCount} exercises · ~{w.estimatedMinutes} min
+                {w.status === "MISSED" && w.setsLogged > 0 ? ` · ${w.setsLogged} set${w.setsLogged === 1 ? "" : "s"} logged, not saved` : ""}
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button className="button-secondary" style={{ flex: 1 }} disabled={busy} onClick={() => onUse(w, today)}>
+                  {w.status === "DONE" ? "Repeat today" : "Use today"}
+                </button>
+                <button
+                  className="button-quiet"
+                  disabled={busy}
+                  onClick={() => {
+                    setPickerFor(pickerFor === w.id ? null : w.id);
+                    setPicked(earliest);
+                  }}
+                >
+                  Another day…
+                </button>
+              </div>
+              {pickerFor === w.id && (
+                <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                  <input type="date" min={earliest} value={picked} onChange={(e) => setPicked(e.target.value)} style={{ flex: 1, padding: 8 }} />
+                  <button
+                    className="button-primary"
+                    disabled={busy || !picked || picked < earliest}
+                    onClick={() => {
+                      setPickerFor(null);
+                      onUse(w, picked);
+                    }}
+                  >
+                    Schedule
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {!showAll && items.length > shown.length && (
+          <button className="button-quiet" style={{ marginTop: 4 }} onClick={() => setShowAll(true)}>
+            Show all {items.length}
+          </button>
+        )}
+      </div>
+    </>
   );
 }
 
@@ -228,6 +443,9 @@ function TodaysWorkoutCard({
       <div className="text-dim" style={{ fontSize: 12 }}>Today's workout · built at {built}</div>
       <div style={{ fontSize: 20, fontWeight: 700, color: "var(--navy)", marginTop: 4 }}>
         {label} day {saved && "✓"}
+      </div>
+      <div style={{ fontSize: 12, fontWeight: 600, marginTop: 4, color: "var(--good)" }}>
+        {saved ? "✓ Completed and logged to your history" : "✓ Saved to your account · open it on any device"}
       </div>
       <p className="text-dim" style={{ fontSize: 13, margin: "4px 0 10px" }}>
         {workout.exercises.length} exercises · ~{workout.estimatedMinutes} min
