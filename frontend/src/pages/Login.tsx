@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api, auth } from "../lib/api.js";
 import { ForgotPassword, ResetPassword } from "./PasswordReset.js";
+import { getTwoFactorTrust, setTwoFactorTrust } from "../lib/twoFactorTrust.js";
 
 // A password reset email links to /?reset=<token>.
 function resetTokenFromUrl(): string | null {
@@ -31,7 +32,10 @@ export default function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
     e.preventDefault();
     setError(null);
     try {
-      const result = await api.login(email, password, needsCode ? code : undefined);
+      // Within 24 hours of a 2FA code on this device, the trust cookie lets
+      // the server skip asking for one.
+      const result = await api.login(email, password, needsCode ? code : undefined, getTwoFactorTrust());
+      if (result.trustToken) setTwoFactorTrust(result.trustToken, result.trustHours ?? 24);
       auth.setToken(result.token);
       onLoggedIn();
     } catch (err: any) {
@@ -62,7 +66,8 @@ export default function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
     e.preventDefault();
     setError(null);
     try {
-      await api.verify2fa(code);
+      const result = await api.verify2fa(code);
+      if (result.trustToken) setTwoFactorTrust(result.trustToken, result.trustHours ?? 24);
       onLoggedIn();
     } catch (err: any) {
       setError(err.message);
@@ -158,12 +163,17 @@ export default function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
             </>
           )}
           {needsCode && (
-            <input
-              placeholder="6-digit code"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              style={{ width: "100%", padding: 10, marginBottom: 8 }}
-            />
+            <>
+              <input
+                placeholder="6-digit code"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                style={{ width: "100%", padding: 10, marginBottom: 4 }}
+              />
+              <p className="text-dim" style={{ fontSize: 12, margin: "0 0 8px" }}>
+                You won't be asked for a code again on this device for 24 hours.
+              </p>
+            </>
           )}
           <button className="button-primary" style={{ width: "100%" }}>
             {needsCode ? "Verify" : "Log in"}

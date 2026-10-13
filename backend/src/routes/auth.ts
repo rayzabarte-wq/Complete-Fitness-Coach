@@ -10,6 +10,9 @@ import {
   totpKeyUri,
   verifyTotpCode,
   issueSessionToken,
+  issueTwoFactorTrustToken,
+  verifyTwoFactorTrustToken,
+  TWO_FACTOR_TRUST_HOURS,
 } from "../services/auth.js";
 import QRCode from "qrcode";
 import { createHash, randomBytes } from "node:crypto";
@@ -59,7 +62,21 @@ const loginSchema = z.object({
   email: z.string().email(),
   password: z.string(),
   code: z.string().length(6).optional(), // required once 2FA is enabled
+  // From an earlier successful 2FA on this device within the last 24 hours
+  // (see issueTwoFactorTrustToken) — lets the code be skipped.
+  trustToken: z.string().max(2000).optional(),
 });
+
+// Whether a 2FA trust token lets this user skip the code: it must be valid
+// and unexpired, belong to this user, and have been issued after their last
+// password reset (resetting the password revokes trusted devices too).
+function trustsDevice(user: { id: string; sessionsValidAfter: Date | null }, trustToken: string | undefined): boolean {
+  if (!trustToken) return false;
+  const payload = verifyTwoFactorTrustToken(trustToken);
+  if (!payload || payload.sub !== user.id) return false;
+  const validAfterSec = user.sessionsValidAfter ? Math.floor(user.sessionsValidAfter.getTime() / 1000) : null;
+  return validAfterSec === null || (payload.iat ?? 0) >= validAfterSec;
+}
 
 // POST /auth/login - password check, then TOTP code check if 2FA is enabled.
 authRouter.post("/login", loginLimiter, async (req, res) => {
@@ -67,7 +84,7 @@ authRouter.post("/login", loginLimiter, async (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.flatten() });
   }
-  const { email, password, code } = parsed.data;
+  const { email, password, code, trustToken } = parsed.data;
 
   const user = await prisma.user.findUnique({ where: { email } });
   // Same error for "no such user" and "wrong password" so login can't be
@@ -76,17 +93,22 @@ authRouter.post("/login", loginLimiter, async (req, res) => {
     return res.status(401).json({ error: "Invalid email or password" });
   }
 
+  // A fresh trust token is only issued when a code is actually entered, so
+  // the 24 hours run from the last real 2FA check rather than sliding.
+  let newTrustToken: string | undefined;
   if (user.totpEnabled) {
-    if (!code) {
+    if (code) {
+      if (!user.totpSecret || !verifyTotpCode(user.totpSecret, code)) {
+        return res.status(401).json({ error: "Invalid 2FA code" });
+      }
+      newTrustToken = issueTwoFactorTrustToken(user.id);
+    } else if (!trustsDevice(user, trustToken)) {
       return res.status(401).json({ error: "2FA code required", requires2fa: true });
-    }
-    if (!user.totpSecret || !verifyTotpCode(user.totpSecret, code)) {
-      return res.status(401).json({ error: "Invalid 2FA code" });
     }
   }
 
   const token = issueSessionToken(user.id);
-  res.json({ token, totpEnabled: user.totpEnabled });
+  res.json({ token, totpEnabled: user.totpEnabled, trustToken: newTrustToken, trustHours: TWO_FACTOR_TRUST_HOURS });
 });
 
 // POST /auth/2fa/setup - must already be logged in with a password. Issues a
@@ -121,7 +143,9 @@ authRouter.post("/2fa/verify", requireAuth, async (req: AuthedRequest, res) => {
   }
 
   await prisma.user.update({ where: { id: user.id }, data: { totpEnabled: true } });
-  res.json({ totpEnabled: true });
+  // Setting up 2FA counts as passing it: no code needed on this device for
+  // the next 24 hours.
+  res.json({ totpEnabled: true, trustToken: issueTwoFactorTrustToken(user.id), trustHours: TWO_FACTOR_TRUST_HOURS });
 });
 
 // ---------------------------------------------------------------------------

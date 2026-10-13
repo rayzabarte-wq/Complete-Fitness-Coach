@@ -214,6 +214,19 @@ same kind of code Google Authenticator, Authy, or 1Password produce).
   at login and valid for 12 hours.
 - Login attempts are rate-limited (10 per 15 minutes) to slow down
   brute-forcing.
+- **2FA once every 24 hours per device:** after a 2FA code is accepted (at
+  login or during setup), the server returns a signed trust token valid for
+  24 hours. The frontend keeps it in a first-party cookie (`fc_2fa_trust`,
+  `Max-Age` 24h, `SameSite=Strict`, `Secure` on https) and sends it with
+  the next login, so only the password is needed until it expires. The
+  24 hours count from the last time a code was actually entered; they don't
+  extend each time you use it. Details:
+  - The cookie is set by the page rather than by the backend because the
+    frontend and backend are on different domains. A backend cookie would
+    be third-party, which Safari blocks by default.
+  - The token has its own JWT audience, so it can't be used as a session
+    token (and a session token can't be used as one).
+  - It must match the account logging in, and a password reset revokes it.
 - **Forgotten password:** "Forgot password?" on the login screen emails a
   one-time link (`POST /auth/forgot-password`) that **expires after 3
   minutes**. The link opens `/?reset=<token>`, which shows a countdown and

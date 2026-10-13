@@ -564,14 +564,18 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 export interface LoginResponse {
   token: string;
   totpEnabled: boolean;
+  /** Present after a 2FA code was accepted: lets this device skip the code
+   * for trustHours (see lib/twoFactorTrust.ts). */
+  trustToken?: string;
+  trustHours?: number;
 }
 
 export const api = {
   register: (email: string, password: string) =>
     request<LoginResponse>("/auth/register", { method: "POST", body: JSON.stringify({ email, password }) }),
 
-  login: (email: string, password: string, code?: string) =>
-    request<LoginResponse>("/auth/login", { method: "POST", body: JSON.stringify({ email, password, code }) }),
+  login: (email: string, password: string, code?: string, trustToken?: string) =>
+    request<LoginResponse>("/auth/login", { method: "POST", body: JSON.stringify({ email, password, code, trustToken }) }),
 
   forgotPassword: (email: string) =>
     request<{ message: string }>("/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) }),
@@ -585,7 +589,10 @@ export const api = {
   setup2fa: () => request<{ secret: string; qrDataUrl: string }>("/auth/2fa/setup", { method: "POST" }),
 
   verify2fa: (code: string) =>
-    request<{ totpEnabled: boolean }>("/auth/2fa/verify", { method: "POST", body: JSON.stringify({ code }) }),
+    request<{ totpEnabled: boolean; trustToken?: string; trustHours?: number }>("/auth/2fa/verify", {
+      method: "POST",
+      body: JSON.stringify({ code }),
+    }),
 
   getExercises: () => request<Exercise[]>("/exercises"),
 
