@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, DailyWorkout, SavedWorkout, MovementPattern, PlannedSession, SessionType, StepsResponse, TodaySuggestion } from "../lib/api.js";
-import { usePlan } from "../lib/planContext.js";
+import { usePlan, loggedSets } from "../lib/planContext.js";
 import { formatLocalDateKey } from "../lib/location.js";
 import { ACTIVITY_COLORS, ACTIVITY_LABELS, ActivityKey, activityForSessionType, FOCUS_LABELS } from "../lib/activity.js";
 import { fullLabelFor } from "../lib/sessionTypes.js";
@@ -62,7 +62,7 @@ export default function Log() {
 const ALL_FOCUSES: MovementPattern[] = ["PUSH", "PULL", "LEGS", "UPPER", "LOWER", "FULL_BODY", "CORE"];
 
 function StrengthLog() {
-  const { today: todaysWorkout, plan, loaded, date, setBuilt, openWorkout } = usePlan();
+  const { today: todaysWorkout, plan, loaded, loadFailed, retryLoad, date, setBuilt, adopt, openWorkout } = usePlan();
   const [params, setParams] = useSearchParams();
   const [today, setToday] = useState<TodaySuggestion | null>(null);
   const [loading, setLoading] = useState<MovementPattern | null>(null);
@@ -80,7 +80,7 @@ function StrengthLog() {
   const [reusing, setReusing] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   // A saved workout waiting for the person to confirm replacing a day's workout.
-  const [confirmReuse, setConfirmReuse] = useState<{ item: SavedWorkout; date: string } | null>(null);
+  const [confirmReuse, setConfirmReuse] = useState<{ item: SavedWorkout; date: string; replaceWorkoutId: string } | null>(null);
 
   const loadSaved = useCallback(() => {
     api.getSavedWorkouts(date).then(setSaved).catch(() => {});
@@ -101,18 +101,25 @@ function StrengthLog() {
   // Uses a saved workout on a day by copying it: NO AI call. For today it
   // opens straight away; for another day it's scheduled and will be that
   // day's workout on every device.
-  async function reuse(item: SavedWorkout, targetDate: string) {
+  async function reuse(item: SavedWorkout, targetDate: string, replaceWorkoutId: string | null = null) {
     setConfirmReuse(null);
     setReusing(item.id);
     setError(null);
     setNotice(null);
     try {
-      const result = await api.reuseWorkout(item.id, targetDate);
+      const result = await api.reuseWorkout(item.id, targetDate, replaceWorkoutId);
       if (targetDate === date) setBuilt(result);
       else setNotice(`Scheduled for ${formatDay(targetDate, date)}. It'll be that day's workout on all your devices. No AI call needed.`);
       loadSaved();
     } catch (err: any) {
-      setError(err.message ?? "Couldn't use that workout");
+      if (err.status === 409 && err.body?.existing) {
+        // That day has a workout this device didn't know about: keep it.
+        if (targetDate === date) adopt(err.body.existing);
+        setNotice(`${formatDay(targetDate, date)} already had a workout saved, so nothing was replaced.`);
+        loadSaved();
+      } else {
+        setError(err.message ?? "Couldn't use that workout");
+      }
     } finally {
       setReusing(null);
     }
@@ -121,7 +128,7 @@ function StrengthLog() {
   // Replacing a day that already has a workout asks first.
   function requestReuse(item: SavedWorkout, targetDate: string) {
     const existing = targetDate === date ? todaysWorkout : saved.find((w) => w.date === targetDate);
-    if (existing) setConfirmReuse({ item, date: targetDate });
+    if (existing) setConfirmReuse({ item, date: targetDate, replaceWorkoutId: existing.workoutId });
     else reuse(item, targetDate);
   }
 
@@ -132,9 +139,17 @@ function StrengthLog() {
     setLoading(focus);
     setError(null);
     try {
-      setBuilt(await api.generatePlan(focus, date, plannedId));
+      // Only replaces the workout this device knows about and the person
+      // agreed to replace. If the server has a different one (this device
+      // didn't know), it answers 409 and we show that one instead.
+      setBuilt(await api.generatePlan(focus, date, plannedId, todaysWorkout?.workoutId ?? null));
     } catch (err: any) {
-      setError(err.message ?? "Failed to build the workout");
+      if (err.status === 409 && err.body?.existing) {
+        adopt(err.body.existing);
+        setNotice("You already had a workout saved for today, so I opened it instead of building a new one. Nothing was replaced.");
+      } else {
+        setError(err.message ?? "Failed to build the workout");
+      }
     } finally {
       setLoading(null);
     }
@@ -168,8 +183,27 @@ function StrengthLog() {
   if (feedbackSessionId) {
     return <FeedbackPrompt sessionId={feedbackSessionId} onDone={() => setFeedbackSessionId(null)} />;
   }
-  if (plan) return <LogWorkout onSaved={setFeedbackSessionId} />;
-  if (!loaded && loading === null) return <p className="text-dim">Loading…</p>;
+  if (plan) return <LogWorkout onSaved={setFeedbackSessionId} notice={notice} />;
+  if (!loaded) {
+    if (loadFailed) {
+      // We couldn't reach the server, so we DON'T KNOW whether today already
+      // has a workout. Offering to build one here is how a saved workout got
+      // replaced, so don't offer it until we can check.
+      return (
+        <div className="card" style={{ borderLeft: "4px solid var(--accent)" }}>
+          <strong style={{ color: "var(--navy)" }}>Couldn't check for today's workout</strong>
+          <p className="text-dim" style={{ fontSize: 13, margin: "6px 0 10px" }}>
+            This looks like a connection problem. Anything you've saved is safe on your account. I won't offer to build a new workout until
+            I can check, so nothing gets replaced by mistake.
+          </p>
+          <button className="button-primary" style={{ width: "100%" }} onClick={retryLoad}>
+            Try again
+          </button>
+        </div>
+      );
+    }
+    return <p className="text-dim">Loading…</p>;
+  }
 
   const rotation = today ? [...new Set(today.split.rotation)] : [];
   const others = ALL_FOCUSES.filter((f) => !rotation.includes(f));
@@ -200,9 +234,14 @@ function StrengthLog() {
             The AI builds a new workout for today. It replaces the current one on all your devices
             {todaysWorkout.savedSessionId ? " (the session you already saved stays in your history)." : ", along with anything logged in it but not saved."}
           </p>
+          {!todaysWorkout.savedSessionId && loggedSets(todaysWorkout) > 0 && (
+            <p style={{ fontSize: 13, fontWeight: 600, color: "var(--danger)", margin: "0 0 10px" }}>
+              ⚠ You've logged {loggedSets(todaysWorkout)} set{loggedSets(todaysWorkout) === 1 ? "" : "s"} in today's workout. Replacing it throws them away.
+            </p>
+          )}
           <div style={{ display: "flex", gap: 8 }}>
             <button className="button-primary" style={{ flex: 1 }} onClick={() => build(confirmReplace.focus, confirmReplace.plannedId)}>
-              Yes, build a new one
+              {!todaysWorkout.savedSessionId && loggedSets(todaysWorkout) > 0 ? "Yes, discard my sets" : "Yes, build a new one"}
             </button>
             <button className="button-secondary" style={{ flex: 1 }} onClick={() => setConfirmReplace(null)}>
               Keep today's
@@ -221,8 +260,13 @@ function StrengthLog() {
             That day already has a workout, which this replaces (anything already saved to your history stays there). It copies the saved
             workout, so no AI call is made.
           </p>
+          {confirmReuse.date === date && todaysWorkout && !todaysWorkout.savedSessionId && loggedSets(todaysWorkout) > 0 && (
+            <p style={{ fontSize: 13, fontWeight: 600, color: "var(--danger)", margin: "0 0 10px" }}>
+              ⚠ You've logged {loggedSets(todaysWorkout)} set{loggedSets(todaysWorkout) === 1 ? "" : "s"} in today's workout. Replacing it throws them away.
+            </p>
+          )}
           <div style={{ display: "flex", gap: 8 }}>
-            <button className="button-primary" style={{ flex: 1 }} onClick={() => reuse(confirmReuse.item, confirmReuse.date)}>
+            <button className="button-primary" style={{ flex: 1 }} onClick={() => reuse(confirmReuse.item, confirmReuse.date, confirmReuse.replaceWorkoutId)}>
               Yes, use it
             </button>
             <button className="button-secondary" style={{ flex: 1 }} onClick={() => setConfirmReuse(null)}>

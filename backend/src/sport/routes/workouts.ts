@@ -20,6 +20,11 @@ const generateBodySchema = z.object({
   // The person's local date, so "today's workout" follows their time zone.
   date: dateSchema,
   plannedSessionId: z.string().nullish(),
+  // Required to build over a workout that already exists for that day: the
+  // workoutId the person agreed to replace. A device that didn't know about
+  // the existing workout (a failed or stale load) can't send it, so it can
+  // never silently overwrite someone's workout and logged progress.
+  replaceWorkoutId: z.string().nullish(),
 });
 
 workoutsRouter.post("/plan/:pattern", async (req: AuthedRequest, res) => {
@@ -32,25 +37,47 @@ workoutsRouter.post("/plan/:pattern", async (req: AuthedRequest, res) => {
   if (!body.success) {
     return res.status(400).json({ error: body.error.flatten() });
   }
-  const { date, plannedSessionId = null } = body.data;
+  const { date, plannedSessionId = null, replaceWorkoutId = null } = body.data;
+  const userId = req.userId!;
+
+  // Checked BEFORE calling the AI (no wasted call): a workout already exists
+  // for this day and the request isn't an agreed replacement of it. Answer
+  // with the existing workout so the app can show it instead.
+  const existing = await prisma.dailyWorkout.findUnique({ where: { userId_date: { userId, date } } });
+  if (existing && existing.workoutId !== replaceWorkoutId) {
+    return res.status(409).json({ error: "A workout is already saved for this day.", existing: dailyWorkoutResponse(existing) });
+  }
 
   try {
     // The one place Claude is called for a strength workout: building the
     // day's workout, or explicitly regenerating it (which replaces it, and
     // anything logged in it so far). Everything else reuses the saved one.
-    const plan = await generateWorkoutPlan(req.userId!, parsed.data as MovementPattern);
+    const plan = await generateWorkoutPlan(userId, parsed.data as MovementPattern);
     const data = {
       workoutId: randomUUID(),
       plan: plan as unknown as Prisma.InputJsonValue,
       plannedSessionId,
       progress: Prisma.DbNull,
       savedSessionId: null,
+      reusedOnDate: null,
     };
-    const daily = await prisma.dailyWorkout.upsert({
-      where: { userId_date: { userId: req.userId!, date } },
-      create: { userId: req.userId!, date, ...data },
-      update: data,
-    });
+    // The write only succeeds if the day's workout is still the one checked
+    // above, so two devices racing can't overwrite each other either.
+    let daily = null;
+    if (existing) {
+      const replaced = await prisma.dailyWorkout.updateMany({ where: { userId, date, workoutId: existing.workoutId }, data });
+      if (replaced.count === 1) daily = await prisma.dailyWorkout.findUnique({ where: { userId_date: { userId, date } } });
+    } else {
+      try {
+        daily = await prisma.dailyWorkout.create({ data: { userId, date, ...data } });
+      } catch (err) {
+        if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002")) throw err;
+      }
+    }
+    if (!daily) {
+      const current = await prisma.dailyWorkout.findUnique({ where: { userId_date: { userId, date } } });
+      return res.status(409).json({ error: "A workout is already saved for this day.", existing: current ? dailyWorkoutResponse(current) : null });
+    }
     res.status(201).json(dailyWorkoutResponse(daily));
   } catch (err) {
     console.error(err);
@@ -172,6 +199,7 @@ workoutsRouter.get("/saved", async (req: AuthedRequest, res) => {
         : "MISSED";
       return {
         id: row.id,
+        workoutId: row.workoutId,
         date: row.date,
         status,
         movementPattern: plan.movementPattern,
@@ -185,7 +213,13 @@ workoutsRouter.get("/saved", async (req: AuthedRequest, res) => {
   );
 });
 
-const reuseSchema = z.object({ sourceId: z.string().min(1), date: dateSchema });
+const reuseSchema = z.object({
+  sourceId: z.string().min(1),
+  date: dateSchema,
+  // As for building: required to replace a workout that already exists on
+  // that day, and must match the one the person agreed to replace.
+  replaceWorkoutId: z.string().nullish(),
+});
 
 // POST /workouts/reuse - use an already-built workout (a missed one, or a
 // past one to repeat) for another day, with NO AI call: its plan is copied
@@ -197,7 +231,7 @@ workoutsRouter.post("/reuse", async (req: AuthedRequest, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.flatten() });
   }
-  const { sourceId, date } = parsed.data;
+  const { sourceId, date, replaceWorkoutId = null } = parsed.data;
   const userId = req.userId!;
 
   // Scoped to this account, so another user's workout can't be copied by
@@ -210,6 +244,11 @@ workoutsRouter.post("/reuse", async (req: AuthedRequest, res) => {
     return res.status(400).json({ error: "That workout is already the one for this day." });
   }
 
+  const existing = await prisma.dailyWorkout.findUnique({ where: { userId_date: { userId, date } } });
+  if (existing && existing.workoutId !== replaceWorkoutId) {
+    return res.status(409).json({ error: "A workout is already saved for that day.", existing: dailyWorkoutResponse(existing) });
+  }
+
   const data = {
     workoutId: randomUUID(),
     plan: source.plan as Prisma.InputJsonValue,
@@ -219,11 +258,9 @@ workoutsRouter.post("/reuse", async (req: AuthedRequest, res) => {
     reusedOnDate: null,
   };
   const [target] = await prisma.$transaction([
-    prisma.dailyWorkout.upsert({
-      where: { userId_date: { userId, date } },
-      create: { userId, date, ...data },
-      update: data,
-    }),
+    existing
+      ? prisma.dailyWorkout.update({ where: { id: existing.id }, data })
+      : prisma.dailyWorkout.create({ data: { userId, date, ...data } }),
     // Completed workouts stay "done"; anything else is now "moved".
     ...(source.savedSessionId
       ? []

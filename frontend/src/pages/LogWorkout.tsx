@@ -32,7 +32,7 @@ const READINESS_OPTIONS: { value: ReadinessLevel; label: string }[] = [
  * Rendered by the Log tab's Strength view once a session has been built.
  * Everything entered is saved to the server as you go (see
  * lib/planContext.tsx), so the workout can be continued on another device. */
-export default function LogWorkout({ onSaved }: { onSaved: (sessionId: string) => void }) {
+export default function LogWorkout({ onSaved, notice }: { onSaved: (sessionId: string) => void; notice?: string | null }) {
   const { plan, closeWorkout, markSaved, remoteProgress, remoteVersion, saveProgress } = usePlan();
   const plannedSessionId = plan?.plannedSessionId ?? null;
   const [rows, setRows] = useState<Record<string, SetRow[]>>({});
@@ -49,6 +49,7 @@ export default function LogWorkout({ onSaved }: { onSaved: (sessionId: string) =
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   // True when this device has changes the server doesn't have yet.
   const dirtyRef = useRef(false);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // (Re)load whenever the workout arrives or is replaced from the server:
   // saved progress if there is any, otherwise a fresh start.
@@ -90,6 +91,9 @@ export default function LogWorkout({ onSaved }: { onSaved: (sessionId: string) =
     } catch {
       dirtyRef.current = true;
       setSyncState("error");
+      // Try again shortly rather than waiting for the next edit.
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = setTimeout(() => flush(), 5000);
       setSyncError("Couldn't save your progress to your account. It's kept on this device; check your connection.");
     }
   }
@@ -108,8 +112,16 @@ export default function LogWorkout({ onSaved }: { onSaved: (sessionId: string) =
     const onHide = () => {
       if (document.visibilityState === "hidden") flush();
     };
+    const onBack = () => flush(); // pagehide, and the connection coming back
     document.addEventListener("visibilitychange", onHide);
-    return () => document.removeEventListener("visibilitychange", onHide);
+    window.addEventListener("pagehide", onBack);
+    window.addEventListener("online", onBack);
+    return () => {
+      document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("pagehide", onBack);
+      window.removeEventListener("online", onBack);
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [saveProgress]);
 
@@ -188,6 +200,11 @@ export default function LogWorkout({ onSaved }: { onSaved: (sessionId: string) =
 
   return (
     <div>
+      {notice && (
+        <div className="card" style={{ marginBottom: 12, borderLeft: "4px solid var(--good)" }}>
+          <p style={{ margin: 0, fontSize: 13 }}>✓ {notice}</p>
+        </div>
+      )}
       <div className="card" style={{ marginBottom: 12, borderLeft: "4px solid #2a78d6" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
           <strong style={{ color: "var(--navy)", fontSize: 16 }}>{FOCUS_LABELS[plan.movementPattern] ?? plan.movementPattern} day</strong>

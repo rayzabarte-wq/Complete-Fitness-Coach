@@ -96,6 +96,7 @@ export type SavedWorkoutStatus = "TODAY" | "DONE" | "MISSED" | "SCHEDULED" | "MO
 /** One entry in the saved-workouts list: a workout built for some day. */
 export interface SavedWorkout {
   id: string;
+  workoutId: string;
   date: string;
   status: SavedWorkoutStatus;
   movementPattern: MovementPattern;
@@ -566,9 +567,11 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     const err = new Error(errorMessage(body.error, res.status)) as Error & {
       requires2fa?: boolean;
       status?: number;
+      body?: any;
     };
     err.requires2fa = body.requires2fa;
     err.status = res.status;
+    err.body = body;
     throw err;
   }
   if (res.status === 204) {
@@ -627,23 +630,33 @@ export const api = {
     request(`/sessions/exercise/${exerciseId}?limit=${limit}`),
 
   /** Builds (or rebuilds) the day's workout with the AI. */
-  generatePlan: (pattern: MovementPattern, date: string, plannedSessionId?: string | null) =>
+  generatePlan: (pattern: MovementPattern, date: string, plannedSessionId?: string | null, replaceWorkoutId?: string | null) =>
     request<DailyWorkout>(`/workouts/plan/${pattern}`, {
       method: "POST",
-      body: JSON.stringify({ date, plannedSessionId: plannedSessionId ?? null }),
+      // replaceWorkoutId is the workout the person agreed to replace; without
+      // it the server refuses (409) to build over an existing workout.
+      body: JSON.stringify({ date, plannedSessionId: plannedSessionId ?? null, replaceWorkoutId: replaceWorkoutId ?? null }),
     }),
   /** Workouts built in the last 30 days (and any scheduled ahead). No AI call. */
   getSavedWorkouts: (today: string) => request<SavedWorkout[]>(`/workouts/saved?today=${today}`),
   /** Uses a saved workout on another day by copying it. No AI call. */
-  reuseWorkout: (sourceId: string, date: string) =>
-    request<DailyWorkout>("/workouts/reuse", { method: "POST", body: JSON.stringify({ sourceId, date }) }),
+  reuseWorkout: (sourceId: string, date: string, replaceWorkoutId?: string | null) =>
+    request<DailyWorkout>("/workouts/reuse", {
+      method: "POST",
+      body: JSON.stringify({ sourceId, date, replaceWorkoutId: replaceWorkoutId ?? null }),
+    }),
   /** The workout already built for that day, if any. No AI call. */
   getDailyWorkout: (date: string) => request<DailyWorkout | null>(`/workouts/day/${date}`),
-  saveWorkoutProgress: (date: string, workoutId: string, progress: WorkoutProgress) =>
-    request<{ updatedAt: string }>(`/workouts/day/${date}/progress`, {
+  saveWorkoutProgress: (date: string, workoutId: string, progress: WorkoutProgress) => {
+    const body = JSON.stringify({ workoutId, progress });
+    return request<{ updatedAt: string }>(`/workouts/day/${date}/progress`, {
       method: "PUT",
-      body: JSON.stringify({ workoutId, progress }),
-    }),
+      body,
+      // Lets a save started just as the app is backgrounded (switching to a
+      // video, another app) still complete. Limited to small bodies.
+      keepalive: body.length < 60000,
+    });
+  },
 
   getOutlookStatus: () => request<{ connected: boolean }>("/integrations/outlook/status"),
 

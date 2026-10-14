@@ -470,6 +470,26 @@ saved workout on a day that already has one asks first. Copies start fresh
 Done. The Today card and the workout screen say "Saved to your account"
 (with when progress last saved) so it's clear nothing is lost.
 
+**A workout can't be replaced by accident.** Building over a day's existing
+workout needs `replaceWorkoutId`, the id of the workout the person agreed to
+replace. Without it, or with an id that no longer matches, the server answers
+**409** with the existing workout and does nothing (it checks before calling
+the AI, so no AI call is wasted). The app then opens the existing workout
+instead. This matters when a device doesn't know about the saved workout,
+e.g. after a failed or stale load. On the app side:
+- A failed load of today's workout retries (and re-checks on wake, online,
+  pageshow), and if it still fails the Log tab says "Couldn't check for
+  today's workout" with a **Try again** button and does **not** offer the
+  builder. Only a successful check may show it.
+- The open workout is remembered in `localStorage` (not per-tab storage), and
+  a workout with sets logged reopens by itself after a reload or a restored
+  tab, unless you pressed **Back**.
+- Replacing a workout that has sets logged says how many sets will be
+  thrown away and uses a "Yes, discard my sets" button.
+- Progress saves use `keepalive`, save on `pagehide`/coming back online, and a
+  failed save retries every few seconds, showing "Not saved to your account
+  yet" until it succeeds.
+
 API: `POST /workouts/plan/:focus` (with `date`) builds or regenerates the
 day's workout; `GET /workouts/day/:date` and
 `PUT /workouts/day/:date/progress` read and save it;
