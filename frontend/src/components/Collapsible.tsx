@@ -7,31 +7,37 @@ import { ReactNode, useState } from "react";
 // - id: a link to #<id> opens it (Settings uses this for #privacy, #import).
 // - hint: a short summary beside the title, so a closed section still says
 //   something ("2 active", "6 lifts").
-// - rememberAs: remembers on this device whether you left it open. Only
-//   used where the section is something you check regularly.
+// - rememberAs: remembers on this device whether you left it open or closed.
+//   Only used where the section is something you check regularly.
+// - defaultOpen: whether it starts open when you've never chosen either way.
+//   Once you open or close it yourself, that choice wins.
 export default function Collapsible({
   title,
   id,
   hint,
   rememberAs,
+  defaultOpen = false,
   children,
 }: {
   title: string;
   id?: string;
   hint?: string;
   rememberAs?: string;
+  defaultOpen?: boolean;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(() => {
     if (id && window.location.hash === `#${id}`) return true;
     if (rememberAs) {
       try {
-        return localStorage.getItem(`section_open:${rememberAs}`) === "1";
+        const stored = localStorage.getItem(`section_open:${rememberAs}`);
+        if (stored === "1") return true;
+        if (stored === "0") return false;
       } catch {
-        return false;
+        // fall through to the default
       }
     }
-    return false;
+    return defaultOpen;
   });
   const bodyId = `section-${(rememberAs ?? title).toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
 
@@ -40,8 +46,7 @@ export default function Collapsible({
     setOpen(next);
     if (rememberAs) {
       try {
-        if (next) localStorage.setItem(`section_open:${rememberAs}`, "1");
-        else localStorage.removeItem(`section_open:${rememberAs}`);
+        localStorage.setItem(`section_open:${rememberAs}`, next ? "1" : "0");
       } catch {
         // per-device convenience only
       }

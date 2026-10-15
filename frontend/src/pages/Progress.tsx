@@ -128,7 +128,7 @@ function GoalsTab() {
         <BenchmarksCard version={version} />
       </Collapsible>
 
-      <Collapsible title="Body goals" hint={goals ? (active.length ? `${active.length} active` : "none yet") : undefined} rememberAs="progress-goals">
+      <Collapsible title="Body goals" hint={goals ? (active.length ? `${active.length} active` : "none yet") : undefined} rememberAs="progress-goals" defaultOpen>
       <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", marginTop: 8 }}>
         <div style={{ display: "flex", gap: 6 }}>
           <button className="button-quiet" onClick={() => setLogging((v) => !v)}>
@@ -732,7 +732,7 @@ function StrengthTab() {
 
   return (
     <div>
-      <Collapsible title="Strength progression" hint={series && series.length ? `${series.length} lift${series.length === 1 ? "" : "s"}` : undefined} rememberAs="progress-strength">
+      <Collapsible title="Strength progression" hint={series && series.length ? `${series.length} lift${series.length === 1 ? "" : "s"}` : undefined} rememberAs="progress-strength" defaultOpen>
       <div className="card">
         <p className="text-dim" style={{ fontSize: 12, margin: "2px 0 8px" }}>
           Best set each session, as an estimated one-rep max (reps for bodyweight and band work).
@@ -922,7 +922,7 @@ function StepsTab() {
 
   return (
     <div>
-      <Collapsible title="Daily steps, last 30 days" hint={avg != null ? `${avg.toLocaleString()} avg` : undefined} rememberAs="progress-steps">
+      <Collapsible title="Daily steps, last 30 days" hint={avg != null ? `${avg.toLocaleString()} avg` : undefined} rememberAs="progress-steps" defaultOpen>
       <div className="card">
         <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: 6 }}>
           <span style={{ fontSize: 28, fontWeight: 700 }}>{avg != null ? avg.toLocaleString() : "—"}</span>

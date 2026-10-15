@@ -143,10 +143,11 @@ variation coverage) and Steps. Each sub-tab has the same period-on-period
 comparison: two periods, plain numbers, the difference and an up/down arrow.
 Within each sub-tab, every block (How you compare, Body goals, Recent scans,
 Quarterly goal review, Strength progression, Recovery, Coverage, Daily steps,
-Step goal, Compare periods) is a collapsible section, closed the first time
-you see it, like Settings. A closed header carries a short summary ("1
-active", "2 logged", "7,750 avg", "3 recovering") and the app remembers on
-that device which ones you left open. Both pages share
+Step goal, Compare periods) is a collapsible section, like Settings. The
+graph sections (Body goals, Strength progression, Daily steps) open by
+default and everything else starts closed; whichever way you leave a section
+is remembered on that device. A closed header carries a short summary ("1
+active", "2 logged", "7,750 avg", "3 recovering"). Both pages share
 `components/Collapsible.tsx`.
 
 **Calendar day view.** Each day is a simplified summary: one line per activity
