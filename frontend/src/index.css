@@ -127,6 +127,31 @@ a:focus-visible {
   color: var(--text-dim);
 }
 
+.section-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin: 10px 0 0;
+  padding: 14px 12px;
+  background: var(--surface);
+  color: var(--navy);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: left;
+  cursor: pointer;
+}
+.section-chevron {
+  font-size: 20px;
+  line-height: 1;
+  transition: transform 0.15s;
+}
+
 .section-title {
   font-size: 12px;
   font-weight: 700;
