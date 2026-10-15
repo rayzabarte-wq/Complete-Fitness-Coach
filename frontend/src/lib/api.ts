@@ -1,4 +1,4 @@
-import { Equipment } from "./equipment.js";
+import { Accessory, Equipment, GymsResponse } from "./equipment.js";
 
 // Tolerates the common ways VITE_API_URL gets pasted in: a bare domain
 // without https:// (how Railway displays generated domains, which would
@@ -26,9 +26,44 @@ export interface Exercise {
   primaryMuscle: Muscle | null;
   secondaryMuscles: Muscle[];
   variationTag: string | null;
+  /** Set for the user's own exercises; null for the shared catalog. */
+  userId?: string | null;
+  requires?: Accessory[];
+  customEquipmentId?: string | null;
+  archivedAt?: string | null;
+}
+
+/** What the add-your-own-exercise form sends. */
+export interface CustomExerciseInput {
+  name: string;
+  category: "COMPOUND" | "ACCESSORY";
+  muscleGroup: string;
+  repRangeStyle: "STRENGTH" | "HYPERTROPHY";
+  equipment: Equipment;
+  movementPattern: "PUSH" | "PULL" | "LEGS" | "CORE";
+  primaryMuscle?: Muscle;
+  requires?: Accessory[];
+  customEquipmentId?: string | null;
+}
+
+export interface GymUpdate {
+  name?: string;
+  accessories?: Accessory[];
+  customEquipmentIds?: string[];
+  items?: EquipmentInput[];
 }
 
 export type Muscle = "CHEST" | "SHOULDERS" | "TRICEPS" | "BACK" | "BICEPS" | "QUADS" | "HAMSTRINGS" | "GLUTES" | "CORE";
+
+export interface EquipmentInput {
+  equipment: Equipment;
+  enabled: boolean;
+  minLb?: number;
+  maxLb?: number;
+  stepLb?: number;
+  customWeightsLb?: number[];
+  bandLevels?: string[];
+}
 
 export interface SetInput {
   exerciseId: string;
@@ -73,6 +108,9 @@ export interface WorkoutPlan {
   estimatedMinutes: number;
   block: BlockInfo;
   recoveringMuscles: string[];
+  /** The gym profile the workout was built for. */
+  gymId: string;
+  gymName: string;
   /** Identifies this generated workout on the server (it changes each time
    * a new one is built), so progress saves go to the right workout. */
   workoutId: string;
@@ -132,6 +170,7 @@ export interface LogSessionInput {
   sets: SetInput[];
   focus?: MovementPattern;
   plannedSessionId?: string;
+  gymId?: string;
 }
 
 export type SessionType =
@@ -211,12 +250,18 @@ export interface SportPriority {
   weeklyMinutesAvailable: number | null;
 }
 
+export interface Milestone {
+  phase: string;
+  target: string;
+}
+
 export interface SportApproach {
   id: string;
   sport: Sport;
   approachText: string;
   weeklySessionTarget: number;
   sessionMinutes: number;
+  milestones: Milestone[] | null;
   status: ApproachStatus;
 }
 
@@ -615,8 +660,22 @@ export const api = {
 
   getExercises: () => request<Exercise[]>("/exercises"),
 
-  createExercise: (data: Omit<Exercise, "id">) =>
+  getGyms: () => request<GymsResponse>("/gyms"),
+  saveGym: (id: string, data: GymUpdate) =>
+    request<GymsResponse>(`/gyms/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  /** Applies a preset to a gym (or, with no presetId, resets it to the preset it follows). */
+  applyGymPreset: (id: string, presetId?: string) =>
+    request<GymsResponse>(`/gyms/${id}/preset`, { method: "POST", body: JSON.stringify({ presetId }) }),
+  /** Remembers which gym the workout page starts on. */
+  setActiveGym: (gymId: string) =>
+    request<GymsResponse>("/gyms/active", { method: "PUT", body: JSON.stringify({ gymId }) }),
+  addCustomEquipment: (name: string) =>
+    request<GymsResponse>("/gyms/custom-equipment", { method: "POST", body: JSON.stringify({ name }) }),
+  removeCustomEquipment: (id: string) => request<GymsResponse>(`/gyms/custom-equipment/${id}`, { method: "DELETE" }),
+
+  createExercise: (data: CustomExerciseInput) =>
     request<Exercise>("/exercises", { method: "POST", body: JSON.stringify(data) }),
+  archiveExercise: (id: string) => request<void>(`/exercises/${id}`, { method: "DELETE" }),
 
   logSession: (data: LogSessionInput) =>
     request<{ id: string }>("/sessions", { method: "POST", body: JSON.stringify(data) }),
@@ -630,12 +689,18 @@ export const api = {
     request(`/sessions/exercise/${exerciseId}?limit=${limit}`),
 
   /** Builds (or rebuilds) the day's workout with the AI. */
-  generatePlan: (pattern: MovementPattern, date: string, plannedSessionId?: string | null, replaceWorkoutId?: string | null) =>
+  generatePlan: (
+    pattern: MovementPattern,
+    date: string,
+    plannedSessionId?: string | null,
+    replaceWorkoutId?: string | null,
+    gymId?: string
+  ) =>
     request<DailyWorkout>(`/workouts/plan/${pattern}`, {
       method: "POST",
       // replaceWorkoutId is the workout the person agreed to replace; without
       // it the server refuses (409) to build over an existing workout.
-      body: JSON.stringify({ date, plannedSessionId: plannedSessionId ?? null, replaceWorkoutId: replaceWorkoutId ?? null }),
+      body: JSON.stringify({ date, plannedSessionId: plannedSessionId ?? null, replaceWorkoutId: replaceWorkoutId ?? null, gymId }),
     }),
   /** Workouts built in the last 30 days (and any scheduled ahead). No AI call. */
   getSavedWorkouts: (today: string) => request<SavedWorkout[]>(`/workouts/saved?today=${today}`),
@@ -767,7 +832,13 @@ export const api = {
   updateApproach: (
     planId: string,
     sport: Sport,
-    data: { status?: ApproachStatus; approachText?: string; weeklySessionTarget?: number; sessionMinutes?: number }
+    data: {
+      status?: ApproachStatus;
+      approachText?: string;
+      weeklySessionTarget?: number;
+      sessionMinutes?: number;
+      milestones?: Milestone[];
+    }
   ) => request<TrainingPlan>(`/plan/${planId}/approaches/${sport}`, { method: "PATCH", body: JSON.stringify(data) }),
 
   // How many session cards the schedule builder needs to show per sport,

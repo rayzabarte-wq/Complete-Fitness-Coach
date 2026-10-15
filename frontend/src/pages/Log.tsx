@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, DailyWorkout, SavedWorkout, MovementPattern, PlannedSession, SessionType, StepsResponse, TodaySuggestion } from "../lib/api.js";
 import { usePlan, loggedSets } from "../lib/planContext.js";
+import { Gym, GYM_KIND_LABEL } from "../lib/equipment.js";
 import { formatLocalDateKey } from "../lib/location.js";
 import { ACTIVITY_COLORS, ACTIVITY_LABELS, ActivityKey, activityForSessionType, FOCUS_LABELS } from "../lib/activity.js";
 import { fullLabelFor } from "../lib/sessionTypes.js";
@@ -61,6 +62,31 @@ export default function Log() {
 
 const ALL_FOCUSES: MovementPattern[] = ["PUSH", "PULL", "LEGS", "UPPER", "LOWER", "FULL_BODY", "CORE"];
 
+function GymSwitcher({ gyms, value, onChange, disabled }: { gyms: Gym[]; value: string; onChange: (id: string) => void; disabled: boolean }) {
+  const current = gyms.find((g) => g.id === value) ?? gyms[0];
+  return (
+    <div className="card">
+      <div className="text-dim" style={{ fontSize: 12 }}>Where are you training?</div>
+      <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+        {gyms.map((g) => (
+          <button
+            key={g.id}
+            className={g.id === current.id ? "button-primary" : "button-secondary"}
+            disabled={disabled}
+            onClick={() => onChange(g.id)}
+            style={{ flex: 1, fontSize: 13, padding: "8px 4px" }}
+          >
+            {GYM_KIND_LABEL[g.kind]}
+          </button>
+        ))}
+      </div>
+      <div className="text-dim" style={{ fontSize: 12, marginTop: 6 }}>
+        {current.name} — workouts only use equipment it has. Change it under Settings &gt; Gyms.
+      </div>
+    </div>
+  );
+}
+
 function StrengthLog() {
   const { today: todaysWorkout, plan, loaded, loadFailed, retryLoad, date, setBuilt, adopt, openWorkout } = usePlan();
   const [params, setParams] = useSearchParams();
@@ -81,6 +107,24 @@ function StrengthLog() {
   const [notice, setNotice] = useState<string | null>(null);
   // A saved workout waiting for the person to confirm replacing a day's workout.
   const [confirmReuse, setConfirmReuse] = useState<{ item: SavedWorkout; date: string; replaceWorkoutId: string } | null>(null);
+
+  // Which gym (Home / Regular / Visiting) new workouts are built for. The
+  // choice is remembered on the account, so it's still there next time.
+  const [gyms, setGyms] = useState<Gym[]>([]);
+  const [gymId, setGymId] = useState<string | null>(null);
+  useEffect(() => {
+    api
+      .getGyms()
+      .then((res) => {
+        setGyms(res.gyms);
+        setGymId(res.activeGymId);
+      })
+      .catch(() => {});
+  }, []);
+  function chooseGym(id: string) {
+    setGymId(id);
+    api.setActiveGym(id).catch(() => {});
+  }
 
   const loadSaved = useCallback(() => {
     api.getSavedWorkouts(date).then(setSaved).catch(() => {});
@@ -142,7 +186,7 @@ function StrengthLog() {
       // Only replaces the workout this device knows about and the person
       // agreed to replace. If the server has a different one (this device
       // didn't know), it answers 409 and we show that one instead.
-      setBuilt(await api.generatePlan(focus, date, plannedId, todaysWorkout?.workoutId ?? null));
+      setBuilt(await api.generatePlan(focus, date, plannedId, todaysWorkout?.workoutId ?? null, gymId ?? undefined));
     } catch (err: any) {
       if (err.status === 409 && err.body?.existing) {
         adopt(err.body.existing);
@@ -214,6 +258,8 @@ function StrengthLog() {
 
   return (
     <div>
+      {gyms.length > 0 && gymId && <GymSwitcher gyms={gyms} value={gymId} onChange={chooseGym} disabled={loading !== null} />}
+
       {todaysWorkout && (
         <TodaysWorkoutCard
           workout={todaysWorkout}

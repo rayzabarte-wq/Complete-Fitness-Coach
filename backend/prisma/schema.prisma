@@ -70,6 +70,12 @@ model User {
   microsoftAccount MicrosoftAccount?
   stravaAccount    StravaAccount?
   trainingPlans    TrainingPlan[]
+  gyms             GymProfile[]
+  customEquipment  CustomEquipment[]
+  // The gym profile (home / regular gym / visiting) last used to build a
+  // workout, so the switcher on the workout page remembers it. A plain id
+  // rather than a relation: if it's stale, the home gym is used.
+  activeGymId      String?
   consents         ConsentRecord[]
   bodyMeasurements BodyMeasurement[]
   bodyGoals        BodyGoal[]
@@ -142,18 +148,100 @@ enum RepRangeStyle {
   HYPERTROPHY // 8-15 reps, progression via rep quality / RPE
 }
 
-// Matches the equipment actually on hand: an adjustable dumbbell set
-// (5-45lb, 5lb steps), a barbell (20-80lb, 5lb steps), an EZ bar
-// (20-80lb, 10lb steps), elastic bands, and bodyweight work on a chin-up
-// bar / rings. Increments and ranges per type live in
-// backend/src/lib/equipmentConfig.ts (and are mirrored on the frontend so
-// inputs only ever offer loadable values).
+// The kinds of equipment an exercise can need. What each person actually
+// HAS of each kind (on/off, loadable weights, band levels) is per-user —
+// see GymProfile / GymEquipment below. The defaults for someone who hasn't configured
+// anything live in backend/src/sport/lib/equipmentConfig.ts.
 enum Equipment {
   DUMBBELL
   BARBELL
   EZ_BAR
   BAND
   BODYWEIGHT
+}
+
+// The three places a person trains, each with its own equipment: their HOME
+// gym, a regular PUBLIC_GYM, and a VISITING gym (travel, a friend's, a
+// hotel). One profile of each kind per user, created on first use with
+// starting-point defaults for that kind (see sport/lib/equipmentConfig.ts).
+// Workouts are built for whichever gym is selected on the workout page:
+// only exercises doable with THAT gym's equipment are used, and weights
+// come from its loadable values.
+enum GymKind {
+  HOME
+  PUBLIC_GYM
+  VISITING
+}
+
+// Simple tick-box equipment that has no weights to configure, but which
+// some exercises need (Exercise.requires): a bench for pressing, a bar to
+// hang from, rings.
+enum Accessory {
+  BENCH
+  PULL_UP_BAR
+  RINGS
+}
+
+model GymProfile {
+  id     String @id @default(cuid())
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+
+  kind GymKind
+  // Editable label, e.g. "Garage" or "PureGym Woking".
+  name String
+  accessories Accessory[] @default([])
+  // The preset this gym follows for anything the user hasn't changed; null
+  // means the default preset for its kind (see sport/lib/equipmentConfig.ts).
+  presetId String?
+  // Which of the user's own custom equipment (CustomEquipment) this gym has.
+  customEquipmentIds String[] @default([])
+
+  equipment GymEquipment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, kind])
+}
+
+// What a gym has of each weighted/band/bodyweight type. No row for a type
+// means "use this gym kind's defaults", so profiles work without a backfill.
+// Null min/max/step fall back to the defaults too. If customWeightsLb is
+// non-empty it replaces the min/max/step range entirely — for gear that
+// isn't evenly spaced, like a fixed-dumbbell rack (10, 12.5, 15, 20...).
+// For BODYWEIGHT the weights are optional ADDED load (0 is always allowed);
+// for BAND, bandLevels is which resistance levels the gym has.
+model GymEquipment {
+  id    String     @id @default(cuid())
+  gym   GymProfile @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  gymId String
+
+  equipment       Equipment
+  enabled         Boolean   @default(true)
+  minLb           Float?
+  maxLb           Float?
+  stepLb          Float?
+  customWeightsLb Float[]   @default([])
+  bandLevels      String[]  @default([])
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([gymId, equipment])
+}
+
+// A piece of equipment the user names themselves ("Landmine attachment",
+// "Sled"), which they then tick per gym. It only matters through the custom
+// exercises that need it (Exercise.customEquipmentId): those exercises join
+// workout selection only at gyms that have the item.
+model CustomEquipment {
+  id     String @id @default(cuid())
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+
+  name      String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, name])
 }
 
 // Used to group exercises into full-session workouts (Push / Pull / Legs /
@@ -197,7 +285,7 @@ enum ReadinessLevel {
 // Shared exercise catalog — not scoped per-user, see the note on User above.
 model Exercise {
   id              String            @id @default(cuid())
-  name            String            @unique
+  name            String
   category        ExerciseCategory
   muscleGroup     String
   repRangeStyle   RepRangeStyle
@@ -216,6 +304,20 @@ model Exercise {
   // tallies to make sure no part of a muscle is chronically neglected.
   variationTag     String?
 
+  // Shared catalog exercises have no owner. A user-added exercise belongs to
+  // that user (plain id, no relation — account deletion removes them after
+  // the user's sets are gone) and is only offered to them.
+  userId            String?
+  // Accessories (bench, bar, rings) a gym must have for this exercise.
+  requires          Accessory[] @default([])
+  // For a user-added exercise built around their own custom equipment: the
+  // gym must have that item ticked.
+  customEquipmentId String?
+  // Removed by the user; hidden from selection but kept so logged history
+  // still resolves.
+  archivedAt        DateTime?
+
+  @@unique([userId, name])
   sets            SetEntry[]
   recommendations Recommendation[]
 }
@@ -249,6 +351,8 @@ model WorkoutSession {
   // later updates (e.g. after feedback is submitted) patch the same event
   // instead of creating a duplicate.
   outlookEventId String?
+  // The gym profile this session was done at (plain id, informational).
+  gymId String?
 
   @@index([userId, date])
 }
@@ -540,6 +644,11 @@ model SportApproach {
   approachText        String
   weeklySessionTarget Int
   sessionMinutes      Int            @default(45)
+  // Phased milestones across the 12 weeks, e.g. [{"phase": "Weeks 1-4 —
+  // Base building", "target": "Squat 3x5 @ 185lb, consistent depth"}, ...].
+  // Optional because approaches created before this field existed, or
+  // edited by hand without touching milestones, may not have any.
+  milestones          Json?
   status              ApproachStatus @default(PROPOSED)
 
   @@unique([planId, sport])

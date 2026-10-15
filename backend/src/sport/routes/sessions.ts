@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../../lib/prisma.js";
 import { validateSetLoad, Equipment } from "../lib/equipmentConfig.js";
+import { getGym } from "../services/gyms.js";
 // Outlook sync is a Scheduler capability — Sport reaches it only through
 // scheduler/index.ts's public interface, never by importing its internal
 // files directly. This is the seam a real split would cut along.
@@ -43,6 +44,8 @@ const createSessionSchema = z.object({
   plannedSessionId: z.string().optional(),
   // The generated daily workout this was logged from (marked saved).
   workoutId: z.string().optional(),
+  // The gym profile the workout was done at (weights are checked against it).
+  gymId: z.string().optional(),
 });
 
 // Shared include shape for loading everything the Outlook event payload
@@ -92,19 +95,24 @@ sessionsRouter.post("/", async (req: AuthedRequest, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.flatten() });
   }
-  const { date, notes, startedAt, endedAt, sleepQuality, soreness, energyLevel, sets, focus, plannedSessionId, workoutId } = parsed.data;
+  const { date, notes, startedAt, endedAt, sleepQuality, soreness, energyLevel, sets, focus, plannedSessionId, workoutId, gymId } = parsed.data;
   const userId = req.userId!;
 
   const exerciseIds = [...new Set(sets.map((s) => s.exerciseId))];
   const exercises = await prisma.exercise.findMany({ where: { id: { in: exerciseIds } } });
   const exerciseById = new Map(exercises.map((e) => [e.id, e]));
 
+  // Checked against the equipment of the gym this was done at (falls back to
+  // the user's active gym), not a fixed set.
+  const gym = await getGym(userId, gymId);
+  const equipmentConfig = gym.equipment;
+
   for (const set of sets) {
     const exercise = exerciseById.get(set.exerciseId);
     if (!exercise) {
       return res.status(400).json({ error: `Unknown exerciseId: ${set.exerciseId}` });
     }
-    const loadError = validateSetLoad(exercise.equipment as Equipment, set.weightLb, set.bandLevel);
+    const loadError = validateSetLoad(equipmentConfig[exercise.equipment as Equipment], set.weightLb, set.bandLevel);
     if (loadError) {
       return res.status(400).json({ error: `${exercise.name}: ${loadError}` });
     }
@@ -116,6 +124,7 @@ sessionsRouter.post("/", async (req: AuthedRequest, res) => {
       date: date ? new Date(date) : undefined,
       notes,
       focus,
+      gymId: gym.id,
       startedAt: startedAt ? new Date(startedAt) : undefined,
       endedAt: endedAt ? new Date(endedAt) : undefined,
       sleepQuality,

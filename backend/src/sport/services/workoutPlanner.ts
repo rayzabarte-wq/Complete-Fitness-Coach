@@ -1,6 +1,7 @@
 import { prisma } from "../../lib/prisma.js";
 import { askClaude } from "../../lib/claude.js";
-import { EQUIPMENT_CONFIG, Equipment } from "../lib/equipmentConfig.js";
+import { Equipment, ResolvedEquipment, clampToLoadable, describeWeights } from "../lib/equipmentConfig.js";
+import { getGym } from "./gyms.js";
 import { Focus, FOCUS_LABELS, focusMuscles, MUSCLE_LABELS } from "../lib/training.js";
 import { pickSessionExercises, BlockInfo } from "./exerciseSelection.js";
 import { getRecovery } from "./recovery.js";
@@ -28,19 +29,26 @@ export interface WorkoutPlan {
   exercises: PlannedExercise[];
   estimatedMinutes: number;
   block: BlockInfo;
+  /** The gym profile this workout was built for. */
+  gymId: string;
+  gymName: string;
   /** Muscles this session targets that haven't fully recovered yet. */
   recoveringMuscles: string[];
 }
 
-function equipmentGuidance(equipment: Equipment): string {
-  const config = EQUIPMENT_CONFIG[equipment];
+function equipmentGuidance(config: ResolvedEquipment): string {
   if (config.kind === "weighted") {
-    return `${config.label}, loadable from ${config.minLb}lb to ${config.maxLb}lb in ${config.stepLb}lb increments — suggestedWeightLb MUST be one of these exact values.`;
+    return `${config.label}, this person can load: ${describeWeights(config.weightsLb)} — suggestedWeightLb MUST be one of these exact values.`;
   }
   if (config.kind === "bodyweight") {
-    return `${config.label}. Base movement is bodyweight (suggestedWeightLb: 0); optional added weight from ${config.addedWeightMinLb}lb to ${config.addedWeightMaxLb}lb in ${config.addedWeightStepLb}lb increments if progression calls for it.`;
+    const added = config.weightsLb.filter((w) => w > 0);
+    return `${config.label}. Base movement is bodyweight (suggestedWeightLb: 0); ${
+      added.length > 0
+        ? `optional added weight, one of: ${describeWeights(added)}, if progression calls for it.`
+        : "this person doesn't add weight to bodyweight movements, so always use 0."
+    }`;
   }
-  return `${config.label}, tension levels: ${config.levels.join(", ")}. Set suggestedWeightLb to 0 and put the recommended level in bandLevel.`;
+  return `${config.label}, tension levels available: ${config.bandLevels.join(", ")}. Set suggestedWeightLb to 0 and put the recommended level in bandLevel.`;
 }
 
 /** Short lines of context about the person for the coaching prompt — age
@@ -67,13 +75,20 @@ async function personContext(userId: string): Promise<{ who: string; goals: stri
   return { who, goals: goalLines.length ? goalLines.join("; ") : "" };
 }
 
-export async function generateWorkoutPlan(userId: string, pattern: MovementPattern): Promise<WorkoutPlan> {
+export async function generateWorkoutPlan(userId: string, pattern: MovementPattern, gymId?: string): Promise<WorkoutPlan> {
   // Which exercises: the current training block for this focus (see
   // exerciseSelection.ts — stable within a block, rotated between blocks
   // for coverage, swapped mid-block only on a stall) plus a core finisher.
-  const { picks, block } = await pickSessionExercises(userId, pattern);
+  // Only exercises doable at the chosen gym (Home / Regular / Visiting) are
+  // candidates (see exerciseSelection.ts), and every weight is checked
+  // against that gym's loadable values rather than a fixed set of gear.
+  const gym = await getGym(userId, gymId);
+  const equipmentConfig = gym.equipment;
+  const { picks, block } = await pickSessionExercises(userId, pattern, gym);
   if (picks.length === 0) {
-    throw new Error(`No exercises found for ${FOCUS_LABELS[pattern]} — run the seed script to load the exercise catalog.`);
+    throw new Error(
+      `No ${FOCUS_LABELS[pattern]} exercises match what ${gym.name} has. Tick more equipment for it under Settings > Gyms (or run the seed script if the exercise catalog is empty).`
+    );
   }
   const rows = await prisma.exercise.findMany({ where: { id: { in: picks.map((p) => p.exercise.id) } } });
   const rowById = new Map(rows.map((r) => [r.id, r]));
@@ -116,7 +131,7 @@ export async function generateWorkoutPlan(userId: string, pattern: MovementPatte
 
       return `- exerciseId: "${exercise.id}"
   name: ${exercise.name} (${exercise.category}, ${exercise.repRangeStyle} rep style)
-  equipment: ${equipmentGuidance(exercise.equipment as Equipment)}
+  equipment: ${equipmentGuidance(equipmentConfig[exercise.equipment as Equipment])}
   days since last trained: ${daysSinceLastSession ?? "unknown"}
   recent history: ${historyText}`;
     })
@@ -176,7 +191,16 @@ Respond with ONLY a JSON array, no other text, one object per exercise in the sa
     if (!pick) continue; // skip anything Claude hallucinated an id for
     const exercise = pick.exercise;
 
-    const weightLb = clampToLoadable(exercise.equipment as Equipment, item.suggestedWeightLb);
+    const exerciseEquipment = equipmentConfig[exercise.equipment as Equipment];
+    const weightLb = clampToLoadable(exerciseEquipment, item.suggestedWeightLb);
+    // If Claude names a band level this person doesn't own, fall back to
+    // the first one they do rather than suggesting something unusable.
+    const bandLevel =
+      exerciseEquipment.kind === "band"
+        ? item.bandLevel && exerciseEquipment.bandLevels.includes(item.bandLevel)
+          ? item.bandLevel
+          : exerciseEquipment.bandLevels[0]
+        : null;
 
     await prisma.recommendation.create({
       data: {
@@ -195,7 +219,7 @@ Respond with ONLY a JSON array, no other text, one object per exercise in the sa
       name: exercise.name,
       equipment: exercise.equipment as Equipment,
       suggestedWeightLb: weightLb,
-      bandLevel: item.bandLevel,
+      bandLevel,
       suggestedReps: item.suggestedReps,
       suggestedSets: item.suggestedSets,
       restSeconds: item.restSeconds,
@@ -217,20 +241,8 @@ Respond with ONLY a JSON array, no other text, one object per exercise in the sa
     exercises: planned,
     estimatedMinutes: Math.round(estimatedSeconds / 60),
     block,
+    gymId: gym.id,
+    gymName: gym.name,
     recoveringMuscles: recovering.map((r) => MUSCLE_LABELS[r.muscle]),
   };
-}
-
-function clampToLoadable(equipment: Equipment, weightLb: number): number {
-  const config = EQUIPMENT_CONFIG[equipment];
-  if (config.kind === "band") return 0;
-  if (config.kind === "bodyweight") {
-    if (weightLb <= 0) return 0;
-    const steps = Math.round((weightLb - config.addedWeightMinLb) / config.addedWeightStepLb);
-    const clamped = config.addedWeightMinLb + steps * config.addedWeightStepLb;
-    return Math.min(Math.max(clamped, config.addedWeightMinLb), config.addedWeightMaxLb);
-  }
-  const steps = Math.round((weightLb - config.minLb) / config.stepLb);
-  const clamped = config.minLb + steps * config.stepLb;
-  return Math.min(Math.max(clamped, config.minLb), config.maxLb);
 }

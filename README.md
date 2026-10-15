@@ -20,7 +20,7 @@ strength-app/
 │       ├── sport/          Deep AI coaching — Strength, Golf
 │       │   ├── routes/     exercises, sessions (workout logging), workouts (plan generation), golf
 │       │   ├── services/   workoutPlanner.ts, golfPlanner.ts (Claude API)
-│       │   ├── lib/        equipmentConfig.ts (dumbbell/barbell/EZ bar increments)
+│       │   ├── lib/        equipmentConfig.ts (per-gym equipment defaults + weight resolution)
 │       │   └── index.ts    Sport's public interface — import only from here
 │       ├── scheduler/      Scheduling, weather, connector-sport data capture
 │       │   ├── routes/     calendar, outlook, strava
@@ -174,22 +174,65 @@ health data under GDPR.
 - `NutritionLog` — date, calories, protein/carbs/fat, notes (schema is in
   place now; UI comes later)
 
-## Equipment
+## Gyms & equipment
 
-The app only ever offers weights that are actually loadable on hand:
+You can describe up to three places you train under **Settings > Gyms**: a
+**Home gym**, a **Regular gym** and a **Visiting gym** (travel, a friend's,
+a hotel). Each is its own profile with tick-boxes:
 
-- **Adjustable dumbbells:** 5lb–45lb in 5lb increments
-- **Barbell:** 20lb–80lb in 5lb increments
-- **EZ bar:** 20lb–80lb in 10lb increments
-- **Elastic bands:** Light / Medium / Heavy / X-Heavy (no lb rating)
-- **Bodyweight** (chin-up bar / rings): optional added weight, 0lb–45lb in
-  5lb increments
+- **Equipment types:** Dumbbells, Barbell, EZ bar, Resistance bands,
+  Bodyweight. For the weighted ones set a min, max and step (e.g. 5–45lb in
+  5lb steps) — or an exact list for uneven gear like a fixed-dumbbell rack
+  (`10, 12.5, 15, 20, 30`). Bands: which of Light / Medium / Heavy / X-Heavy
+  it has. Bodyweight: the most optional *added* weight (0 if none).
+- **Also has:** Bench, Pull-up / chin-up bar, Gym rings. Exercises that need
+  one (`Exercise.requires`) are left out of gyms without it.
+- **Your own equipment:** name anything else ("Sled", "Landmine attachment"),
+  then tick it on the gyms that have it. **Your own exercises** can be linked
+  to that item (and to the accessories they need); they join your workouts
+  only at gyms that have everything they need.
 
-This lives in `backend/src/lib/equipmentConfig.ts` (also enforced
-server-side — a logged set with an unloadable weight is rejected) and is
-mirrored in `frontend/src/lib/equipment.ts` to build the weight dropdowns.
-The AI recommender is told these constraints directly and its suggestion is
-snapped to the nearest loadable value as a safety net.
+On the **Log** page a *Home / Regular gym / Visiting gym* switcher chooses
+which gym the next workout is built for. The choice is remembered
+(`User.activeGymId`), and the workout records the gym (`gymId`/`gymName`).
+
+What it drives:
+
+- **Which exercises you get** — only ones doable at that gym. The training
+  block is shared between gyms: an exercise the current gym can't do is
+  replaced for that session only, so the block is intact when you're back home.
+- **Which weights are offered and suggested.** The AI is told that gym's exact
+  loadable values, suggestions are snapped to the nearest one, and the Log
+  page's dropdowns come from the workout's gym.
+- **Server-side validation** of logged sets against that gym's equipment.
+
+Each gym starts from a **preset**, shown at the top of its editor. Home: *Standard
+home gym* (5–45lb dumbbells, 20–80lb barbell/EZ bar, all bands, bench + bar +
+rings). Regular gym: *Commercial gym* (5–100lb dumbbells, 45–315lb barbell,
+EZ bar, bands, bench + bar). Visiting gym: *Basic hotel gym* (5–50lb dumbbells,
+bench, bodyweight), *Well-equipped hotel gym* (dumbbells to 75lb, barbell to
+135lb, bench + bar) or *No equipment* (bodyweight + light/medium bands). The
+values are editable guesses, not facts about real gyms. After picking one you
+can change the min, max and step of any equipment type (or its exact weight
+list) and save; only what you change is stored, the rest keeps following the
+preset. **Reset to defaults** deletes your adjustments and re-applies the
+preset (equipment and accessories; the gym's name and your own-equipment
+ticks are kept), and choosing a different preset does the same with the new
+one. Presets live in `GYM_PRESETS` in `backend/src/sport/lib/equipmentConfig.ts`;
+the choice is `GymProfile.presetId` (`POST /gyms/:id/preset`). Profiles are the
+`GymProfile` / `GymEquipment` / `CustomEquipment` tables (`GET /gyms`,
+`PUT /gyms/:id`, `PUT /gyms/active`, `/gyms/custom-equipment`), and custom
+exercises are `Exercise` rows with a `userId` (`POST`/`DELETE /exercises`). All
+are included in the data export and deleted with the account.
+
+Upgrading: apply the `gym_profiles` and `gym_preset` migrations (`npx prisma migrate deploy`, or
+`migrate dev` locally) and re-run the seed (`npx prisma db seed`) so catalog
+exercises get their bench / bar / rings requirements. The migration turns
+any equipment settings saved earlier into each user's Home gym. It also
+adds a partial unique index for catalog names that `schema.prisma` can't
+express, so `migrate dev` may offer to "fix" it — decline that.
+
+Weights are in pounds only.
 
 The `Log` page shows only the current generated session's exercises, with
 a weight/band selector, a reps field (pre-filled with the AI's suggested
@@ -790,10 +833,15 @@ walks through four steps:
    together in one call (so the total weekly load stays realistic instead
    of each sport being sized in isolation), a short narrative approach —
    phasing, focus, how it should progress — plus a weekly session count and
-   a typical session length. Where a weekly time-available figure was given,
-   session count × session length is kept at or under it. Each is reviewed
-   individually: approve as-is, or edit the text/count/length (which counts
-   as approving it). Every sport must be approved before moving on.
+   a typical session length, plus **phased milestones**: the 12 weeks broken
+   into roughly 3 phases, each with a short label and a specific, measurable
+   target (a number, time, distance, or skill check tied to the sport's
+   stated goal — e.g. "Weeks 1-4 — Base building: Squat 3x5 @ 185lb" through
+   to a final-phase target that visibly moves the needle on the goal). Where
+   a weekly time-available figure was given, session count × session length
+   is kept at or under it. Each approach is reviewed individually: approve
+   as-is, or edit the text/count/length/milestones (which counts as
+   approving it). Every sport must be approved before moving on.
 3. **Weekly schedule.** Once every approach is approved, the person builds
    their own schedule — not Claude. An earlier version had Claude propose
    the whole week's day/time layout, but that didn't place sessions the way

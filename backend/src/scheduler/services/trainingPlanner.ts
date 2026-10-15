@@ -41,11 +41,21 @@ function extractJson(rawText: string): unknown {
 // the session count/length proposed here.
 // ---------------------------------------------------------------------------
 
+export interface Milestone {
+  // e.g. "Weeks 1-4 — Base building"
+  phase: string;
+  // A specific, measurable target for that phase, tied to the sport's
+  // stated goal where one was given — e.g. "Squat 3x5 @ 185lb, consistent
+  // depth" rather than a vague "get stronger".
+  target: string;
+}
+
 export interface GeneratedApproach {
   sport: Sport;
   approachText: string;
   weeklySessionTarget: number;
   sessionMinutes: number;
+  milestones: Milestone[];
 }
 
 export async function generateSportApproaches(
@@ -71,11 +81,12 @@ For EACH sport listed above, propose:
 1. A short approach (2-4 sentences) describing how training in that sport should be structured and progress across the 12 weeks — mention phasing where it helps (e.g. base building, then intensity), and what the main focus is given its priority level and goal.
 2. A realistic weekly session count (weeklySessionTarget) for that sport.
 3. A typical single-session length in minutes (sessionMinutes) for that sport.
+4. Phased milestones (milestones): break the 12 weeks into 3 phases (roughly weeks 1-4, 5-8, 9-12, adjusted if a different split makes more sense for that sport/goal) and give each phase a short label and a SPECIFIC, MEASURABLE target — a number, time, distance, or concrete skill check, not a vague statement. Each later phase's target should build on the one before it, and the final phase's target should visibly move the needle on the sport's stated goal (or, with no goal given, on general improvement at the person's current level). If there isn't enough information to name a precise number (e.g. no baseline was given), propose a sensible concrete one anyway and phrase it so it's obviously adjustable (e.g. "add roughly 10lb to your current back squat working weight" rather than refusing to give a number).
 
 Where a weekly time-available figure is given, treat it as a hard ceiling: weeklySessionTarget x sessionMinutes must not exceed it (round session count/length down rather than over-committing). Where none is given, use your own judgment for a realistic weekly commitment. Balance the weekly session targets ACROSS all sports together too — the total weekly commitment must be realistic for one person to actually do (a HIGH priority sport should get more sessions/week than a LOW priority one). A sport marked LOW priority should still appear with a maintenance-level approach and a small session count, not be dropped.
 
 Respond with ONLY a JSON array, no other text, in this exact shape:
-[{"sport": "STRENGTH", "approachText": "...", "weeklySessionTarget": 3, "sessionMinutes": 45}, ...]
+[{"sport": "STRENGTH", "approachText": "...", "weeklySessionTarget": 3, "sessionMinutes": 45, "milestones": [{"phase": "Weeks 1-4 — Base building", "target": "Squat 3x5 @ 185lb, consistent depth"}, {"phase": "Weeks 5-8 — Build", "target": "Squat 3x5 @ 205lb"}, {"phase": "Weeks 9-12 — Peak", "target": "Squat 1x5 @ 225lb"}]}, ...]
 Use these exact sport codes: ${priorities.map((p) => p.sport).join(", ")}.`;
 
   const rawText = await askClaude(prompt);
@@ -221,6 +232,7 @@ export interface ApproachUpdate {
   approachText?: string;
   weeklySessionTarget?: number;
   sessionMinutes?: number;
+  milestones?: Milestone[];
 }
 
 export interface PlanAmendment {
@@ -230,16 +242,21 @@ export interface PlanAmendment {
 
 export async function generatePlanAmendment(params: {
   overallGoal: string | null;
-  approaches: { sport: Sport; approachText: string; weeklySessionTarget: number; sessionMinutes: number }[];
+  approaches: { sport: Sport; approachText: string; weeklySessionTarget: number; sessionMinutes: number; milestones: Milestone[] | null }[];
   requestText: string;
 }): Promise<PlanAmendment> {
   const { overallGoal, approaches, requestText } = params;
 
   const approachLines = approaches
-    .map((a) => `- ${SPORT_LABELS[a.sport]}: ${a.weeklySessionTarget} sessions/week x ${a.sessionMinutes} min. Current approach: ${a.approachText}`)
+    .map((a) => {
+      const milestoneText = a.milestones?.length
+        ? ` Current milestones: ${a.milestones.map((m) => `[${m.phase}: ${m.target}]`).join(", ")}`
+        : "";
+      return `- ${SPORT_LABELS[a.sport]}: ${a.weeklySessionTarget} sessions/week x ${a.sessionMinutes} min. Current approach: ${a.approachText}${milestoneText}`;
+    })
     .join("\n");
 
-  const prompt = `You are amending an in-progress 3-month training plan partway through, based on the person's own request. This is NOT a fresh plan — keep everything the request doesn't ask you to change exactly as it is, and you are only adjusting the CONTENT of the plan (weekly session count, session length, approach text) — never a day/time schedule, which the person builds themselves separately.
+  const prompt = `You are amending an in-progress 3-month training plan partway through, based on the person's own request. This is NOT a fresh plan — keep everything the request doesn't ask you to change exactly as it is, and you are only adjusting the CONTENT of the plan (weekly session count, session length, approach text, phased milestones) — never a day/time schedule, which the person builds themselves separately.
 
 ${overallGoal ? `Overall goal for the quarter: "${overallGoal}"\n` : ""}
 Current per-sport approaches:
@@ -247,7 +264,7 @@ ${approachLines}
 
 The person's amendment request: "${requestText}"
 
-Apply ONLY the change(s) the request actually asks for. For any sport whose weekly session target, session length, or approach text should change as a result, include it in approachUpdates with just the fields that change (omit sports that don't need updating, and omit fields on a sport that don't need updating).
+Apply ONLY the change(s) the request actually asks for. For any sport whose weekly session target, session length, approach text, or milestones should change as a result, include it in approachUpdates with just the fields that change (omit sports that don't need updating, and omit fields on a sport that don't need updating). If you change a sport's session count or approach significantly, check whether its remaining milestones (any phase not already in the past) still make sense and update them if not — if you include milestones, always include the FULL replacement list of phases for that sport (don't try to patch a single phase).
 
 Respond with ONLY a JSON object, no other text, in this exact shape:
 {"changeSummary": "one short sentence describing what changed, in plain terms", "approachUpdates": [{"sport": "RUN", "weeklySessionTarget": 2}]}`;

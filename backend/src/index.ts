@@ -11,7 +11,7 @@ import cors from "cors";
 // sync). Each is imported only through its own index.ts — see the seam
 // note there. Everything else here (auth, account) is shared/core, used
 // by both.
-import { exercisesRouter, sessionsRouter, workoutsRouter, golfRouter, progressRouter } from "./sport/index.js";
+import { exercisesRouter, gymsRouter, sessionsRouter, workoutsRouter, golfRouter, progressRouter } from "./sport/index.js";
 import {
   calendarRouter,
   outlookPublicRouter,
@@ -60,6 +60,7 @@ app.use("/ingest", ingestRouter);
 //
 // Sport routes:
 app.use("/exercises", requireAuth, exercisesRouter);
+app.use("/gyms", requireAuth, gymsRouter);
 app.use("/sessions", requireAuth, sessionsRouter);
 app.use("/workouts", requireAuth, workoutsRouter);
 app.use("/golf", requireAuth, golfRouter);

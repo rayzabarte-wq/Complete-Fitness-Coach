@@ -25,6 +25,8 @@ const generateBodySchema = z.object({
   // the existing workout (a failed or stale load) can't send it, so it can
   // never silently overwrite someone's workout and logged progress.
   replaceWorkoutId: z.string().nullish(),
+  // Which gym profile to build for; defaults to the user's active gym.
+  gymId: z.string().optional(),
 });
 
 workoutsRouter.post("/plan/:pattern", async (req: AuthedRequest, res) => {
@@ -37,7 +39,7 @@ workoutsRouter.post("/plan/:pattern", async (req: AuthedRequest, res) => {
   if (!body.success) {
     return res.status(400).json({ error: body.error.flatten() });
   }
-  const { date, plannedSessionId = null, replaceWorkoutId = null } = body.data;
+  const { date, plannedSessionId = null, replaceWorkoutId = null, gymId } = body.data;
   const userId = req.userId!;
 
   // Checked BEFORE calling the AI (no wasted call): a workout already exists
@@ -52,7 +54,7 @@ workoutsRouter.post("/plan/:pattern", async (req: AuthedRequest, res) => {
     // The one place Claude is called for a strength workout: building the
     // day's workout, or explicitly regenerating it (which replaces it, and
     // anything logged in it so far). Everything else reuses the saved one.
-    const plan = await generateWorkoutPlan(userId, parsed.data as MovementPattern);
+    const plan = await generateWorkoutPlan(userId, parsed.data as MovementPattern, gymId);
     const data = {
       workoutId: randomUUID(),
       plan: plan as unknown as Prisma.InputJsonValue,

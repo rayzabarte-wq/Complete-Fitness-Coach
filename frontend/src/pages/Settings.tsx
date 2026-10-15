@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, auth, Profile, SessionType } from "../lib/api.js";
+import GymsSection from "../components/GymsSection.js";
 import { SESSION_TYPE_TREE } from "../lib/sessionTypes.js";
 import { ConsentSettings } from "../components/Consent.js";
 
@@ -27,44 +28,48 @@ export default function Settings({ onLoggedOut }: { onLoggedOut: () => void }) {
         </p>
       )}
 
-      <div className="section-title">Training</div>
-      {profile && <TrainingSection profile={profile} onSaved={reload} />}
+      <Collapsible title="Training">{profile && <TrainingSection profile={profile} onSaved={reload} />}</Collapsible>
 
-      <div className="section-title">Profile</div>
-      {profile && <ProfileSection profile={profile} onSaved={reload} />}
+      <Collapsible title="Profile">{profile && <ProfileSection profile={profile} onSaved={reload} />}</Collapsible>
 
-      <div className="section-title" id="privacy">
-        Privacy &amp; consent
-      </div>
-      <div className="card">
-        <ConsentSettings onChanged={reload} />
-      </div>
+      <Collapsible title="Privacy & consent" id="privacy">
+        <div className="card">
+          <ConsentSettings onChanged={reload} />
+        </div>
+      </Collapsible>
 
-      <div className="section-title" id="import">
-        Data import
-      </div>
-      {profile && <DataImportSection profile={profile} onChanged={reload} />}
+      <Collapsible title="Data import" id="import">
+        {profile && <DataImportSection profile={profile} onChanged={reload} />}
+      </Collapsible>
 
-      <div className="section-title">Connections</div>
-      <OutlookSection />
-      <StravaSection />
+      <Collapsible title="Connections">
+        <OutlookSection />
+        <StravaSection />
+      </Collapsible>
 
-      <div className="section-title">Workout types</div>
-      <WorkoutTypesSection />
+      <Collapsible title="Gyms">
+        <GymsSection />
+      </Collapsible>
 
-      <div className="section-title">Planning</div>
-      <div className="card">
-        <strong>3-month training plan</strong>
-        <p className="text-dim" style={{ fontSize: 13, marginTop: 6 }}>
-          The multi-sport quarterly planner (priorities, approaches, weekly framework). The strength auto-fill on the Calendar works without it.
-        </p>
-        <Link to="/plan" className="button-secondary" style={{ display: "block", textAlign: "center", textDecoration: "none", marginTop: 8 }}>
-          Open the 3-month plan
-        </Link>
-      </div>
+      <Collapsible title="Workout types">
+        <WorkoutTypesSection />
+      </Collapsible>
 
-      <div className="section-title">Your data</div>
-      <YourDataSection />
+      <Collapsible title="Planning">
+        <div className="card">
+          <strong>3-month training plan</strong>
+          <p className="text-dim" style={{ fontSize: 13, marginTop: 6 }}>
+            The multi-sport quarterly planner (priorities, approaches, weekly framework). The strength auto-fill on the Calendar works without it.
+          </p>
+          <Link to="/plan" className="button-secondary" style={{ display: "block", textAlign: "center", textDecoration: "none", marginTop: 8 }}>
+            Open the 3-month plan
+          </Link>
+        </div>
+      </Collapsible>
+
+      <Collapsible title="Your data">
+        <YourDataSection />
+      </Collapsible>
 
       <button
         className="button-secondary"
@@ -76,6 +81,35 @@ export default function Settings({ onLoggedOut }: { onLoggedOut: () => void }) {
       >
         Log out
       </button>
+    </div>
+  );
+}
+
+// A settings group that opens and closes when its heading is tapped. Starts
+// closed so nothing can be changed by accident and the page stays short. The
+// contents stay mounted while closed (just hidden), so anything half-typed in
+// a form isn't lost by collapsing it. A link to #privacy or #import opens
+// that group.
+function Collapsible({ title, id, children }: { title: string; id?: string; children: ReactNode }) {
+  const [open, setOpen] = useState(() => !!id && window.location.hash === `#${id}`);
+  const bodyId = `settings-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+  return (
+    <div id={id}>
+      <button
+        type="button"
+        className="section-toggle"
+        aria-expanded={open}
+        aria-controls={bodyId}
+        onClick={() => setOpen((o) => !o)}
+      >
+        <span>{title}</span>
+        <span aria-hidden="true" className="section-chevron" style={{ transform: open ? "rotate(90deg)" : "none" }}>
+          ›
+        </span>
+      </button>
+      <div id={bodyId} hidden={!open}>
+        {children}
+      </div>
     </div>
   );
 }
