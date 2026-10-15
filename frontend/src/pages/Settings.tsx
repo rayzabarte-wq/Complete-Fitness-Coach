@@ -2,6 +2,7 @@ import { ReactNode, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, auth, Profile, SessionType } from "../lib/api.js";
 import GymsSection from "../components/GymsSection.js";
+import Collapsible from "../components/Collapsible.js";
 import { APP_VERSION, ServerStatus, describeVersions, getServerStatus, versionsDiffer } from "../lib/diagnose.js";
 import { SESSION_TYPE_TREE } from "../lib/sessionTypes.js";
 import { ConsentSettings } from "../components/Consent.js";
@@ -99,35 +100,6 @@ export default function Settings({ onLoggedOut }: { onLoggedOut: () => void }) {
       <p className="text-dim" style={{ fontSize: 11, textAlign: "center", marginTop: 12 }}>
         {server ? describeVersions(server) : `App version ${APP_VERSION}.`}
       </p>
-    </div>
-  );
-}
-
-// A settings group that opens and closes when its heading is tapped. Starts
-// closed so nothing can be changed by accident and the page stays short. The
-// contents stay mounted while closed (just hidden), so anything half-typed in
-// a form isn't lost by collapsing it. A link to #privacy or #import opens
-// that group.
-function Collapsible({ title, id, children }: { title: string; id?: string; children: ReactNode }) {
-  const [open, setOpen] = useState(() => !!id && window.location.hash === `#${id}`);
-  const bodyId = `settings-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
-  return (
-    <div id={id}>
-      <button
-        type="button"
-        className="section-toggle"
-        aria-expanded={open}
-        aria-controls={bodyId}
-        onClick={() => setOpen((o) => !o)}
-      >
-        <span>{title}</span>
-        <span aria-hidden="true" className="section-chevron" style={{ transform: open ? "rotate(90deg)" : "none" }}>
-          ›
-        </span>
-      </button>
-      <div id={bodyId} hidden={!open}>
-        {children}
-      </div>
     </div>
   );
 }

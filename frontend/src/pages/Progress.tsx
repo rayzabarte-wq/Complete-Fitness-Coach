@@ -16,6 +16,7 @@ import { formatLocalDateKey } from "../lib/location.js";
 import { ACTIVITY_COLORS, MUSCLE_LABELS } from "../lib/activity.js";
 import { TimeChart, DailyBarChart, Meter, Line, Marker } from "../components/charts.js";
 import PeriodCompare, { CompareRow } from "../components/PeriodCompare.js";
+import Collapsible from "../components/Collapsible.js";
 
 // Progress: one tab, four sub-tabs. Goals (body goals + setting/revising
 // them, benchmarks, the quarterly review), Strength (lift progression),
@@ -123,10 +124,12 @@ function GoalsTab() {
     <div>
       {error && <p style={{ color: "var(--danger)" }}>{error}</p>}
 
-      <BenchmarksCard version={version} />
+      <Collapsible title="How you compare" rememberAs="progress-compare">
+        <BenchmarksCard version={version} />
+      </Collapsible>
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div className="section-title">Body goals</div>
+      <Collapsible title="Body goals" hint={goals ? (active.length ? `${active.length} active` : "none yet") : undefined} rememberAs="progress-goals">
+      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", marginTop: 8 }}>
         <div style={{ display: "flex", gap: 6 }}>
           <button className="button-quiet" onClick={() => setLogging((v) => !v)}>
             + Scan
@@ -179,12 +182,21 @@ function GoalsTab() {
           ))}
         </details>
       )}
+      </Collapsible>
 
-      <RecentScans measurements={measurements} onChanged={reload} />
+      {measurements.length > 0 && (
+        <Collapsible title="Recent scans" hint={`${measurements.length} logged`} rememberAs="progress-scans">
+          <RecentScans measurements={measurements} onChanged={reload} />
+        </Collapsible>
+      )}
 
-      <QuarterlyReviewCard version={version} />
+      <Collapsible title="Quarterly goal review" rememberAs="progress-quarterly">
+        <QuarterlyReviewCard version={version} />
+      </Collapsible>
 
+      <Collapsible title="Compare periods" rememberAs="progress-goals-compare">
       <PeriodCompare
+        hideTitle
         reloadKey={version}
         load={async (a, b) => {
           const [sa, sb] = await Promise.all([api.getBodySummary(a.from, a.to), api.getBodySummary(b.from, b.to)]);
@@ -200,6 +212,7 @@ function GoalsTab() {
           );
         }}
       />
+      </Collapsible>
     </div>
   );
 }
@@ -571,10 +584,7 @@ function RecentScans({ measurements, onChanged }: { measurements: BodyMeasuremen
   if (measurements.length === 0) return null;
   const recent = [...measurements].reverse().slice(0, 5);
   return (
-    <details style={{ marginTop: 12 }}>
-      <summary className="text-dim" style={{ cursor: "pointer", fontSize: 13 }}>
-        Recent scans ({measurements.length} total)
-      </summary>
+    <>
       <div className="card" style={{ marginTop: 6, padding: 10 }}>
         {recent.map((m) => (
           <div key={m.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13, padding: "4px 0" }}>
@@ -598,7 +608,7 @@ function RecentScans({ measurements, onChanged }: { measurements: BodyMeasuremen
           </div>
         ))}
       </div>
-    </details>
+    </>
   );
 }
 
@@ -611,7 +621,6 @@ function BenchmarksCard({ version }: { version: number }) {
   if (!data.available) {
     return (
       <div className="card" style={{ marginBottom: 4 }}>
-        <strong style={{ color: "var(--navy)" }}>How you compare</strong>
         <p className="text-dim" style={{ fontSize: 13, marginBottom: 0 }}>
           {data.reason}{" "}
           <Link to="/settings" style={{ color: "var(--accent)" }}>
@@ -623,7 +632,6 @@ function BenchmarksCard({ version }: { version: number }) {
   }
   return (
     <div className="card" style={{ marginBottom: 4 }}>
-      <strong style={{ color: "var(--navy)" }}>How you compare</strong>
       {data.benchmarks.map((b) => (
         <div key={b.metric} style={{ marginTop: 8 }}>
           <div style={{ fontSize: 14 }}>
@@ -669,9 +677,8 @@ function QuarterlyReviewCard({ version }: { version: number }) {
 
   return (
     <div className="card" style={{ marginTop: 12 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <strong style={{ color: "var(--navy)" }}>Quarterly goal review</strong>
-        <select value={quarter} onChange={(e) => setQuarter(e.target.value)} style={{ padding: "4px 6px" }} aria-label="Quarter">
+      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center" }}>
+        <select value={quarter} onChange={(e) => setQuarter(e.target.value)} style={{ padding: "4px 6px", width: "100%" }} aria-label="Quarter">
           {options.map((q, i) => (
             <option key={q} value={q}>
               {i === 0 ? `${q.replace("-", " ")} (so far)` : q.replace("-", " ")}
@@ -725,8 +732,8 @@ function StrengthTab() {
 
   return (
     <div>
+      <Collapsible title="Strength progression" hint={series && series.length ? `${series.length} lift${series.length === 1 ? "" : "s"}` : undefined} rememberAs="progress-strength">
       <div className="card">
-        <strong style={{ color: "var(--navy)" }}>Strength progression</strong>
         <p className="text-dim" style={{ fontSize: 12, margin: "2px 0 8px" }}>
           Best set each session, as an estimated one-rep max (reps for bodyweight and band work).
         </p>
@@ -761,8 +768,11 @@ function StrengthTab() {
           </>
         )}
       </div>
+      </Collapsible>
 
+      <Collapsible title="Compare periods" rememberAs="progress-strength-compare">
       <PeriodCompare
+        hideTitle
         load={async (a, b) => {
           const [sa, sb] = await Promise.all([api.getStrengthSummary(a.from, a.to), api.getStrengthSummary(b.from, b.to)]);
           const rows: CompareRow[] = [
@@ -780,6 +790,7 @@ function StrengthTab() {
           return rows;
         }}
       />
+      </Collapsible>
     </div>
   );
 }
@@ -796,10 +807,12 @@ function BalanceTab() {
   const order = Object.keys(MUSCLE_LABELS);
   const coverage = [...data.coverage].sort((a, b) => order.indexOf(a.muscle) - order.indexOf(b.muscle));
 
+  const recovering = data.recovery.filter((r) => r.status === "RECOVERING").length;
+
   return (
     <div>
+      <Collapsible title="Recovery right now" hint={recovering ? `${recovering} recovering` : "all ready"} rememberAs="progress-recovery">
       <div className="card">
-        <strong style={{ color: "var(--navy)" }}>Recovery right now</strong>
         <p className="text-dim" style={{ fontSize: 12, margin: "2px 0 8px" }}>
           Each muscle's clock restarts when you train it: about 3 days as the main target, 2 as a helper, longer after very hard sets.
         </p>
@@ -814,8 +827,10 @@ function BalanceTab() {
         ))}
       </div>
 
+      </Collapsible>
+
+      <Collapsible title="Coverage, last 4 weeks" rememberAs="progress-coverage">
       <div className="card" style={{ marginTop: 12 }}>
-        <strong style={{ color: "var(--navy)" }}>Coverage, last 4 weeks</strong>
         <p className="text-dim" style={{ fontSize: 12, margin: "2px 0 8px" }}>
           Sets per week for each muscle, and how evenly its different angles were worked. Highlighted angles got no sets. The next training block will rotate them in.
         </p>
@@ -835,8 +850,11 @@ function BalanceTab() {
           </div>
         ))}
       </div>
+      </Collapsible>
 
+      <Collapsible title="Compare periods" rememberAs="progress-balance-compare">
       <PeriodCompare
+        hideTitle
         load={async (a, b) => {
           const [sa, sb] = await Promise.all([api.getStrengthSummary(a.from, a.to), api.getStrengthSummary(b.from, b.to)]);
           return order
@@ -849,6 +867,7 @@ function BalanceTab() {
             }));
         }}
       />
+      </Collapsible>
     </div>
   );
 }
@@ -903,11 +922,8 @@ function StepsTab() {
 
   return (
     <div>
+      <Collapsible title="Daily steps, last 30 days" hint={avg != null ? `${avg.toLocaleString()} avg` : undefined} rememberAs="progress-steps">
       <div className="card">
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <span className="swatch" style={{ background: ACTIVITY_COLORS.STEPS }} />
-          <strong style={{ color: "var(--navy)" }}>Daily steps, last 30 days</strong>
-        </div>
         <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: 6 }}>
           <span style={{ fontSize: 28, fontWeight: 700 }}>{avg != null ? avg.toLocaleString() : "—"}</span>
           <span className="text-dim" style={{ fontSize: 13 }}>
@@ -942,8 +958,10 @@ function StepsTab() {
         )}
       </div>
 
+      </Collapsible>
+
+      <Collapsible title="Average daily step goal" hint={goal != null ? goal.toLocaleString() : "not set"} rememberAs="progress-step-goal">
       <div className="card" style={{ marginTop: 12 }}>
-        <strong style={{ color: "var(--navy)" }}>Average daily step goal</strong>
         <p className="text-dim" style={{ fontSize: 12, margin: "2px 0 6px" }}>
           The goal is an average. Progress compares your average with it, and the calendar ticks the days you reached it.
         </p>
@@ -962,8 +980,11 @@ function StepsTab() {
         </div>
         {error && <p style={{ color: "var(--danger)", fontSize: 13 }}>{error}</p>}
       </div>
+      </Collapsible>
 
+      <Collapsible title="Compare periods" rememberAs="progress-steps-compare">
       <PeriodCompare
+        hideTitle
         reloadKey={version}
         load={async (a, b) => {
           const [sa, sb] = await Promise.all([api.getSteps(a.from, a.to), api.getSteps(b.from, b.to)]);
@@ -973,6 +994,7 @@ function StepsTab() {
           return rows;
         }}
       />
+      </Collapsible>
     </div>
   );
 }

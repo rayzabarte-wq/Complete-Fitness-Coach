@@ -113,10 +113,13 @@ export function DeltaRow({ row }: { row: CompareRow }) {
 
 export default function PeriodCompare({
   title = "Compare periods",
+  hideTitle = false,
   load,
   reloadKey,
 }: {
   title?: string;
+  /** Leave the title out when a collapsible header above already says it. */
+  hideTitle?: boolean;
   load: (current: Range, previous: Range) => Promise<CompareRow[]>;
   /** Change it to force a reload when the parent's data changes. */
   reloadKey?: unknown;
@@ -144,8 +147,13 @@ export default function PeriodCompare({
   return (
     <div className="card" style={{ marginTop: 12 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-        <strong style={{ color: "var(--navy)" }}>{title}</strong>
-        <select value={preset} onChange={(e) => setPreset(e.target.value as PresetKey)} style={{ padding: "4px 6px", maxWidth: "62%" }} aria-label="Periods to compare">
+        {!hideTitle && <strong style={{ color: "var(--navy)" }}>{title}</strong>}
+        <select
+          value={preset}
+          onChange={(e) => setPreset(e.target.value as PresetKey)}
+          style={{ padding: "4px 6px", ...(hideTitle ? { width: "100%" } : { maxWidth: "62%" }) }}
+          aria-label="Periods to compare"
+        >
           {PRESETS.map((p) => (
             <option key={p.key} value={p.key}>
               {p.label}
