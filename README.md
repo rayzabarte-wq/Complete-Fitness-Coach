@@ -206,17 +206,26 @@ What it drives:
   page's dropdowns come from the workout's gym.
 - **Server-side validation** of logged sets against that gym's equipment.
 
-Starting points (editable) when a gym is first used: Home = 5–45lb dumbbells,
-20–80lb barbell/EZ bar, all bands, bench + bar + rings; Regular gym = 5–100lb
-dumbbells, 45–315lb barbell, bench + bar; Visiting gym = 5–50lb dumbbells,
-bodyweight and a bench only (barbell, EZ bar and bands unticked). Defaults live in
-`backend/src/sport/lib/equipmentConfig.ts`; profiles are the `GymProfile` /
-`GymEquipment` / `CustomEquipment` tables (`GET /gyms`, `PUT /gyms/:id`,
-`PUT /gyms/active`, `/gyms/custom-equipment`), and custom exercises are
-`Exercise` rows with a `userId` (`POST`/`DELETE /exercises`). All are included
-in the data export and deleted with the account.
+Each gym starts from a **preset**, shown at the top of its editor. Home: *Standard
+home gym* (5–45lb dumbbells, 20–80lb barbell/EZ bar, all bands, bench + bar +
+rings). Regular gym: *Commercial gym* (5–100lb dumbbells, 45–315lb barbell,
+EZ bar, bands, bench + bar). Visiting gym: *Basic hotel gym* (5–50lb dumbbells,
+bench, bodyweight), *Well-equipped hotel gym* (dumbbells to 75lb, barbell to
+135lb, bench + bar) or *No equipment* (bodyweight + light/medium bands). The
+values are editable guesses, not facts about real gyms. After picking one you
+can change the min, max and step of any equipment type (or its exact weight
+list) and save; only what you change is stored, the rest keeps following the
+preset. **Reset to defaults** deletes your adjustments and re-applies the
+preset (equipment and accessories; the gym's name and your own-equipment
+ticks are kept), and choosing a different preset does the same with the new
+one. Presets live in `GYM_PRESETS` in `backend/src/sport/lib/equipmentConfig.ts`;
+the choice is `GymProfile.presetId` (`POST /gyms/:id/preset`). Profiles are the
+`GymProfile` / `GymEquipment` / `CustomEquipment` tables (`GET /gyms`,
+`PUT /gyms/:id`, `PUT /gyms/active`, `/gyms/custom-equipment`), and custom
+exercises are `Exercise` rows with a `userId` (`POST`/`DELETE /exercises`). All
+are included in the data export and deleted with the account.
 
-Upgrading: apply the `gym_profiles` migration (`npx prisma migrate deploy`, or
+Upgrading: apply the `gym_profiles` and `gym_preset` migrations (`npx prisma migrate deploy`, or
 `migrate dev` locally) and re-run the seed (`npx prisma db seed`) so catalog
 exercises get their bench / bar / rings requirements. The migration turns
 any equipment settings saved earlier into each user's Home gym. It also

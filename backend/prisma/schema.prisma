@@ -191,6 +191,9 @@ model GymProfile {
   // Editable label, e.g. "Garage" or "PureGym Woking".
   name String
   accessories Accessory[] @default([])
+  // The preset this gym follows for anything the user hasn't changed; null
+  // means the default preset for its kind (see sport/lib/equipmentConfig.ts).
+  presetId String?
   // Which of the user's own custom equipment (CustomEquipment) this gym has.
   customEquipmentIds String[] @default([])
 

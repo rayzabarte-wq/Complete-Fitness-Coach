@@ -62,46 +62,111 @@ export const GYM_KIND_LABEL: Record<GymKind, string> = {
   VISITING: "Visiting gym",
 };
 
-// Starting points for a gym that hasn't been configured. They are only
-// defaults: the Settings form lets the user change everything.
-//  - HOME: modest adjustable gear (what the app always assumed).
-//  - PUBLIC_GYM: full racks of dumbbells and plated bars, plenty of bands.
-//  - VISITING: a typical hotel/friend's gym: dumbbells and bodyweight only.
-const HOME_DEFAULTS = {
-  DUMBBELL: { enabled: true, minLb: 5, maxLb: 45, stepLb: 5 },
-  BARBELL: { enabled: true, minLb: 20, maxLb: 80, stepLb: 5 },
-  EZ_BAR: { enabled: true, minLb: 20, maxLb: 80, stepLb: 10 },
-  BAND: { enabled: true },
-  BODYWEIGHT: { enabled: true, minLb: 0, maxLb: 45, stepLb: 5 },
-};
-const KIND_DEFAULTS: Record<GymKind, Record<Equipment, { enabled: boolean; minLb?: number; maxLb?: number; stepLb?: number }>> = {
-  HOME: HOME_DEFAULTS,
-  PUBLIC_GYM: {
-    DUMBBELL: { enabled: true, minLb: 5, maxLb: 100, stepLb: 5 },
-    BARBELL: { enabled: true, minLb: 45, maxLb: 315, stepLb: 5 },
-    EZ_BAR: { enabled: true, minLb: 20, maxLb: 100, stepLb: 5 },
-    BAND: { enabled: true },
-    BODYWEIGHT: { enabled: true, minLb: 0, maxLb: 90, stepLb: 5 },
+// PRESETS are the starting points a gym can be set to. A gym uses its preset
+// for everything the person hasn't changed: an equipment type with no saved
+// row simply follows the preset, and "Reset to defaults" in Settings deletes
+// the saved rows and re-applies the preset (equipment and accessories).
+// Every value is an editable guess, not a fact about any real gym.
+interface PresetEquipment {
+  enabled: boolean;
+  minLb?: number;
+  maxLb?: number;
+  stepLb?: number;
+  bandLevels?: string[];
+}
+export interface GymPreset {
+  id: string;
+  kind: GymKind;
+  label: string;
+  description: string;
+  accessories: Accessory[];
+  equipment: Record<Equipment, PresetEquipment>;
+}
+
+export const GYM_PRESETS: GymPreset[] = [
+  {
+    id: "home_standard",
+    kind: "HOME",
+    label: "Standard home gym",
+    description: "Adjustable dumbbells to 45lb, barbell and EZ bar to 80lb, bands, bench, chin-up bar and rings.",
+    accessories: ["BENCH", "PULL_UP_BAR", "RINGS"],
+    equipment: {
+      DUMBBELL: { enabled: true, minLb: 5, maxLb: 45, stepLb: 5 },
+      BARBELL: { enabled: true, minLb: 20, maxLb: 80, stepLb: 5 },
+      EZ_BAR: { enabled: true, minLb: 20, maxLb: 80, stepLb: 10 },
+      BAND: { enabled: true, bandLevels: [...BAND_LEVELS] },
+      BODYWEIGHT: { enabled: true, minLb: 0, maxLb: 45, stepLb: 5 },
+    },
   },
-  VISITING: {
-    DUMBBELL: { enabled: true, minLb: 5, maxLb: 50, stepLb: 5 },
-    BARBELL: { enabled: false, minLb: 45, maxLb: 135, stepLb: 5 },
-    EZ_BAR: { enabled: false, minLb: 20, maxLb: 60, stepLb: 10 },
-    BAND: { enabled: false },
-    BODYWEIGHT: { enabled: true, minLb: 0, maxLb: 0, stepLb: 5 },
+  {
+    id: "commercial_gym",
+    kind: "PUBLIC_GYM",
+    label: "Commercial gym",
+    description: "Dumbbells to 100lb, barbell to 315lb, EZ bar, bands, bench and pull-up bar.",
+    accessories: ["BENCH", "PULL_UP_BAR"],
+    equipment: {
+      DUMBBELL: { enabled: true, minLb: 5, maxLb: 100, stepLb: 5 },
+      BARBELL: { enabled: true, minLb: 45, maxLb: 315, stepLb: 5 },
+      EZ_BAR: { enabled: true, minLb: 20, maxLb: 100, stepLb: 5 },
+      BAND: { enabled: true, bandLevels: [...BAND_LEVELS] },
+      BODYWEIGHT: { enabled: true, minLb: 0, maxLb: 90, stepLb: 5 },
+    },
   },
-};
-const DEFAULT_ACCESSORIES: Record<GymKind, Accessory[]> = {
-  HOME: ["BENCH", "PULL_UP_BAR", "RINGS"],
-  PUBLIC_GYM: ["BENCH", "PULL_UP_BAR"],
-  VISITING: ["BENCH"],
-};
-export const defaultAccessories = (kind: GymKind): Accessory[] => [...DEFAULT_ACCESSORIES[kind]];
+  {
+    id: "hotel_basic",
+    kind: "VISITING",
+    label: "Basic hotel gym",
+    description: "Light dumbbells to 50lb, a bench and bodyweight. No barbell or bands.",
+    accessories: ["BENCH"],
+    equipment: {
+      DUMBBELL: { enabled: true, minLb: 5, maxLb: 50, stepLb: 5 },
+      BARBELL: { enabled: false, minLb: 45, maxLb: 135, stepLb: 5 },
+      EZ_BAR: { enabled: false, minLb: 20, maxLb: 60, stepLb: 10 },
+      BAND: { enabled: false, bandLevels: [...BAND_LEVELS] },
+      BODYWEIGHT: { enabled: true, minLb: 0, maxLb: 0, stepLb: 5 },
+    },
+  },
+  {
+    id: "hotel_good",
+    kind: "VISITING",
+    label: "Well-equipped hotel gym",
+    description: "Dumbbells to 75lb, a barbell to 135lb, bench and pull-up bar.",
+    accessories: ["BENCH", "PULL_UP_BAR"],
+    equipment: {
+      DUMBBELL: { enabled: true, minLb: 5, maxLb: 75, stepLb: 5 },
+      BARBELL: { enabled: true, minLb: 45, maxLb: 135, stepLb: 5 },
+      EZ_BAR: { enabled: false, minLb: 20, maxLb: 60, stepLb: 10 },
+      BAND: { enabled: false, bandLevels: [...BAND_LEVELS] },
+      BODYWEIGHT: { enabled: true, minLb: 0, maxLb: 45, stepLb: 5 },
+    },
+  },
+  {
+    id: "travel_no_equipment",
+    kind: "VISITING",
+    label: "No equipment (bodyweight + bands)",
+    description: "Bodyweight, plus light and medium bands you've packed. No weights, bench or bar.",
+    accessories: [],
+    equipment: {
+      DUMBBELL: { enabled: false, minLb: 5, maxLb: 50, stepLb: 5 },
+      BARBELL: { enabled: false, minLb: 45, maxLb: 135, stepLb: 5 },
+      EZ_BAR: { enabled: false, minLb: 20, maxLb: 60, stepLb: 10 },
+      BAND: { enabled: true, bandLevels: ["Light", "Medium"] },
+      BODYWEIGHT: { enabled: true, minLb: 0, maxLb: 0, stepLb: 5 },
+    },
+  },
+];
+
+/** The first preset of a kind is that kind's default. */
+export const presetsFor = (kind: GymKind): GymPreset[] => GYM_PRESETS.filter((p) => p.kind === kind);
+export const defaultPreset = (kind: GymKind): GymPreset => presetsFor(kind)[0];
+/** The named preset if it belongs to this kind, otherwise the kind's default. */
+export const resolvePreset = (kind: GymKind, presetId?: string | null): GymPreset =>
+  presetsFor(kind).find((p) => p.id === presetId) ?? defaultPreset(kind);
 
 // For BODYWEIGHT, minLb is always 0 (plain bodyweight) and maxLb is the most
 // ADDED weight the person will use; maxLb 0 means "no added weight".
-function defaultRow(kind: GymKind, equipment: Equipment): EquipmentSettingRow {
-  const d = KIND_DEFAULTS[kind][equipment];
+function presetRow(preset: GymPreset, equipment: Equipment): EquipmentSettingRow {
+  const d = preset.equipment[equipment];
   return {
     equipment,
     enabled: d.enabled,
@@ -109,7 +174,7 @@ function defaultRow(kind: GymKind, equipment: Equipment): EquipmentSettingRow {
     maxLb: d.maxLb ?? null,
     stepLb: d.stepLb ?? null,
     customWeightsLb: [],
-    bandLevels: equipment === "BAND" ? [...BAND_LEVELS] : [],
+    bandLevels: equipment === "BAND" ? [...(d.bandLevels ?? BAND_LEVELS)] : [],
   };
 }
 
@@ -154,8 +219,8 @@ function buildWeights(kind: EquipmentKind, minLb: number, maxLb: number, stepLb:
   return weights;
 }
 
-function resolveOne(gymKind: GymKind, equipment: Equipment, row: EquipmentSettingRow | undefined): ResolvedEquipment {
-  const def = defaultRow(gymKind, equipment);
+function resolveOne(preset: GymPreset, equipment: Equipment, row: EquipmentSettingRow | undefined): ResolvedEquipment {
+  const def = presetRow(preset, equipment);
   const kind = EQUIPMENT_KIND[equipment];
   const enabled = row ? row.enabled : def.enabled;
   const minLb = kind === "band" ? 0 : kind === "bodyweight" ? 0 : row?.minLb ?? def.minLb ?? 0;
@@ -183,10 +248,10 @@ function resolveOne(gymKind: GymKind, equipment: Equipment, row: EquipmentSettin
   };
 }
 
-/** Merges a gym's saved rows over that gym kind's defaults, for every equipment type. */
-export function resolveEquipment(rows: EquipmentSettingRow[], gymKind: GymKind = "HOME"): Record<Equipment, ResolvedEquipment> {
+/** Merges a gym's saved rows over its preset (or the kind's default), for every equipment type. */
+export function resolveEquipment(rows: EquipmentSettingRow[], gymKind: GymKind = "HOME", presetId?: string | null): Record<Equipment, ResolvedEquipment> {
   const byType = new Map(rows.map((r) => [r.equipment, r]));
-  return Object.fromEntries(ALL_EQUIPMENT.map((e) => [e, resolveOne(gymKind, e, byType.get(e))])) as Record<Equipment, ResolvedEquipment>;
+  return Object.fromEntries(ALL_EQUIPMENT.map((e) => [e, resolveOne(resolvePreset(gymKind, presetId), e, byType.get(e))])) as Record<Equipment, ResolvedEquipment>;
 }
 
 /** Human-readable summary of a weight list, used in the AI prompt and errors. */

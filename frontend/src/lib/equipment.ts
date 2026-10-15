@@ -31,7 +31,16 @@ export interface Gym {
   accessories: Accessory[];
   /** Ids of the user's CustomEquipment items this gym has. */
   customEquipmentIds: string[];
+  /** The preset this gym follows for anything not changed. */
+  presetId: string;
   equipment: EquipmentSetting[];
+}
+
+export interface GymPreset {
+  id: string;
+  kind: GymKind;
+  label: string;
+  description: string;
 }
 
 export interface CustomEquipment {
@@ -43,6 +52,7 @@ export interface GymsResponse {
   gyms: Gym[];
   activeGymId: string;
   customEquipment: CustomEquipment[];
+  presets: GymPreset[];
   allBandLevels: string[];
   allAccessories: { value: Accessory; label: string }[];
 }

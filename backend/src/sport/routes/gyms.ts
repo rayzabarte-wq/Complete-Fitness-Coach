@@ -10,7 +10,10 @@ import {
   EQUIPMENT_KIND,
   MAX_CUSTOM_WEIGHTS,
   MAX_WEIGHT_OPTIONS,
+  GYM_PRESETS,
+  presetsFor,
   rangeValues,
+  resolvePreset,
 } from "../lib/equipmentConfig.js";
 import { getGym, listGyms } from "../services/gyms.js";
 
@@ -28,6 +31,7 @@ async function loadResponse(userId: string) {
     activeGymId: active.id,
     customEquipment,
     allBandLevels: BAND_LEVELS,
+    presets: GYM_PRESETS.map(({ id, kind, label, description }) => ({ id, kind, label, description })),
     allAccessories: ALL_ACCESSORIES.map((value) => ({ value, label: ACCESSORY_LABEL[value] })),
   };
 }
@@ -48,6 +52,29 @@ gymsRouter.put("/active", async (req: AuthedRequest, res) => {
   const gyms = await listGyms(userId);
   if (!gyms.some((g) => g.id === parsed.data.gymId)) return res.status(404).json({ error: "Gym not found" });
   await prisma.user.update({ where: { id: userId }, data: { activeGymId: parsed.data.gymId } });
+  res.json(await loadResponse(userId));
+});
+
+// POST /gyms/:id/preset - set this gym back to a preset: pass presetId to
+// switch to a different one, or omit it to reset to the preset it already
+// follows. Either way every adjustment to equipment weights and the
+// accessory tick-boxes is discarded and replaced by the preset's values.
+// The gym's name and its ticked custom equipment are kept.
+gymsRouter.post("/:id/preset", async (req: AuthedRequest, res) => {
+  const parsed = z.object({ presetId: z.string().optional() }).safeParse(req.body ?? {});
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  const userId = req.userId!;
+  const gym = await prisma.gymProfile.findFirst({ where: { id: req.params.id, userId } });
+  if (!gym) return res.status(404).json({ error: "Gym not found" });
+  const wanted = parsed.data.presetId;
+  if (wanted && !presetsFor(gym.kind).some((p) => p.id === wanted)) {
+    return res.status(400).json({ error: "That preset isn't available for this gym" });
+  }
+  const preset = resolvePreset(gym.kind, wanted ?? gym.presetId);
+  await prisma.$transaction([
+    prisma.gymEquipment.deleteMany({ where: { gymId: gym.id } }),
+    prisma.gymProfile.update({ where: { id: gym.id }, data: { presetId: preset.id, accessories: preset.accessories } }),
+  ]);
   res.json(await loadResponse(userId));
 });
 

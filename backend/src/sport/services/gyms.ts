@@ -7,7 +7,8 @@ import {
   GYM_KIND_LABEL,
   GymKind,
   ResolvedEquipment,
-  defaultAccessories,
+  defaultPreset,
+  resolvePreset,
   resolveEquipment,
 } from "../lib/equipmentConfig.js";
 
@@ -18,6 +19,8 @@ export interface ResolvedGym {
   name: string;
   accessories: Accessory[];
   customEquipmentIds: string[];
+  /** The preset this gym follows for anything not changed (kind default if never chosen). */
+  presetId: string;
   equipment: Record<Equipment, ResolvedEquipment>;
 }
 
@@ -28,7 +31,7 @@ export async function ensureGyms(userId: string): Promise<void> {
   const missing = ALL_GYM_KINDS.filter((k) => !have.has(k));
   if (missing.length === 0) return;
   await prisma.gymProfile.createMany({
-    data: missing.map((kind) => ({ userId, kind, name: GYM_KIND_LABEL[kind], accessories: defaultAccessories(kind) })),
+    data: missing.map((kind) => ({ userId, kind, name: GYM_KIND_LABEL[kind], accessories: defaultPreset(kind).accessories, presetId: defaultPreset(kind).id })),
     skipDuplicates: true,
   });
 }
@@ -45,7 +48,8 @@ export async function listGyms(userId: string): Promise<ResolvedGym[]> {
       name: g.name,
       accessories: g.accessories,
       customEquipmentIds: g.customEquipmentIds,
-      equipment: resolveEquipment(g.equipment, g.kind),
+      presetId: resolvePreset(g.kind, g.presetId).id,
+      equipment: resolveEquipment(g.equipment, g.kind, g.presetId),
     }));
 }
 

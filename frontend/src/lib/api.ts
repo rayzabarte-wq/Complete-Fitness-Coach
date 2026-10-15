@@ -660,6 +660,9 @@ export const api = {
   getGyms: () => request<GymsResponse>("/gyms"),
   saveGym: (id: string, data: GymUpdate) =>
     request<GymsResponse>(`/gyms/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  /** Applies a preset to a gym (or, with no presetId, resets it to the preset it follows). */
+  applyGymPreset: (id: string, presetId?: string) =>
+    request<GymsResponse>(`/gyms/${id}/preset`, { method: "POST", body: JSON.stringify({ presetId }) }),
   /** Remembers which gym the workout page starts on. */
   setActiveGym: (gymId: string) =>
     request<GymsResponse>("/gyms/active", { method: "PUT", body: JSON.stringify({ gymId }) }),

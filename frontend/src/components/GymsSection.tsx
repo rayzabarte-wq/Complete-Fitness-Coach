@@ -75,6 +75,8 @@ function CheckRow({ label, checked, onChange, bold }: { label: string; checked: 
 export default function GymsSection() {
   const [data, setData] = useState<GymsResponse | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Bumped when a preset is applied so the editor reloads its form fields.
+  const [resetKey, setResetKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -119,7 +121,16 @@ export default function GymsSection() {
             </button>
           ))}
         </div>
-        <GymEditor key={gym.id} gym={gym} data={data} onSaved={setData} />
+        <GymEditor
+          key={`${gym.id}-${resetKey}`}
+          gym={gym}
+          data={data}
+          onSaved={setData}
+          onPreset={(res) => {
+            setData(res);
+            setResetKey((k) => k + 1);
+          }}
+        />
       </div>
 
       <CustomEquipmentCard data={data} onChanged={setData} />
@@ -128,7 +139,17 @@ export default function GymsSection() {
   );
 }
 
-function GymEditor({ gym, data, onSaved }: { gym: Gym; data: GymsResponse; onSaved: (r: GymsResponse) => void }) {
+function GymEditor({
+  gym,
+  data,
+  onSaved,
+  onPreset,
+}: {
+  gym: Gym;
+  data: GymsResponse;
+  onSaved: (r: GymsResponse) => void;
+  onPreset: (r: GymsResponse) => void;
+}) {
   const [name, setName] = useState(gym.name);
   const [drafts, setDrafts] = useState<EquipmentDraft[]>(gym.equipment.map(toDraft));
   const [accessories, setAccessories] = useState<Accessory[]>(gym.accessories);
@@ -136,6 +157,24 @@ function GymEditor({ gym, data, onSaved }: { gym: Gym; data: GymsResponse; onSav
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [confirmReset, setConfirmReset] = useState(false);
+  const [presetBusy, setPresetBusy] = useState(false);
+  const presets = data.presets.filter((p) => p.kind === gym.kind);
+  const preset = presets.find((p) => p.id === gym.presetId) ?? presets[0];
+
+  async function applyPreset(presetId?: string) {
+    setError(null);
+    setMessage(null);
+    setPresetBusy(true);
+    try {
+      onPreset(await api.applyGymPreset(gym.id, presetId));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't apply that");
+      setPresetBusy(false);
+      return;
+    }
+    setConfirmReset(false);
+  }
 
   function update(equipment: EquipmentDraft["equipment"], patch: Partial<EquipmentDraft>) {
     setMessage(null);
@@ -183,6 +222,48 @@ function GymEditor({ gym, data, onSaved }: { gym: Gym; data: GymsResponse; onSav
 
   return (
     <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ background: "var(--surface-2)", borderRadius: 8, padding: 10, fontSize: 13 }}>
+        <strong>Starting point</strong>
+        {presets.length > 1 ? (
+          <select
+            value={preset.id}
+            disabled={presetBusy}
+            onChange={(e) => applyPreset(e.target.value)}
+            style={{ ...wideInput, marginTop: 6 }}
+            aria-label="Gym preset"
+          >
+            {presets.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <div style={{ marginTop: 4 }}>{preset.label}</div>
+        )}
+        <div className="text-dim" style={{ marginTop: 4 }}>
+          {preset.description} Change any weights below and save; they're yours until you reset.
+          {presets.length > 1 && " Picking a different starting point replaces your equipment settings for this gym."}
+        </div>
+        {!confirmReset ? (
+          <button className="button-secondary" disabled={presetBusy} onClick={() => setConfirmReset(true)} style={{ marginTop: 8, fontSize: 12, padding: "6px 10px" }}>
+            Reset to defaults
+          </button>
+        ) : (
+          <div style={{ marginTop: 8 }}>
+            <div>Reset this gym's equipment, weights and accessories to “{preset.label}”? Your changes here will be lost (the gym's name and your own equipment ticks stay).</div>
+            <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+              <button className="button-primary" disabled={presetBusy} onClick={() => applyPreset()} style={{ flex: 1, fontSize: 12, padding: "6px 10px" }}>
+                {presetBusy ? "Resetting..." : "Yes, reset"}
+              </button>
+              <button className="button-secondary" disabled={presetBusy} onClick={() => setConfirmReset(false)} style={{ flex: 1, fontSize: 12, padding: "6px 10px" }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
       <label style={{ fontSize: 13 }}>
         <span className="text-dim">Name</span>
         <input type="text" value={name} maxLength={60} onChange={(e) => setName(e.target.value)} style={{ ...wideInput, marginTop: 4 }} />
