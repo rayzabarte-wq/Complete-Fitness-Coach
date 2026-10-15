@@ -983,6 +983,22 @@ session-date comparisons happen on the server using its own timezone. For
 a single-user personal deployment this is unlikely to matter, but it's
 worth knowing about before relying on the dashboard right at a day boundary.
 
+## Admin area and in-app messages
+
+An owner-only page (Settings → **Admin**) for looking after the app's users.
+
+- **Who is an admin:** set `ADMIN_EMAILS` on the backend service in Railway to a comma-separated list of emails (for example `ray.zabarte@gmail.com`), then redeploy. Nobody else can see the page, and an admin must have 2FA switched on to use it.
+- **Users:** everyone who has signed up, with join date, last seen, workouts logged and 2FA status, plus counts for new and active users in the last 7 days. Only account basics and counts are shown: no training, body, nutrition or consent data.
+- **Suspend / reinstate:** blocks login and every API call straight away (and the Apple Health upload token), keeping the data. Reinstate undoes it.
+- **Delete:** permanent; the admin types the person's email to confirm. Same effect as the person deleting their own account.
+- **Messages:** write a title and message to everyone or one person. It appears as a card at the top of their Calendar until they dismiss it or it expires (default 2 weeks). You can see how many people dismissed it and withdraw it.
+- **Activity log:** every suspend, reinstate, delete and message is recorded with who did it.
+- "Last seen" is updated at most once an hour whenever a signed-in account uses the app.
+- Admin accounts can't be suspended or deleted from this page.
+- Messages only reach people when they open the app. Phone push notifications are not built.
+
+Upgrade note: adds a migration (`20261016090000_admin_and_messages`) that runs with the usual `prisma migrate deploy`.
+
 ## iPhone / Safari polish
 
 Beyond the responsive layout itself, a few iOS-specific fixes are baked in:

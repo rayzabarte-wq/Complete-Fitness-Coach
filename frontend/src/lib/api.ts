@@ -606,6 +606,46 @@ function errorMessage(error: unknown, status: number): string {
   return `Request failed: ${status}`;
 }
 
+export interface AppMessage {
+  id: string;
+  title: string;
+  body: string;
+  createdAt: string;
+}
+export interface AdminUser {
+  id: string;
+  email: string;
+  createdAt: string;
+  lastSeenAt: string | null;
+  totpEnabled: boolean;
+  suspendedAt: string | null;
+  isAdmin: boolean;
+  sessionCount: number;
+  lastSessionAt: string | null;
+}
+export interface AdminUsersResponse {
+  summary: { total: number; newLast7Days: number; activeLast7Days: number; suspended: number };
+  users: AdminUser[];
+}
+export interface AdminMessage {
+  id: string;
+  title: string;
+  body: string;
+  createdAt: string;
+  expiresAt: string | null;
+  targetEmail: string | null;
+  everyone: boolean;
+  dismissedBy: number;
+}
+export interface AdminLogEntry {
+  id: string;
+  adminEmail: string;
+  action: string;
+  targetEmail: string | null;
+  detail: string | null;
+  createdAt: string;
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const token = auth.getToken();
   const res = await fetch(`${API_URL}${path}`, {
@@ -926,6 +966,21 @@ export const api = {
     request<void>(`/body/goals/${id}`, { method: "PATCH", body: JSON.stringify({ status }) }),
   getQuarterReview: (quarter?: string) => request<QuarterReview>(`/body/review${qs({ quarter })}`),
   getBenchmarks: () => request<Benchmarks>("/body/benchmarks"),
+
+  // --- Messages from the app's owner, and the admin area ---------------------
+  getMessages: () => request<AppMessage[]>("/messages"),
+  dismissMessage: (id: string) => request<void>(`/messages/${id}/dismiss`, { method: "POST" }),
+  adminMe: () => request<{ isAdmin: boolean; totpEnabled: boolean }>("/admin/me"),
+  adminUsers: () => request<AdminUsersResponse>("/admin/users"),
+  adminSuspend: (id: string) => request<{ ok: true }>(`/admin/users/${id}/suspend`, { method: "POST" }),
+  adminReinstate: (id: string) => request<{ ok: true }>(`/admin/users/${id}/reinstate`, { method: "POST" }),
+  adminDeleteUser: (id: string, confirmEmail: string) =>
+    request<void>(`/admin/users/${id}`, { method: "DELETE", body: JSON.stringify({ confirmEmail }) }),
+  adminMessages: () => request<AdminMessage[]>("/admin/messages"),
+  adminSendMessage: (data: { title: string; body: string; targetUserId?: string; expiresInDays?: number }) =>
+    request<{ id: string }>("/admin/messages", { method: "POST", body: JSON.stringify(data) }),
+  adminWithdrawMessage: (id: string) => request<void>(`/admin/messages/${id}`, { method: "DELETE" }),
+  adminLog: () => request<AdminLogEntry[]>("/admin/log"),
 
   // --- Nutrition ------------------------------------------------------------
   getNutrition: (from: string, to: string) => request<NutritionResponse>(`/nutrition${qs({ from, to })}`),

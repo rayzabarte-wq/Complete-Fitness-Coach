@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, DayForecast, DaySummary, PlannedSession, SessionType, MovementPattern, StravaActivity, GolfSessionType, GolfSessionPlan } from "../lib/api.js";
 import { ACTIVITY_COLORS, FOCUS_LABELS, activityForSessionType } from "../lib/activity.js";
 import { quoteForDate } from "../lib/quotes.js";
+import MessageCards from "../components/MessageCards.js";
 import { requestLocation, parseLocalDate, formatLocalDateKey } from "../lib/location.js";
 import {
   fullLabelFor,
@@ -204,6 +205,8 @@ export default function Calendar() {
           </div>
         )}
       </div>
+
+      <MessageCards />
 
       <figure className="card" style={{ margin: "0 0 12px", borderLeft: "4px solid var(--sun)" }}>
         <blockquote style={{ margin: 0, fontSize: 14, fontStyle: "italic", lineHeight: 1.45 }}>“{quote.text}”</blockquote>

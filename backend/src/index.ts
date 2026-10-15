@@ -28,6 +28,8 @@ import { bodyRouter } from "./routes/body.js";
 import { stepsRouter } from "./routes/steps.js";
 import { nutritionRouter } from "./routes/nutrition.js";
 import { ingestRouter } from "./routes/ingest.js";
+import { adminRouter } from "./routes/admin.js";
+import { messagesRouter } from "./routes/messages.js";
 import { requireAuth } from "./lib/requireAuth.js";
 
 const app = express();
@@ -81,6 +83,9 @@ app.use("/consent", requireAuth, consentRouter);
 app.use("/body", requireAuth, bodyRouter);
 app.use("/steps", requireAuth, stepsRouter);
 app.use("/nutrition", requireAuth, nutritionRouter);
+app.use("/messages", requireAuth, messagesRouter);
+// Owner-only area (see lib/requireAdmin.ts): user list, suspend/delete, messages.
+app.use("/admin", requireAuth, adminRouter);
 
 // Last-resort handler for anything a route didn't catch itself: log it and
 // answer with a readable JSON error instead of crashing or hanging.

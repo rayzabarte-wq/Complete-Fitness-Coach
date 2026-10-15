@@ -17,6 +17,10 @@ export default function Settings({ onLoggedOut }: { onLoggedOut: () => void }) {
     api.getProfile().then(setProfile);
   }, [version]);
   const reload = () => setVersion((v) => v + 1);
+  const [isAdmin, setIsAdmin] = useState(false);
+  useEffect(() => {
+    api.adminMe().then((r) => setIsAdmin(r.isAdmin)).catch(() => {});
+  }, []);
   const [server, setServer] = useState<ServerStatus | null>(null);
   useEffect(() => {
     getServerStatus().then(setServer);
@@ -85,6 +89,12 @@ export default function Settings({ onLoggedOut }: { onLoggedOut: () => void }) {
       <Collapsible title="Your data">
         <YourDataSection />
       </Collapsible>
+
+      {isAdmin && (
+        <Link to="/admin" className="button-secondary" style={{ display: "block", textAlign: "center", textDecoration: "none", marginTop: 16 }}>
+          Admin
+        </Link>
+      )}
 
       <button
         className="button-secondary"

@@ -28,8 +28,9 @@ async function requireIngestToken(req: IngestRequest, res: Response, next: NextF
   const header = req.headers.authorization;
   const token = header?.startsWith("Bearer ") ? header.slice(7).trim() : null;
   if (!token) return res.status(401).json({ error: "Missing upload token" });
-  const user = await prisma.user.findUnique({ where: { ingestTokenHash: hashIngestToken(token) }, select: { id: true } });
+  const user = await prisma.user.findUnique({ where: { ingestTokenHash: hashIngestToken(token) }, select: { id: true, suspendedAt: true } });
   if (!user) return res.status(401).json({ error: "Upload token not recognised — create a new one in Settings." });
+  if (user.suspendedAt) return res.status(403).json({ error: "This account has been suspended." });
   if (!(await hasConsent(user.id, "BODY_DATA"))) return res.status(403).json({ error: CONSENT_REQUIRED_MESSAGE.BODY_DATA });
   req.userId = user.id;
   next();

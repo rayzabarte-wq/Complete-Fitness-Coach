@@ -6,6 +6,7 @@ import Settings from "./pages/Settings.js";
 import Calendar, { DayDetail } from "./pages/Calendar.js";
 import Progress from "./pages/Progress.js";
 import Plan from "./pages/Plan.js";
+import Admin from "./pages/Admin.js";
 import { api, auth } from "./lib/api.js";
 import { PlanProvider } from "./lib/planContext.js";
 import { ConsentOnboarding } from "./components/Consent.js";
@@ -99,6 +100,7 @@ export default function App() {
               <Route path="/progress" element={<Progress />} />
               <Route path="/settings" element={<Settings onLoggedOut={() => setLoggedIn(false)} />} />
               <Route path="/plan" element={<Plan />} />
+              <Route path="/admin" element={<Admin />} />
             </Routes>
           </main>
 

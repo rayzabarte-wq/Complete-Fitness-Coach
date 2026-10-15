@@ -180,6 +180,7 @@ accountRouter.delete("/", requireAuth, async (req: AuthedRequest, res) => {
   // that point at them don't block account deletion) — remove them now that
   // the user's sets are gone.
   await prisma.exercise.deleteMany({ where: { userId: req.userId } });
+  await prisma.announcement.deleteMany({ where: { targetUserId: req.userId } });
 
   res.status(204).send();
 });

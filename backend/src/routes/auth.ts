@@ -2,7 +2,7 @@ import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
-import { requireAuth, AuthedRequest } from "../lib/requireAuth.js";
+import { requireAuth, AuthedRequest, SUSPENDED_MESSAGE } from "../lib/requireAuth.js";
 import {
   hashPassword,
   verifyPassword,
@@ -91,6 +91,10 @@ authRouter.post("/login", loginLimiter, async (req, res) => {
   // used to enumerate whether an email is registered.
   if (!user || !(await verifyPassword(password, user.passwordHash))) {
     return res.status(401).json({ error: "Invalid email or password" });
+  }
+
+  if (user.suspendedAt) {
+    return res.status(403).json({ error: SUSPENDED_MESSAGE });
   }
 
   // A fresh trust token is only issued when a code is actually entered, so

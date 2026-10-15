@@ -63,6 +63,14 @@ model User {
   // password also signs out every device that was still logged in.
   sessionsValidAfter DateTime?
 
+  // Set by an admin to block this account from logging in or using the API,
+  // without deleting any data. Cleared to reinstate. See routes/admin.ts.
+  suspendedAt DateTime?
+  // When the account was last used, updated at most once an hour (see
+  // lib/requireAuth.ts) — enough for "active this week", no finer.
+  lastSeenAt  DateTime?
+
+  announcementReads AnnouncementRead[]
   sessions         WorkoutSession[]
   recommendations  Recommendation[]
   plannedSessions  PlannedSession[]
@@ -942,4 +950,45 @@ model TrainingBlock {
   swapLog     Json     @default("[]")
 
   @@index([userId, focus, closedAt])
+}
+
+
+// A message from the app's admin to its users, shown as a card at the top of
+// the Calendar until dismissed. targetUserId null = everyone; otherwise just
+// that person. See routes/admin.ts (write) and routes/messages.ts (read).
+model Announcement {
+  id           String   @id @default(cuid())
+  title        String
+  body         String
+  targetUserId String?
+  createdAt    DateTime @default(now())
+  expiresAt    DateTime?
+  reads        AnnouncementRead[]
+
+  @@index([createdAt])
+}
+
+// Records that someone dismissed a message, so it doesn't come back.
+model AnnouncementRead {
+  announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  announcementId String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId         String
+  dismissedAt    DateTime     @default(now())
+
+  @@id([announcementId, userId])
+}
+
+// What admins did to accounts (suspend, reinstate, delete, message). The
+// admin and target are plain values, not relations, so the record outlives
+// a deleted account.
+model AdminAuditLog {
+  id          String   @id @default(cuid())
+  adminEmail  String
+  action      String
+  targetEmail String?
+  detail      String?
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
 }
