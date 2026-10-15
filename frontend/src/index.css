@@ -1,27 +1,70 @@
-/* Navy + brick red on white. White/off-white carries most of the screen,
-   navy is structure (header, nav, headings), brick red is the accent for the
-   things that should draw the eye: primary buttons, the active tab, a hit
-   goal. Soft greys for secondary text and dividers. */
+/* Teal & Sunshine. Warm sand carries most of the screen, teal is structure
+   and action (header, headings, buttons, links, the selected state), sunshine
+   yellow is the small highlight (active tab bar, goal rings, today's marker).
+   Warm greys for secondary text. Dark mode follows the system setting and
+   keeps the same teal and sun, on deep green-grey. Colours are always used
+   through these tokens so both themes stay in step. */
 :root {
   color-scheme: light;
-  --bg: #f6f5f2;
-  --surface: #ffffff;
-  --surface-2: #f0eee9;
-  --border: #e2dfd8;
-  --text: #1b2333;
-  --text-dim: #5f6673;
-  --navy: #1f2f4d;
-  --navy-2: #2c4068;
+  --bg: #f8f3ea;
+  --surface: #fffdf9;
+  --surface-2: #f1ebdd;
+  --border: #e9e0cf;
+  --text: #1f2f33;
+  --text-dim: #5d6e70;
+  /* "navy" is the structural ink: headings, labels, quiet buttons. Kept under
+     its old name so existing styles pick up the new colour. */
+  --navy: #1a6b71;
+  --navy-2: #13565b;
   --on-navy: #ffffff;
-  --accent: #a63d2f; /* brick red */
-  --accent-soft: #f6e7e4;
+  /* The bar behind the header and chart tooltips, with --on-navy text. */
+  --bar: #1a6b71;
+  /* Action colour: buttons, links, selected state. */
+  --accent: #1f7a80;
+  --accent-soft: #dcefee;
   --on-accent: #ffffff;
-  --danger: #a63d2f;
+  /* The highlight. */
+  --sun: #f2b134;
+  --on-sun: #2b2005;
+  --sun-soft: #fdf0cc;
+  --danger: #b8432f;
+  --danger-soft: #fbe4de;
   /* Change arrows: better / worse. Colour supports, never replaces, the
      arrow direction and the words. */
   --good: #2e7d5b;
-  --bad: #a63d2f;
-  font-family: "Inter", -apple-system, "Segoe UI", sans-serif;
+  --good-soft: #e1f1e8;
+  --bad: #b8432f;
+  --shadow: 0 1px 2px rgba(31, 47, 51, 0.06), 0 6px 16px rgba(31, 47, 51, 0.06);
+  --radius: 16px;
+  font-family: "DM Sans", "Inter", -apple-system, "Segoe UI", sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #14201f;
+    --surface: #1d2d2c;
+    --surface-2: #263836;
+    --border: #2b3d3c;
+    --text: #eef5f2;
+    --text-dim: #a6bbb7;
+    --navy: #6fcfd1;
+    --navy-2: #8adadc;
+    --on-navy: #ffffff;
+    --bar: #1b5c61;
+    --accent: #4fb8bb;
+    --accent-soft: #223f40;
+    --on-accent: #0c2022;
+    --sun: #f4c14f;
+    --on-sun: #2b2005;
+    --sun-soft: #3a3520;
+    --danger: #ff8a73;
+    --danger-soft: #402a28;
+    --good: #6fcf9f;
+    --good-soft: #223a30;
+    --bad: #ff8a73;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 16px rgba(0, 0, 0, 0.25);
+  }
 }
 
 * {
@@ -49,6 +92,8 @@ h1,
 h2,
 h3 {
   color: var(--navy);
+  font-family: "Poppins", "DM Sans", -apple-system, "Segoe UI", sans-serif;
+  font-weight: 600;
 }
 
 button {
@@ -69,7 +114,7 @@ textarea {
   color: var(--text);
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 10px;
 }
 
 input:focus,
@@ -84,16 +129,17 @@ a:focus-visible {
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius);
   padding: 16px;
+  box-shadow: var(--shadow);
 }
 
 .button-primary {
   background: var(--accent);
   color: var(--on-accent);
   border: none;
-  border-radius: 8px;
-  padding: 10px 16px;
+  border-radius: 12px;
+  padding: 11px 18px;
   font-weight: 600;
   cursor: pointer;
 }
@@ -107,8 +153,8 @@ a:focus-visible {
   background: var(--surface);
   color: var(--navy);
   border: 1px solid var(--navy);
-  border-radius: 8px;
-  padding: 9px 14px;
+  border-radius: 12px;
+  padding: 10px 16px;
   font-weight: 600;
   cursor: pointer;
 }
@@ -117,7 +163,7 @@ a:focus-visible {
   background: var(--surface-2);
   color: var(--text-dim);
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   padding: 6px 10px;
   font-size: 12px;
   cursor: pointer;
@@ -137,7 +183,8 @@ a:focus-visible {
   background: var(--surface);
   color: var(--navy);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 12px;
+  box-shadow: var(--shadow);
   font: inherit;
   font-size: 13px;
   font-weight: 700;
@@ -167,7 +214,7 @@ a:focus-visible {
   gap: 4px;
   background: var(--surface-2);
   padding: 4px;
-  border-radius: 10px;
+  border-radius: 14px;
   margin-bottom: 14px;
   overflow-x: auto;
 }
@@ -177,7 +224,7 @@ a:focus-visible {
   border: none;
   background: none;
   padding: 8px 10px;
-  border-radius: 8px;
+  border-radius: 10px;
   font-size: 13px;
   font-weight: 600;
   color: var(--text-dim);
@@ -188,7 +235,7 @@ a:focus-visible {
 .subtabs button[aria-selected="true"] {
   background: var(--surface);
   color: var(--navy);
-  box-shadow: 0 1px 2px rgba(31, 47, 77, 0.12);
+  box-shadow: 0 1px 3px rgba(31, 47, 51, 0.16);
 }
 
 .chip {
@@ -208,10 +255,39 @@ a:focus-visible {
   color: var(--accent);
 }
 
+/* The sunshine highlight: a chip for something to notice, e.g. a streak. */
+.chip-sun {
+  background: var(--sun);
+  color: var(--on-sun);
+}
+
 .swatch {
   display: inline-block;
   width: 10px;
   height: 10px;
   border-radius: 3px;
   flex-shrink: 0;
+}
+
+/* Progress ring: --pct is 0-100. Sun on a pale sun track, number in the middle. */
+.ring {
+  --pct: 0;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: conic-gradient(var(--sun) calc(var(--pct) * 1%), var(--sun-soft) 0);
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.ring b {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text);
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 700;
 }
