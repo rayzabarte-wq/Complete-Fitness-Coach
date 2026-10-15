@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, DayForecast, DaySummary, PlannedSession, SessionType, MovementPattern, StravaActivity, GolfSessionType, GolfSessionPlan } from "../lib/api.js";
 import { ACTIVITY_COLORS, FOCUS_LABELS, activityForSessionType } from "../lib/activity.js";
@@ -75,6 +75,11 @@ function sevenDaysFrom(weekOffset: number): { key: string; date: Date }[] {
     days.push({ key: formatLocalDateKey(d), date: d });
   }
   return days;
+}
+
+function greeting(now: Date): string {
+  const h = now.getHours();
+  return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
 }
 
 export default function Calendar() {
@@ -177,7 +182,30 @@ export default function Calendar() {
 
   return (
     <div>
-      <figure className="card" style={{ margin: "0 0 12px", borderLeft: "4px solid var(--accent)" }}>
+      <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 12 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontFamily: '"Poppins", sans-serif', fontWeight: 600, fontSize: 18, color: "var(--navy)" }}>{greeting(new Date())}</div>
+          <div className="text-dim" style={{ fontSize: 13, marginTop: 2 }}>
+            {workoutCount === 0
+              ? "Nothing planned for these days yet."
+              : doneCount === workoutCount
+                ? `All ${workoutCount} planned sessions done. Well played.`
+                : `${doneCount} of ${workoutCount} planned sessions done`}
+          </div>
+        </div>
+        {workoutCount > 0 && (
+          <div
+            className="ring"
+            style={{ "--pct": Math.round((doneCount / workoutCount) * 100) } as CSSProperties}
+            role="img"
+            aria-label={`${doneCount} of ${workoutCount} sessions done`}
+          >
+            <b>{Math.round((doneCount / workoutCount) * 100)}%</b>
+          </div>
+        )}
+      </div>
+
+      <figure className="card" style={{ margin: "0 0 12px", borderLeft: "4px solid var(--sun)" }}>
         <blockquote style={{ margin: 0, fontSize: 14, fontStyle: "italic", lineHeight: 1.45 }}>“{quote.text}”</blockquote>
         <figcaption className="text-dim" style={{ fontSize: 12, marginTop: 6 }}>
           — {quote.author}, {quote.context}

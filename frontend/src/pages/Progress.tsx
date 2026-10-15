@@ -281,7 +281,7 @@ function GoalCard({ goal, onChanged }: { goal: BodyGoal; onChanged: () => void }
           </div>
         </div>
         {goal.status === "ACTIVE" ? (
-          <span className={good ? "chip" : "chip chip-accent"} style={good ? { background: "#e6f2ec", color: "var(--good)" } : undefined}>
+          <span className={good ? "chip" : "chip chip-accent"} style={good ? { background: "var(--good-soft)", color: "var(--good)" } : undefined}>
             {pace.state === "REACHED" ? "✓ " : pace.state === "BEHIND" ? "▼ " : pace.state === "AHEAD" ? "▲ " : ""}
             {pace.label}
           </span>

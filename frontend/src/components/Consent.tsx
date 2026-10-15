@@ -99,7 +99,7 @@ export function ConsentSettings({ onChanged }: { onChanged?: () => void }) {
         <div key={p.purpose} style={{ padding: "10px 0", borderTop: "1px solid var(--border)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
             <strong style={{ fontSize: 14 }}>{p.title}</strong>
-            <span className={p.granted ? "chip" : "chip"} style={p.granted ? { background: "#e6f2ec", color: "var(--good)" } : undefined}>
+            <span className={p.granted ? "chip" : "chip"} style={p.granted ? { background: "var(--good-soft)", color: "var(--good)" } : undefined}>
               {p.granted ? "✓ On" : "Off"}
             </span>
           </div>

@@ -416,11 +416,11 @@ function tomorrowKey(todayKey: string): string {
 }
 
 const BADGES: Record<SavedWorkout["status"], { label: string; bg: string; color: string }> = {
-  TODAY: { label: "Today", bg: "#e6edf7", color: "var(--navy)" },
-  DONE: { label: "Done ✓", bg: "#e3f1ea", color: "var(--good)" },
-  MISSED: { label: "Missed", bg: "var(--accent-soft)", color: "var(--accent)" },
-  SCHEDULED: { label: "Scheduled", bg: "#e6edf7", color: "var(--navy)" },
-  MOVED: { label: "Moved", bg: "#eceae4", color: "var(--text-dim)" },
+  TODAY: { label: "Today", bg: "var(--sun-soft)", color: "var(--navy)" },
+  DONE: { label: "Done ✓", bg: "var(--good-soft)", color: "var(--good)" },
+  MISSED: { label: "Missed", bg: "var(--danger-soft)", color: "var(--danger)" },
+  SCHEDULED: { label: "Scheduled", bg: "var(--accent-soft)", color: "var(--navy)" },
+  MOVED: { label: "Moved", bg: "var(--surface-2)", color: "var(--text-dim)" },
 };
 
 /** Workouts built on earlier days (or scheduled ahead), newest first. Any of

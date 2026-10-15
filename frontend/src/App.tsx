@@ -74,7 +74,7 @@ export default function App() {
               position: "sticky",
               top: 0,
               zIndex: 10,
-              background: "var(--navy)",
+              background: "var(--bar)",
               color: "var(--on-navy)",
               padding:
                 "max(14px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 12px max(16px, env(safe-area-inset-left))",
@@ -137,7 +137,7 @@ function NavTab({ to, label, end }: { to: string; label: string; end?: boolean }
         fontSize: 13,
         fontWeight: 700,
         padding: "6px 18px",
-        borderTop: isActive ? "3px solid var(--accent)" : "3px solid transparent",
+        borderTop: isActive ? "3px solid var(--sun)" : "3px solid transparent",
         marginTop: -9,
         paddingTop: 9,
       })}
