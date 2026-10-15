@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { AuthedRequest } from "../lib/requireAuth.js";
+import { USAGE_EVENTS } from "../services/usage.js";
 import { AdminRequest, isAdminEmail, requireAdmin } from "../lib/requireAdmin.js";
 
 // The admin area: see who has signed up, suspend or delete accounts, and send
@@ -172,4 +173,35 @@ adminRouter.delete("/messages/:id", async (req: AdminRequest, res) => {
 // GET /admin/log - the most recent admin actions.
 adminRouter.get("/log", async (_req, res) => {
   res.json(await prisma.adminAuditLog.findMany({ orderBy: { createdAt: "desc" }, take: 50 }));
+});
+
+// GET /admin/usage - how much each feature is used: totals only, never who.
+// Features nobody has used are listed with zeros.
+adminRouter.get("/usage", async (_req, res) => {
+  const now = Date.now();
+  const since30 = new Date(now - 30 * DAY);
+  const since7 = now - 7 * DAY;
+  const [rows, totalUsers, optedIn] = await Promise.all([
+    prisma.usageEvent.groupBy({ by: ["name", "userId"], where: { createdAt: { gte: since30 } }, _count: { _all: true }, _max: { createdAt: true } }),
+    prisma.user.count(),
+    prisma.consentRecord.findMany({ where: { purpose: "PRODUCT_ANALYTICS" }, orderBy: { createdAt: "asc" }, select: { userId: true, granted: true } }),
+  ]);
+  const consent = new Map<string, boolean>();
+  for (const r of optedIn) consent.set(r.userId, r.granted);
+  const byName = new Map<string, { events30: number; users30: Set<string>; users7: Set<string> }>();
+  for (const r of rows) {
+    const e = byName.get(r.name) ?? { events30: 0, users30: new Set<string>(), users7: new Set<string>() };
+    e.events30 += r._count._all;
+    e.users30.add(r.userId);
+    if (r._max.createdAt && r._max.createdAt.getTime() >= since7) e.users7.add(r.userId);
+    byName.set(r.name, e);
+  }
+  res.json({
+    totalUsers,
+    optedInUsers: [...consent.values()].filter(Boolean).length,
+    features: USAGE_EVENTS.map((name) => {
+      const e = byName.get(name);
+      return { name, events30: e?.events30 ?? 0, users30: e?.users30.size ?? 0, users7: e?.users7.size ?? 0 };
+    }),
+  });
 });

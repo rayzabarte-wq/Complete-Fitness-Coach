@@ -71,6 +71,7 @@ model User {
   lastSeenAt  DateTime?
 
   announcementReads AnnouncementRead[]
+  usageEvents       UsageEvent[]
   sessions         WorkoutSession[]
   recommendations  Recommendation[]
   plannedSessions  PlannedSession[]
@@ -990,5 +991,21 @@ model AdminAuditLog {
   detail      String?
   createdAt   DateTime @default(now())
 
+  @@index([createdAt])
+}
+
+// One use of one feature ("page_progress", "workout_generated"), recorded only
+// for people who gave PRODUCT_ANALYTICS consent. Holds the feature name and a
+// time, never anything the person entered. Deleted with the account or when
+// consent is withdrawn, and trimmed after a year. See routes/usage.ts.
+model UsageEvent {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  name      String
+  createdAt DateTime @default(now())
+
+  @@index([name, createdAt])
+  @@index([userId, createdAt])
   @@index([createdAt])
 }

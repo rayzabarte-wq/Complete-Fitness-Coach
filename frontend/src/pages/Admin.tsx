@@ -1,6 +1,6 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api, AdminLogEntry, AdminMessage, AdminUser, AdminUsersResponse } from "../lib/api.js";
+import { api, AdminLogEntry, AdminUsage, AdminMessage, AdminUser, AdminUsersResponse } from "../lib/api.js";
 import Collapsible from "../components/Collapsible.js";
 
 // The owner's area: who has signed up, suspend or delete accounts, and send
@@ -59,6 +59,10 @@ export default function Admin() {
 
       <Collapsible title="Messages" rememberAs="admin-messages">
         <MessagesSection users={data?.users ?? []} messages={messages} onChanged={reload} />
+      </Collapsible>
+
+      <Collapsible title="Feature use" rememberAs="admin-usage">
+        <UsageSection />
       </Collapsible>
 
       <Collapsible title="Activity log" rememberAs="admin-log">
@@ -317,6 +321,64 @@ function MessagesSection({ users, messages, onChanged }: { users: AdminUser[]; m
           <button className="button-quiet" style={{ marginTop: 6 }} onClick={() => withdraw(m.id)}>
             Withdraw
           </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const FEATURE_LABELS: Record<string, string> = {
+  page_calendar: "Calendar screen",
+  page_day: "Day view",
+  page_log: "Log screen",
+  page_progress: "Progress screen",
+  page_settings: "Settings screen",
+  page_plan: "3-month plan screen",
+  log_steps_tab: "Log: Steps tab",
+  log_nutrition_tab: "Log: Nutrition tab",
+  log_other_sport_tab: "Log: other sport tabs",
+  workout_generated: "Workout built",
+  workout_saved: "Workout saved",
+  gym_switched: "Gym switched",
+  gym_preset_applied: "Gym preset applied",
+  custom_equipment_added: "Custom equipment added",
+  custom_exercise_created: "Custom exercise created",
+  steps_saved: "Steps entered by hand",
+  nutrition_saved: "Nutrition entered by hand",
+  body_scan_added: "Body scan added",
+  goal_created: "Body goal created",
+  message_dismissed: "Message dismissed",
+};
+
+// Totals per feature over the last 30 days. Never shows who used what.
+function UsageSection() {
+  const [usage, setUsage] = useState<AdminUsage | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    api.adminUsage().then(setUsage).catch((e) => setError(e.message));
+  }, []);
+
+  if (error) return <p style={{ color: "var(--danger)", fontSize: 13 }}>{error}</p>;
+  if (!usage) return <p className="text-dim" style={{ fontSize: 13 }}>Loading…</p>;
+
+  const features = [...usage.features].sort((a, b) => b.users30 - a.users30 || b.events30 - a.events30);
+  const max = Math.max(1, ...features.map((f) => f.users30));
+  return (
+    <div>
+      <p className="text-dim" style={{ fontSize: 12, margin: "8px 0" }}>
+        {usage.optedInUsers} of {usage.totalUsers} users have agreed to usage statistics, and only their activity is counted. Last 30 days.
+      </p>
+      {features.map((f) => (
+        <div key={f.name} style={{ marginBottom: 8 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, gap: 8 }}>
+            <span>{FEATURE_LABELS[f.name] ?? f.name}</span>
+            <span className="text-dim" style={{ whiteSpace: "nowrap" }}>
+              {f.users30} {f.users30 === 1 ? "person" : "people"} · {f.events30} uses · {f.users7} this week
+            </span>
+          </div>
+          <div style={{ height: 6, background: "var(--surface-2)", borderRadius: 3, marginTop: 3 }}>
+            <div style={{ height: 6, width: `${(f.users30 / max) * 100}%`, background: "var(--accent)", borderRadius: 3 }} />
+          </div>
         </div>
       ))}
     </div>

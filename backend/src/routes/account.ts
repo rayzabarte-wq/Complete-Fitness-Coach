@@ -17,7 +17,7 @@ export const accountRouter = Router();
 accountRouter.get("/export", requireAuth, async (req: AuthedRequest, res) => {
   const userId = req.userId!;
 
-  const [user, sessions, recommendations, plannedSessions, nutritionLogs, trainingPlans, outlookConnected, stravaConnected, consents, bodyMeasurements, bodyGoals, stepDays, nutritionDays, trainingBlocks, gyms, customEquipment, customExercises] =
+  const [user, sessions, recommendations, plannedSessions, nutritionLogs, trainingPlans, outlookConnected, stravaConnected, consents, bodyMeasurements, bodyGoals, stepDays, nutritionDays, trainingBlocks, gyms, customEquipment, customExercises, usageEvents] =
     await Promise.all([
       prisma.user.findUniqueOrThrow({
         where: { id: userId },
@@ -62,6 +62,7 @@ accountRouter.get("/export", requireAuth, async (req: AuthedRequest, res) => {
       prisma.gymProfile.findMany({ where: { userId }, include: { equipment: true }, orderBy: { kind: "asc" } }),
       prisma.customEquipment.findMany({ where: { userId }, orderBy: { name: "asc" } }),
       prisma.exercise.findMany({ where: { userId }, orderBy: { name: "asc" } }),
+      prisma.usageEvent.findMany({ where: { userId }, orderBy: { createdAt: "asc" }, select: { name: true, createdAt: true } }),
     ]);
 
   res.json({
@@ -75,6 +76,7 @@ accountRouter.get("/export", requireAuth, async (req: AuthedRequest, res) => {
     gyms,
     customEquipment,
     customExercises,
+    usageEvents,
     consentHistory: consents,
     bodyMeasurements,
     bodyGoals,

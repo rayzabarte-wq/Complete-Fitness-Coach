@@ -30,6 +30,8 @@ import { nutritionRouter } from "./routes/nutrition.js";
 import { ingestRouter } from "./routes/ingest.js";
 import { adminRouter } from "./routes/admin.js";
 import { messagesRouter } from "./routes/messages.js";
+import { usageRouter } from "./routes/usage.js";
+import { purgeOldUsage } from "./services/usage.js";
 import { requireAuth } from "./lib/requireAuth.js";
 
 const app = express();
@@ -84,6 +86,7 @@ app.use("/body", requireAuth, bodyRouter);
 app.use("/steps", requireAuth, stepsRouter);
 app.use("/nutrition", requireAuth, nutritionRouter);
 app.use("/messages", requireAuth, messagesRouter);
+app.use("/usage", requireAuth, usageRouter);
 // Owner-only area (see lib/requireAdmin.ts): user list, suspend/delete, messages.
 app.use("/admin", requireAuth, adminRouter);
 
@@ -103,4 +106,8 @@ app.use(errorHandler);
 const port = Number(process.env.PORT ?? 3001);
 app.listen(port, () => {
   console.log(`Backend listening on http://localhost:${port}`);
+  // Usage records are kept for a year (see services/usage.ts): trim now, then daily.
+  const trim = () => purgeOldUsage().catch((err) => console.error("[usage] purge failed:", err));
+  trim();
+  setInterval(trim, 24 * 60 * 60 * 1000).unref();
 });

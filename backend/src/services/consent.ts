@@ -10,7 +10,7 @@ import { prisma } from "../lib/prisma.js";
 // retention reviewed by someone qualified in UK GDPR / EU GDPR and the
 // other markets you launch in (body composition counts as health data,
 // which is special-category data under GDPR).
-export const CONSENT_TEXT_VERSION = "2026-10-08";
+export const CONSENT_TEXT_VERSION = "2026-10-16";
 
 export const CONSENT_PURPOSES: {
   purpose: ConsentPurpose;
@@ -41,8 +41,9 @@ export const CONSENT_PURPOSES: {
   {
     purpose: "PRODUCT_ANALYTICS",
     title: "Help improve the app",
-    description: "Allow anonymous, aggregated usage statistics in future versions. Nothing is collected for this today.",
-    withdrawEffect: "Nothing is collected. This is recorded for when the feature exists.",
+    description:
+      "Record which screens and features I use (for example \"opened Progress\" or \"built a workout\") and when, never what I enter. The app's owner sees only totals per feature to decide what to improve, not my individual activity. Kept for up to 12 months.",
+    withdrawEffect: "Your usage records are deleted straight away and nothing more is recorded.",
   },
 ];
 
@@ -90,6 +91,9 @@ export async function recordConsents(userId: string, choices: Partial<Record<Con
       await tx.stepDay.deleteMany({ where: { userId } });
       // No data may flow in any more, so the upload token goes too.
       await tx.user.update({ where: { id: userId }, data: { ingestTokenHash: null } });
+    }
+    if (withdrawn.has("PRODUCT_ANALYTICS")) {
+      await tx.usageEvent.deleteMany({ where: { userId } });
     }
     await tx.user.update({ where: { id: userId }, data: { consentReviewedAt: new Date() } });
   });

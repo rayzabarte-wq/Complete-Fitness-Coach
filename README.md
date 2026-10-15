@@ -999,6 +999,17 @@ An owner-only page (Settings → **Admin**) for looking after the app's users.
 
 Upgrade note: adds a migration (`20261016090000_admin_and_messages`) that runs with the usual `prisma migrate deploy`.
 
+### Feature-use tracking
+
+Admin → **Feature use** shows, for the last 30 days, how many people used each feature, how many uses, and how many this week. It is totals only; admins can't see who used what.
+
+- **Consent first:** nothing is recorded unless the person ticked "Help improve the app" (Settings → Privacy & consent). The wording was changed to say what is collected, so earlier answers given under the old wording ("nothing is collected today") don't count: people need to turn it off and on again, or answer it fresh at sign-up.
+- **What is stored:** a feature name from a fixed list (`USAGE_EVENTS` in `backend/src/services/usage.ts`) and a time. Never anything the person entered.
+- **Deleted** with the account, when consent is withdrawn, and after 12 months. Included in the data export.
+- **Adding a feature to track:** add its name to `USAGE_EVENTS` and to the `UsageEventName` type in `frontend/src/lib/api.ts`, call `track("name")` where it happens (or wrap the api method in `tracked(...)`), and add a label in `Admin.tsx`.
+
+Upgrade note: adds migration `20261016120000_usage_events`.
+
 ## iPhone / Safari polish
 
 Beyond the responsive layout itself, a few iOS-specific fixes are baked in:

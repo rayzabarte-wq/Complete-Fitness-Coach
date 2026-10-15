@@ -606,6 +606,48 @@ function errorMessage(error: unknown, status: number): string {
   return `Request failed: ${status}`;
 }
 
+export interface AdminUsage {
+  totalUsers: number;
+  optedInUsers: number;
+  features: { name: string; events30: number; users30: number; users7: number }[];
+}
+
+// --- Feature-use tracking ----------------------------------------------------
+// Reports that a feature was used (a name from the server's allowed list,
+// never anything the person entered). The server records it only for people
+// who gave the analytics consent; if it says it didn't, sending pauses for a
+// while. Never throws and never blocks anything.
+export type UsageEventName =
+  | "page_calendar" | "page_day" | "page_log" | "page_progress" | "page_settings" | "page_plan"
+  | "log_steps_tab" | "log_nutrition_tab" | "log_other_sport_tab"
+  | "workout_generated" | "workout_saved" | "gym_switched" | "gym_preset_applied"
+  | "custom_equipment_added" | "custom_exercise_created" | "steps_saved" | "nutrition_saved"
+  | "body_scan_added" | "goal_created" | "message_dismissed";
+
+let trackingPausedUntil = 0;
+const lastSent = new Map<string, number>();
+
+export function track(name: UsageEventName): void {
+  const now = Date.now();
+  if (!auth.getToken() || now < trackingPausedUntil) return;
+  // The same screen opened twice in quick succession counts once.
+  if (now - (lastSent.get(name) ?? 0) < 10_000) return;
+  lastSent.set(name, now);
+  request<{ recorded: boolean }>("/usage", { method: "POST", body: JSON.stringify({ name }) })
+    .then((r) => {
+      if (!r.recorded) trackingPausedUntil = Date.now() + 10 * 60 * 1000;
+    })
+    .catch(() => {});
+}
+
+// Runs an action and reports its use once it has succeeded.
+function tracked<T>(name: UsageEventName, p: Promise<T>): Promise<T> {
+  return p.then((r) => {
+    track(name);
+    return r;
+  });
+}
+
 export interface AppMessage {
   id: string;
   title: string;
@@ -719,20 +761,20 @@ export const api = {
     request<GymsResponse>(`/gyms/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   /** Applies a preset to a gym (or, with no presetId, resets it to the preset it follows). */
   applyGymPreset: (id: string, presetId?: string) =>
-    request<GymsResponse>(`/gyms/${id}/preset`, { method: "POST", body: JSON.stringify({ presetId }) }),
+    tracked("gym_preset_applied", request<GymsResponse>(`/gyms/${id}/preset`, { method: "POST", body: JSON.stringify({ presetId }) })),
   /** Remembers which gym the workout page starts on. */
   setActiveGym: (gymId: string) =>
-    request<GymsResponse>("/gyms/active", { method: "PUT", body: JSON.stringify({ gymId }) }),
+    tracked("gym_switched", request<GymsResponse>("/gyms/active", { method: "PUT", body: JSON.stringify({ gymId }) })),
   addCustomEquipment: (name: string) =>
-    request<GymsResponse>("/gyms/custom-equipment", { method: "POST", body: JSON.stringify({ name }) }),
+    tracked("custom_equipment_added", request<GymsResponse>("/gyms/custom-equipment", { method: "POST", body: JSON.stringify({ name }) })),
   removeCustomEquipment: (id: string) => request<GymsResponse>(`/gyms/custom-equipment/${id}`, { method: "DELETE" }),
 
   createExercise: (data: CustomExerciseInput) =>
-    request<Exercise>("/exercises", { method: "POST", body: JSON.stringify(data) }),
+    tracked("custom_exercise_created", request<Exercise>("/exercises", { method: "POST", body: JSON.stringify(data) })),
   archiveExercise: (id: string) => request<void>(`/exercises/${id}`, { method: "DELETE" }),
 
   logSession: (data: LogSessionInput) =>
-    request<{ id: string }>("/sessions", { method: "POST", body: JSON.stringify(data) }),
+    tracked("workout_saved", request<{ id: string }>("/sessions", { method: "POST", body: JSON.stringify(data) })),
 
   submitFeedback: (sessionId: string, thumbsUp: boolean) =>
     request(`/sessions/${sessionId}/feedback`, { method: "POST", body: JSON.stringify({ thumbsUp }) }),
@@ -750,12 +792,15 @@ export const api = {
     replaceWorkoutId?: string | null,
     gymId?: string
   ) =>
-    request<DailyWorkout>(`/workouts/plan/${pattern}`, {
-      method: "POST",
-      // replaceWorkoutId is the workout the person agreed to replace; without
-      // it the server refuses (409) to build over an existing workout.
-      body: JSON.stringify({ date, plannedSessionId: plannedSessionId ?? null, replaceWorkoutId: replaceWorkoutId ?? null, gymId }),
-    }),
+    tracked(
+      "workout_generated",
+      request<DailyWorkout>(`/workouts/plan/${pattern}`, {
+        method: "POST",
+        // replaceWorkoutId is the workout the person agreed to replace; without
+        // it the server refuses (409) to build over an existing workout.
+        body: JSON.stringify({ date, plannedSessionId: plannedSessionId ?? null, replaceWorkoutId: replaceWorkoutId ?? null, gymId }),
+      })
+    ),
   /** Workouts built in the last 30 days (and any scheduled ahead). No AI call. */
   getSavedWorkouts: (today: string) => request<SavedWorkout[]>(`/workouts/saved?today=${today}`),
   /** Uses a saved workout on another day by copying it. No AI call. */
@@ -954,12 +999,12 @@ export const api = {
   // --- Body data & goals ----------------------------------------------------
   getMeasurements: (from?: string, to?: string) => request<BodyMeasurement[]>(`/body/measurements${qs({ from, to })}`),
   addMeasurement: (data: { measuredAt?: string; weightKg?: number; bodyFatPct?: number; muscleMassKg?: number }) =>
-    request("/body/measurements", { method: "POST", body: JSON.stringify(data) }),
+    tracked("body_scan_added", request("/body/measurements", { method: "POST", body: JSON.stringify(data) })),
   deleteMeasurement: (id: string) => request<void>(`/body/measurements/${id}`, { method: "DELETE" }),
   getBodySummary: (from: string, to: string) => request<BodySummary>(`/body/summary${qs({ from, to })}`),
   getGoals: () => request<BodyGoal[]>("/body/goals"),
   createGoal: (data: { metric: BodyMetric; targetValue: number; targetDate: string; startValue?: number }) =>
-    request<{ id: string }>("/body/goals", { method: "POST", body: JSON.stringify(data) }),
+    tracked("goal_created", request<{ id: string }>("/body/goals", { method: "POST", body: JSON.stringify(data) })),
   reviseGoal: (id: string, data: { targetValue?: number; targetDate?: string; reason: RevisionReason; note?: string }) =>
     request(`/body/goals/${id}/revise`, { method: "POST", body: JSON.stringify(data) }),
   setGoalStatus: (id: string, status: "ACTIVE" | "ACHIEVED" | "CLOSED") =>
@@ -969,7 +1014,7 @@ export const api = {
 
   // --- Messages from the app's owner, and the admin area ---------------------
   getMessages: () => request<AppMessage[]>("/messages"),
-  dismissMessage: (id: string) => request<void>(`/messages/${id}/dismiss`, { method: "POST" }),
+  dismissMessage: (id: string) => tracked("message_dismissed", request<void>(`/messages/${id}/dismiss`, { method: "POST" })),
   adminMe: () => request<{ isAdmin: boolean; totpEnabled: boolean }>("/admin/me"),
   adminUsers: () => request<AdminUsersResponse>("/admin/users"),
   adminSuspend: (id: string) => request<{ ok: true }>(`/admin/users/${id}/suspend`, { method: "POST" }),
@@ -980,16 +1025,18 @@ export const api = {
   adminSendMessage: (data: { title: string; body: string; targetUserId?: string; expiresInDays?: number }) =>
     request<{ id: string }>("/admin/messages", { method: "POST", body: JSON.stringify(data) }),
   adminWithdrawMessage: (id: string) => request<void>(`/admin/messages/${id}`, { method: "DELETE" }),
+  adminUsage: () => request<AdminUsage>("/admin/usage"),
   adminLog: () => request<AdminLogEntry[]>("/admin/log"),
 
   // --- Nutrition ------------------------------------------------------------
   getNutrition: (from: string, to: string) => request<NutritionResponse>(`/nutrition${qs({ from, to })}`),
   setNutrition: (date: string, data: { calories?: number; proteinG?: number; carbsG?: number; fatG?: number }) =>
-    request<void>(`/nutrition/${date}`, { method: "PUT", body: JSON.stringify(data) }),
+    tracked("nutrition_saved", request<void>(`/nutrition/${date}`, { method: "PUT", body: JSON.stringify(data) })),
 
   // --- Steps ----------------------------------------------------------------
   getSteps: (from: string, to: string) => request<StepsResponse>(`/steps${qs({ from, to })}`),
-  setSteps: (date: string, steps: number) => request<void>(`/steps/${date}`, { method: "PUT", body: JSON.stringify({ steps }) }),
+  setSteps: (date: string, steps: number) =>
+    tracked("steps_saved", request<void>(`/steps/${date}`, { method: "PUT", body: JSON.stringify({ steps }) })),
 
   // --- Strength progress ----------------------------------------------------
   getToday: () => request<TodaySuggestion>("/progress/today"),

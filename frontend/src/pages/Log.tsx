@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { api, DailyWorkout, SavedWorkout, MovementPattern, PlannedSession, SessionType, StepsResponse, TodaySuggestion, NutritionResponse } from "../lib/api.js";
+import { api, track, DailyWorkout, SavedWorkout, MovementPattern, PlannedSession, SessionType, StepsResponse, TodaySuggestion, NutritionResponse } from "../lib/api.js";
 import { usePlan, loggedSets } from "../lib/planContext.js";
 import { Gym, GYM_KIND_LABEL } from "../lib/equipment.js";
 import { formatLocalDateKey } from "../lib/location.js";
@@ -44,7 +44,10 @@ export default function Log() {
       {views.length > 1 && (
         <div className="subtabs" role="tablist" aria-label="What to log">
           {views.map((v) => (
-            <button key={v} role="tab" aria-selected={view === v} onClick={() => setView(v)}>
+            <button key={v} role="tab" aria-selected={view === v} onClick={() => {
+                setView(v);
+                if (v !== "STRENGTH") track(v === "STEPS" ? "log_steps_tab" : v === "NUTRITION" ? "log_nutrition_tab" : "log_other_sport_tab");
+              }}>
               <span className="swatch" style={{ background: v === "NUTRITION" ? "var(--sun)" : ACTIVITY_COLORS[v as ActivityKey], marginRight: 6, verticalAlign: "-1px" }} />
               {v === "NUTRITION" ? "Nutrition" : ACTIVITY_LABELS[v as ActivityKey]}
             </button>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BrowserRouter, Routes, Route, NavLink, Link } from "react-router-dom";
+import { BrowserRouter, Routes, Route, NavLink, Link, useLocation } from "react-router-dom";
 import Log from "./pages/Log.js";
 import Login from "./pages/Login.js";
 import Settings from "./pages/Settings.js";
@@ -7,13 +7,32 @@ import Calendar, { DayDetail } from "./pages/Calendar.js";
 import Progress from "./pages/Progress.js";
 import Plan from "./pages/Plan.js";
 import Admin from "./pages/Admin.js";
-import { api, auth } from "./lib/api.js";
+import { api, auth, track, UsageEventName } from "./lib/api.js";
 import { PlanProvider } from "./lib/planContext.js";
 import { ConsentOnboarding } from "./components/Consent.js";
 
 // Information architecture: three tabs for the things used day to day —
 // Calendar (plan + what happened), Log (record it), Progress (goals and
 // trends) — with Settings behind a gear icon in the header.
+
+// Reports which screen is open (see track() in lib/api.ts). Only the screen's
+// name is sent, never the address, so dates and ids in it stay out.
+const PAGE_EVENTS: Record<string, UsageEventName> = {
+  "/": "page_calendar",
+  "/log": "page_log",
+  "/progress": "page_progress",
+  "/settings": "page_settings",
+  "/plan": "page_plan",
+};
+
+function RouteTracker() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    const name = pathname.startsWith("/day/") ? "page_day" : PAGE_EVENTS[pathname];
+    if (name) track(name);
+  }, [pathname]);
+  return null;
+}
 
 export default function App() {
   const [loggedIn, setLoggedIn] = useState(() => {
@@ -63,6 +82,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <PlanProvider>
+        <RouteTracker />
         <div
           style={{
             maxWidth: 480,
