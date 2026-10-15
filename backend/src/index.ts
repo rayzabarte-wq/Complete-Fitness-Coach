@@ -34,7 +34,12 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-app.get("/health", (_req, res) => res.json({ ok: true }));
+// version: the commit this server is running (Railway sets
+// RAILWAY_GIT_COMMIT_SHA for services deployed from GitHub), so the app can
+// tell when it and the server are on different versions. Older servers just
+// answer { ok: true }, which is itself the signal that they're out of date.
+const SERVER_VERSION = process.env.RAILWAY_GIT_COMMIT_SHA?.slice(0, 7) ?? "dev";
+app.get("/health", (_req, res) => res.json({ ok: true, version: SERVER_VERSION }));
 
 // Registration, login, and 2FA setup are the only routes reachable without
 // a session token. The Outlook and Strava OAuth connect/callback routes

@@ -2,6 +2,7 @@ import { ReactNode, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, auth, Profile, SessionType } from "../lib/api.js";
 import GymsSection from "../components/GymsSection.js";
+import { APP_VERSION, ServerStatus, describeVersions, getServerStatus, versionsDiffer } from "../lib/diagnose.js";
 import { SESSION_TYPE_TREE } from "../lib/sessionTypes.js";
 import { ConsentSettings } from "../components/Consent.js";
 
@@ -15,6 +16,10 @@ export default function Settings({ onLoggedOut }: { onLoggedOut: () => void }) {
     api.getProfile().then(setProfile);
   }, [version]);
   const reload = () => setVersion((v) => v + 1);
+  const [server, setServer] = useState<ServerStatus | null>(null);
+  useEffect(() => {
+    getServerStatus().then(setServer);
+  }, []);
 
   return (
     <div>
@@ -26,6 +31,15 @@ export default function Settings({ onLoggedOut }: { onLoggedOut: () => void }) {
         <p className="text-dim" style={{ fontSize: 13, marginTop: 0 }}>
           Signed in as {profile.email}
         </p>
+      )}
+
+      {server && versionsDiffer(server) && (
+        <div className="card" style={{ borderLeft: "4px solid var(--accent)" }}>
+          <strong style={{ color: "var(--navy)" }}>The app and the server are on different versions</strong>
+          <p className="text-dim" style={{ fontSize: 13, margin: "6px 0 0" }}>
+            Some features won't work until both have been redeployed to the latest version. {describeVersions(server)}
+          </p>
+        </div>
       )}
 
       <Collapsible title="Training">{profile && <TrainingSection profile={profile} onSaved={reload} />}</Collapsible>
@@ -81,6 +95,10 @@ export default function Settings({ onLoggedOut }: { onLoggedOut: () => void }) {
       >
         Log out
       </button>
+
+      <p className="text-dim" style={{ fontSize: 11, textAlign: "center", marginTop: 12 }}>
+        {server ? describeVersions(server) : `App version ${APP_VERSION}.`}
+      </p>
     </div>
   );
 }

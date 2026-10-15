@@ -3,6 +3,11 @@ import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
+  // The commit this build was made from (Railway provides it to builds), so
+  // the app can show its version and spot a server on a different one.
+  define: {
+    __APP_VERSION__: JSON.stringify((process.env.RAILWAY_GIT_COMMIT_SHA ?? "dev").slice(0, 7)),
+  },
   server: {
     port: 5173,
     // host: true makes the dev server reachable from other devices on the

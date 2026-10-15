@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { describeProblem } from "../lib/diagnose.js";
 import { api, CustomExerciseInput, EquipmentInput, Exercise, Muscle } from "../lib/api.js";
 import { Accessory, CustomEquipment, EquipmentSetting, GYM_KIND_LABEL, Gym, GymsResponse, buildWeights } from "../lib/equipment.js";
 
@@ -78,23 +79,32 @@ export default function GymsSection() {
   // Bumped when a preset is applied so the editor reloads its form fields.
   const [resetKey, setResetKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
+    setError(null);
     api
       .getGyms()
       .then((res) => {
         setData(res);
         setSelectedId(res.activeGymId);
       })
-      .catch(() => setError("Couldn't load your gyms"));
-  }, []);
+      // Says WHY (server unreachable, running an older version than the
+      // app, signed out, ...) rather than a bare "couldn't load".
+      .catch(async (err) => setError(await describeProblem("your gyms", err)));
+  }, [attempt]);
 
   if (!data) {
     return (
       <div className="card" style={{ marginTop: 12 }}>
-        <p className="text-dim" style={{ fontSize: 13, margin: 0 }}>
+        <p className={error ? undefined : "text-dim"} style={{ fontSize: 13, margin: 0, color: error ? "var(--danger)" : undefined }}>
           {error ?? "Loading..."}
         </p>
+        {error && (
+          <button className="button-secondary" style={{ marginTop: 10 }} onClick={() => setAttempt((n) => n + 1)}>
+            Try again
+          </button>
+        )}
       </div>
     );
   }

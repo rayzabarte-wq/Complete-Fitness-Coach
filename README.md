@@ -462,6 +462,19 @@ at build time, so redeploy the frontend if it ever changes.
   Screen** to get an app-like icon (PWA behavior comes from
   `frontend/public/manifest.json`, already included).
 
+### Checking that both services are on the same version
+
+The frontend and backend deploy separately, so one can be left on an older
+version (the symptom is usually a feature that "can't load", because the
+backend has no route for it yet). Each reports the commit it was built from
+(`RAILWAY_GIT_COMMIT_SHA`): the backend in `GET /health`
+(`{"ok":true,"version":"abc1234"}`), the app in its build. **Settings** shows
+both at the bottom and a warning at the top when they differ or the server
+reports no version (an older server), and the Gyms section explains why it
+couldn't load instead of a generic error. If it flags a mismatch, open the
+service that's behind in Railway → **Deployments** and redeploy it, and check
+its **Settings → Source** branch is the one you deploy from.
+
 ### If a deploy fails
 
 Open the failed service → **Deployments** → the failed deployment →
