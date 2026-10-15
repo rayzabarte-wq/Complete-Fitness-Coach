@@ -182,6 +182,21 @@ health data under GDPR.
 - `NutritionLog` — date, calories, protein/carbs/fat, notes (schema is in
   place now; UI comes later)
 
+## Calories and macros
+
+Daily calories, protein, carbs and fat are stored per day (`NutritionDay`) and
+shown under **Log > Nutrition**, with a 14-day list and the average. MyFitnessPal
+has no public API (its developer programme is closed to new applicants), so
+the route is **Apple Health**: MyFitnessPal writes its totals to Apple Health,
+and an iPhone Shortcut reads them and posts them to `POST /ingest/nutrition`
+with your personal upload token, exactly like steps. Setup steps are in
+**Settings > Data import > Calories and macros**. The endpoint takes one day
+(`{"date","calories","proteinG","carbsG","fatG"}`) or `{"days":[...]}`; any
+figure can be left out, and only the figures sent are changed. Days can also be
+entered by hand (`PUT /nutrition/:date`). Both need the body-data consent, like
+steps, and the data is included in the export and deleted with the account.
+This adds a table: apply the `nutrition_days` migration.
+
 ## Gyms & equipment
 
 You can describe up to three places you train under **Settings > Gyms**: a

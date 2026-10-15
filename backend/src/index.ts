@@ -26,6 +26,7 @@ import { profileRouter } from "./routes/profile.js";
 import { consentRouter } from "./routes/consent.js";
 import { bodyRouter } from "./routes/body.js";
 import { stepsRouter } from "./routes/steps.js";
+import { nutritionRouter } from "./routes/nutrition.js";
 import { ingestRouter } from "./routes/ingest.js";
 import { requireAuth } from "./lib/requireAuth.js";
 
@@ -79,6 +80,7 @@ app.use("/profile", requireAuth, profileRouter);
 app.use("/consent", requireAuth, consentRouter);
 app.use("/body", requireAuth, bodyRouter);
 app.use("/steps", requireAuth, stepsRouter);
+app.use("/nutrition", requireAuth, nutritionRouter);
 
 // Last-resort handler for anything a route didn't catch itself: log it and
 // answer with a readable JSON error instead of crashing or hanging.

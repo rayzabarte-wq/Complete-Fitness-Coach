@@ -80,6 +80,7 @@ model User {
   bodyMeasurements BodyMeasurement[]
   bodyGoals        BodyGoal[]
   stepDays         StepDay[]
+  nutritionDays    NutritionDay[]
   trainingBlocks   TrainingBlock[]
   passwordResetTokens PasswordResetToken[]
   dailyWorkouts       DailyWorkout[]
@@ -876,6 +877,32 @@ model GoalTarget {
 enum StepSource {
   MANUAL
   APPLE_HEALTH
+}
+
+enum NutritionSource {
+  MANUAL
+  APPLE_HEALTH
+}
+
+// One day's food totals: calories and macros. Normally imported from Apple
+// Health (where MyFitnessPal and similar apps write them) by an iPhone
+// Shortcut, with manual entry as a fallback. Any field can be missing, e.g.
+// a day with only calories logged.
+model NutritionDay {
+  id     String @id @default(cuid())
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+
+  // UTC midnight of the calendar day (same convention as StepDay).
+  date      DateTime
+  calories  Int?
+  proteinG  Float?
+  carbsG    Float?
+  fatG      Float?
+  source    NutritionSource @default(APPLE_HEALTH)
+  updatedAt DateTime        @updatedAt
+
+  @@unique([userId, date])
 }
 
 model StepDay {

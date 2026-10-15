@@ -6,9 +6,10 @@ import { hasConsent, CONSENT_REQUIRED_MESSAGE } from "../services/consent.js";
 import { hashIngestToken } from "./profile.js";
 import { measurementInputSchema, saveMeasurements } from "./body.js";
 import { saveStepDays, stepDaySchema } from "./steps.js";
+import { nutritionDaySchema, saveNutritionDays } from "./nutrition.js";
 
 // Data uploads from outside the browser: an iPhone Shortcut reading Apple
-// Health (steps, and the weight/body-fat Renpho writes there), or the
+// Health (steps, calories and macros, and the weight/body-fat Renpho writes there), or the
 // Renpho sync script (tools/renpho_sync.py). Authenticated with the
 // personal upload token from Settings, not a login session — so a Renpho
 // password never has to be given to this app.
@@ -45,6 +46,17 @@ ingestRouter.post("/steps", async (req: IngestRequest, res) => {
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   const days = "days" in parsed.data ? parsed.data.days : [parsed.data];
   res.json(await saveStepDays(req.userId!, "APPLE_HEALTH", days));
+});
+
+// Calories and macros for a day (as written to Apple Health by MyFitnessPal
+// or similar). Same shapes as steps: one day, or { days: [...] }.
+const nutritionBody = z.union([nutritionDaySchema, z.object({ days: z.array(nutritionDaySchema).min(1).max(400) })]);
+
+ingestRouter.post("/nutrition", async (req: IngestRequest, res) => {
+  const parsed = nutritionBody.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  const days = "days" in parsed.data ? parsed.data.days : [parsed.data];
+  res.json(await saveNutritionDays(req.userId!, "APPLE_HEALTH", days));
 });
 
 const bodyBody = z.object({

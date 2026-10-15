@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { api, DailyWorkout, SavedWorkout, MovementPattern, PlannedSession, SessionType, StepsResponse, TodaySuggestion } from "../lib/api.js";
+import { api, DailyWorkout, SavedWorkout, MovementPattern, PlannedSession, SessionType, StepsResponse, TodaySuggestion, NutritionResponse } from "../lib/api.js";
 import { usePlan, loggedSets } from "../lib/planContext.js";
 import { Gym, GYM_KIND_LABEL } from "../lib/equipment.js";
 import { formatLocalDateKey } from "../lib/location.js";
@@ -15,9 +15,9 @@ import LogWorkout, { FeedbackPrompt } from "./LogWorkout.js";
 // Only Strength and Steps show by default (strength-only first release);
 // the others appear when switched on in Settings → Workout types.
 
-type LogView = "STRENGTH" | "STEPS" | "RUN" | "CYCLING" | "WALK" | "SWIM" | "GOLF";
+type LogView = "STRENGTH" | "STEPS" | "NUTRITION" | "RUN" | "CYCLING" | "WALK" | "SWIM" | "GOLF";
 
-const PASSIVE_SPORTS: { key: Exclude<LogView, "STRENGTH" | "STEPS">; matches: (t: SessionType) => boolean }[] = [
+const PASSIVE_SPORTS: { key: Exclude<LogView, "STRENGTH" | "STEPS" | "NUTRITION">; matches: (t: SessionType) => boolean }[] = [
   { key: "RUN", matches: (t) => t.startsWith("RUN_") },
   { key: "CYCLING", matches: (t) => t.startsWith("CYCLING") },
   { key: "WALK", matches: (t) => t.startsWith("WALK_") },
@@ -37,7 +37,7 @@ export default function Log() {
       .catch(() => setVisibleTypes(["STRENGTH"]));
   }, []);
 
-  const views: LogView[] = ["STRENGTH", "STEPS", ...PASSIVE_SPORTS.filter((s) => visibleTypes.some(s.matches)).map((s) => s.key)];
+  const views: LogView[] = ["STRENGTH", "STEPS", "NUTRITION", ...PASSIVE_SPORTS.filter((s) => visibleTypes.some(s.matches)).map((s) => s.key)];
 
   return (
     <div>
@@ -45,15 +45,16 @@ export default function Log() {
         <div className="subtabs" role="tablist" aria-label="What to log">
           {views.map((v) => (
             <button key={v} role="tab" aria-selected={view === v} onClick={() => setView(v)}>
-              <span className="swatch" style={{ background: ACTIVITY_COLORS[v as ActivityKey], marginRight: 6, verticalAlign: "-1px" }} />
-              {ACTIVITY_LABELS[v as ActivityKey]}
+              <span className="swatch" style={{ background: v === "NUTRITION" ? "var(--sun)" : ACTIVITY_COLORS[v as ActivityKey], marginRight: 6, verticalAlign: "-1px" }} />
+              {v === "NUTRITION" ? "Nutrition" : ACTIVITY_LABELS[v as ActivityKey]}
             </button>
           ))}
         </div>
       )}
       {view === "STRENGTH" && <StrengthLog />}
       {view === "STEPS" && <StepsLog />}
-      {view !== "STRENGTH" && view !== "STEPS" && <PassiveSportLog sport={view} />}
+      {view === "NUTRITION" && <NutritionLog />}
+      {view !== "STRENGTH" && view !== "STEPS" && view !== "NUTRITION" && <PassiveSportLog sport={view} />}
     </div>
   );
 }
@@ -643,9 +644,147 @@ function StepsLog() {
   );
 }
 
+// --- Nutrition (passive, with manual entry) ----------------------------------
+
+const MACRO_FIELDS = [
+  { key: "calories", label: "Calories", unit: "kcal" },
+  { key: "proteinG", label: "Protein", unit: "g" },
+  { key: "carbsG", label: "Carbs", unit: "g" },
+  { key: "fatG", label: "Fat", unit: "g" },
+] as const;
+
+function NutritionLog() {
+  const [data, setData] = useState<NutritionResponse | null>(null);
+  const [form, setForm] = useState({ date: formatLocalDateKey(new Date()), calories: "", proteinG: "", carbsG: "", fatG: "" });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    const t = new Date();
+    api
+      .getNutrition(formatLocalDateKey(new Date(t.getFullYear(), t.getMonth(), t.getDate() - 13)), formatLocalDateKey(new Date(t.getFullYear(), t.getMonth(), t.getDate() + 1)))
+      .then(setData)
+      .catch(() => setError("Couldn't load your nutrition"));
+  }, []);
+  useEffect(load, [load]);
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    const body: Record<string, number> = {};
+    for (const f of MACRO_FIELDS) {
+      const raw = form[f.key].trim();
+      if (raw === "") continue;
+      const n = Number(raw);
+      if (!Number.isFinite(n) || n < 0) {
+        setError(`${f.label} should be a number.`);
+        return;
+      }
+      body[f.key] = n;
+    }
+    if (Object.keys(body).length === 0) {
+      setError("Enter at least one figure.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await api.setNutrition(form.date, body);
+      setForm((cur) => ({ ...cur, calories: "", proteinG: "", carbsG: "", fatG: "" }));
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't save");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!data) return <p className="text-dim">{error ?? "Loading…"}</p>;
+  const show = (v: number | null, unit: string) => (v === null ? "–" : unit === "kcal" ? Math.round(v).toLocaleString() : `${Math.round(v)}${unit}`);
+
+  return (
+    <div>
+      <p className="text-dim" style={{ fontSize: 13, marginTop: 0 }}>
+        Calories and macros come from Apple Health each day, where MyFitnessPal and similar apps write them. Set it up in{" "}
+        <Link to="/settings" style={{ color: "var(--accent)" }}>
+          Settings → Data import
+        </Link>
+        , or add a day by hand below.
+      </p>
+
+      {data.daysWithData > 0 && (
+        <div className="card" style={{ marginBottom: 12 }}>
+          <div className="text-dim" style={{ fontSize: 12 }}>
+            Average over the last {data.daysWithData} day{data.daysWithData === 1 ? "" : "s"} with data
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginTop: 8, textAlign: "center" }}>
+            {MACRO_FIELDS.map((f) => (
+              <div key={f.key}>
+                <div style={{ fontWeight: 700, fontSize: 16 }}>{show(data.average[f.key], f.unit)}</div>
+                <div className="text-dim" style={{ fontSize: 11 }}>
+                  {f.label}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {data.days.length === 0 && (
+        <div className="card" style={{ marginBottom: 12 }}>
+          <p style={{ margin: 0, fontSize: 14 }}>No nutrition imported yet.</p>
+        </div>
+      )}
+      {[...data.days].reverse().map((d) => (
+        <div key={d.date} className="card" style={{ marginBottom: 6, padding: "10px 12px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+            <span style={{ fontSize: 14 }}>
+              <span className="swatch" style={{ background: "var(--sun)", marginRight: 8 }} />
+              {new Date(`${d.date}T12:00`).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}
+            </span>
+            <span style={{ fontSize: 14, fontWeight: 600 }}>{d.calories === null ? "–" : `${Math.round(d.calories).toLocaleString()} kcal`}</span>
+          </div>
+          <div className="text-dim" style={{ fontSize: 12, marginTop: 4 }}>
+            Protein {show(d.proteinG, "g")} · Carbs {show(d.carbsG, "g")} · Fat {show(d.fatG, "g")}
+          </div>
+        </div>
+      ))}
+
+      <form onSubmit={save} className="card" style={{ marginTop: 12 }}>
+        <strong style={{ color: "var(--navy)" }}>Add a day by hand</strong>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8, fontSize: 13 }}>
+          <label style={{ gridColumn: "1 / -1" }}>
+            <span className="text-dim">Date</span>
+            <input id="nutrition-date" type="date" value={form.date} max={formatLocalDateKey(new Date())} onChange={(e) => setForm({ ...form, date: e.target.value })} style={{ width: "100%", padding: 8, marginTop: 4 }} />
+          </label>
+          {MACRO_FIELDS.map((f) => (
+            <label key={f.key}>
+              <span className="text-dim">
+                {f.label} ({f.unit})
+              </span>
+              <input
+                id={`nutrition-${f.key}`}
+                type="number"
+                inputMode="decimal"
+                min={0}
+                value={form[f.key]}
+                onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
+                style={{ width: "100%", padding: 8, marginTop: 4 }}
+              />
+            </label>
+          ))}
+        </div>
+        {error && <p style={{ color: "var(--danger)", fontSize: 13, margin: "8px 0 0" }}>{error}</p>}
+        <button className="button-primary" type="submit" disabled={saving || !form.date} style={{ width: "100%", marginTop: 10 }}>
+          {saving ? "Saving..." : "Save day"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
 // --- Connector sports (passive) ---------------------------------------------
 
-function PassiveSportLog({ sport }: { sport: Exclude<LogView, "STRENGTH" | "STEPS"> }) {
+function PassiveSportLog({ sport }: { sport: Exclude<LogView, "STRENGTH" | "STEPS" | "NUTRITION"> }) {
   const [sessions, setSessions] = useState<PlannedSession[] | null>(null);
   const matcher = PASSIVE_SPORTS.find((s) => s.key === sport)!.matches;
   useEffect(() => {

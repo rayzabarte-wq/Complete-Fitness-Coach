@@ -504,6 +504,20 @@ export interface StepsResponse {
   daysHitGoal: number | null;
 }
 
+export interface NutritionFigures {
+  calories: number | null;
+  proteinG: number | null;
+  carbsG: number | null;
+  fatG: number | null;
+}
+
+export interface NutritionResponse {
+  days: ({ date: string; source: string } & NutritionFigures)[];
+  daysWithData: number;
+  /** Average over the days that have each figure. */
+  average: NutritionFigures;
+}
+
 export interface MuscleRecovery {
   muscle: Muscle;
   status: "READY" | "RECOVERING" | "UNTRAINED";
@@ -912,6 +926,11 @@ export const api = {
     request<void>(`/body/goals/${id}`, { method: "PATCH", body: JSON.stringify({ status }) }),
   getQuarterReview: (quarter?: string) => request<QuarterReview>(`/body/review${qs({ quarter })}`),
   getBenchmarks: () => request<Benchmarks>("/body/benchmarks"),
+
+  // --- Nutrition ------------------------------------------------------------
+  getNutrition: (from: string, to: string) => request<NutritionResponse>(`/nutrition${qs({ from, to })}`),
+  setNutrition: (date: string, data: { calories?: number; proteinG?: number; carbsG?: number; fatG?: number }) =>
+    request<void>(`/nutrition/${date}`, { method: "PUT", body: JSON.stringify(data) }),
 
   // --- Steps ----------------------------------------------------------------
   getSteps: (from: string, to: string) => request<StepsResponse>(`/steps${qs({ from, to })}`),

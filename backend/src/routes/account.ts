@@ -17,7 +17,7 @@ export const accountRouter = Router();
 accountRouter.get("/export", requireAuth, async (req: AuthedRequest, res) => {
   const userId = req.userId!;
 
-  const [user, sessions, recommendations, plannedSessions, nutritionLogs, trainingPlans, outlookConnected, stravaConnected, consents, bodyMeasurements, bodyGoals, stepDays, trainingBlocks, gyms, customEquipment, customExercises] =
+  const [user, sessions, recommendations, plannedSessions, nutritionLogs, trainingPlans, outlookConnected, stravaConnected, consents, bodyMeasurements, bodyGoals, stepDays, nutritionDays, trainingBlocks, gyms, customEquipment, customExercises] =
     await Promise.all([
       prisma.user.findUniqueOrThrow({
         where: { id: userId },
@@ -57,6 +57,7 @@ accountRouter.get("/export", requireAuth, async (req: AuthedRequest, res) => {
       prisma.bodyMeasurement.findMany({ where: { userId }, orderBy: { measuredAt: "asc" } }),
       prisma.bodyGoal.findMany({ where: { userId }, include: { targets: { orderBy: { createdAt: "asc" } } }, orderBy: { createdAt: "asc" } }),
       prisma.stepDay.findMany({ where: { userId }, orderBy: { date: "asc" } }),
+      prisma.nutritionDay.findMany({ where: { userId }, orderBy: { date: "asc" } }),
       prisma.trainingBlock.findMany({ where: { userId }, orderBy: { startedAt: "asc" } }),
       prisma.gymProfile.findMany({ where: { userId }, include: { equipment: true }, orderBy: { kind: "asc" } }),
       prisma.customEquipment.findMany({ where: { userId }, orderBy: { name: "asc" } }),
@@ -78,6 +79,7 @@ accountRouter.get("/export", requireAuth, async (req: AuthedRequest, res) => {
     bodyMeasurements,
     bodyGoals,
     dailySteps: stepDays,
+    dailyNutrition: nutritionDays,
     trainingBlocks,
     integrations: {
       outlookConnected,

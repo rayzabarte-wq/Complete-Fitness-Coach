@@ -282,6 +282,30 @@ function DataImportSection({ profile, onChanged }: { profile: Profile; onChanged
       </details>
 
       <details style={{ marginTop: 8 }}>
+        <summary style={{ cursor: "pointer", fontSize: 14, fontWeight: 600, color: "var(--navy)" }}>Calories and macros (MyFitnessPal via Apple Health)</summary>
+        <p style={{ fontSize: 13 }}>
+          MyFitnessPal has no public API, so the route is through Apple Health. In MyFitnessPal's settings, switch on sharing with Apple Health for nutrition (the menu wording varies by version), then check the Health app under Browse → Nutrition that your food shows up.
+        </p>
+        <ol style={{ fontSize: 13, paddingLeft: 18, lineHeight: 1.5 }}>
+          <li>In the Shortcuts app, create a new shortcut.</li>
+          <li>
+            Add <em>Find Health Samples</em> four times, each with start date today: <em>Dietary Energy</em>, <em>Protein</em>, <em>Carbohydrates</em> and <em>Fat, Total</em> (the names in the list may differ a little).
+          </li>
+          <li>
+            After each one add <em>Calculate Statistics</em> (Sum), so you have four totals.
+          </li>
+          <li>
+            Add <em>Get Contents of URL</em>: <span style={code}>{api.apiUrl}/ingest/nutrition</span>, method POST, header <span style={code}>Authorization: Bearer YOUR_TOKEN</span>, JSON body{" "}
+            <span style={code}>{'{"date": "YYYY-MM-DD", "calories": <energy>, "proteinG": <protein>, "carbsG": <carbs>, "fatG": <fat>}'}</span> (use <em>Format Date</em> with format yyyy-MM-dd for the date).
+          </li>
+          <li>In Automation, run it daily (for example at 23:45) with "Run immediately" switched on.</li>
+        </ol>
+        <p className="text-dim" style={{ fontSize: 12 }}>
+          Re-running is safe: a day is overwritten with the latest totals. You can leave out any figure you don't track. Imported days appear under Log → Nutrition.
+        </p>
+      </details>
+
+      <details style={{ marginTop: 8 }}>
         <summary style={{ cursor: "pointer", fontSize: 14, fontWeight: 600, color: "var(--navy)" }}>Renpho body scans</summary>
         <p style={{ fontSize: 13 }}>
           Run <span style={code}>tools/renpho_sync.py</span> from the project folder on your computer. It signs in to Renpho with your Renpho login (kept on your machine, never sent to this app) and uploads new scans here. See SETUP.md, "Renpho sync", for the one-time setup.
