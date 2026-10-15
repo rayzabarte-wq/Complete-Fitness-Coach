@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, DayForecast, DaySummary, PlannedSession, SessionType, MovementPattern, StravaActivity, GolfSessionType, GolfSessionPlan } from "../lib/api.js";
 import { ACTIVITY_COLORS, FOCUS_LABELS, activityForSessionType } from "../lib/activity.js";
+import { quoteForDate } from "../lib/quotes.js";
 import { requestLocation, parseLocalDate, formatLocalDateKey } from "../lib/location.js";
 import {
   fullLabelFor,
@@ -172,8 +173,17 @@ export default function Calendar() {
           DAY_COUNT - 1
         ].date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
 
+  const quote = quoteForDate(new Date());
+
   return (
     <div>
+      <figure className="card" style={{ margin: "0 0 12px", borderLeft: "4px solid var(--accent)" }}>
+        <blockquote style={{ margin: 0, fontSize: 14, fontStyle: "italic", lineHeight: 1.45 }}>“{quote.text}”</blockquote>
+        <figcaption className="text-dim" style={{ fontSize: 12, marginTop: 6 }}>
+          — {quote.author}, {quote.context}
+        </figcaption>
+      </figure>
+
       {showWeather && <WeatherStrip forecast={forecast} error={weatherError} locationDenied={locationDenied} onRetryLocation={loadForecast} />}
 
       <div className="card" style={{ marginBottom: 12 }}>
