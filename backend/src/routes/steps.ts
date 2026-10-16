@@ -27,7 +27,15 @@ export async function saveStepDays(userId: string, source: StepSource, days: { d
 
 export const stepDaySchema = z.object({
   date: z.string().refine(isDayKey, "date must be YYYY-MM-DD"),
-  steps: z.number().int().min(0).max(200000),
+  // Lenient on purpose: the iPhone Shortcut often sends the total as text
+  // ("8,234") or with decimals (8234.0), so both are accepted and rounded.
+  steps: z.preprocess((v) => {
+    if (typeof v === "string") {
+      const n = Number(v.replace(/[,\s]/g, ""));
+      return Number.isFinite(n) ? Math.round(n) : v;
+    }
+    return typeof v === "number" && Number.isFinite(v) ? Math.round(v) : v;
+  }, z.number().int().min(0).max(200000)),
 });
 
 // GET /steps?from=YYYY-MM-DD&to=YYYY-MM-DD (to exclusive) - the days in
