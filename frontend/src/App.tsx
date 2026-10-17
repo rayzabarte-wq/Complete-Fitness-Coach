@@ -9,6 +9,8 @@ import Plan from "./pages/Plan.js";
 import Admin from "./pages/Admin.js";
 import { api, auth, track, UsageEventName } from "./lib/api.js";
 import { PlanProvider } from "./lib/planContext.js";
+import { GymProvider } from "./lib/gymContext.js";
+import GymMenu from "./components/GymMenu.js";
 import { ConsentOnboarding } from "./components/Consent.js";
 
 // Information architecture: three tabs for the things used day to day —
@@ -82,6 +84,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <PlanProvider>
+        <GymProvider>
         <RouteTracker />
         <div
           style={{
@@ -104,12 +107,26 @@ export default function App() {
               alignItems: "center",
             }}
           >
-            <h1 style={{ margin: 0, fontSize: 19, color: "var(--on-navy)", letterSpacing: "-0.01em" }}>
+            <h1
+              style={{
+                margin: 0,
+                fontSize: 18,
+                color: "var(--on-navy)",
+                letterSpacing: "-0.01em",
+                minWidth: 0,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
               Complete Fitness Coach
             </h1>
-            <Link to="/settings" aria-label="Settings" style={{ color: "var(--on-navy)", display: "flex", padding: 4 }}>
-              <GearIcon />
-            </Link>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0, marginLeft: 8 }}>
+              <GymMenu />
+              <Link to="/settings" aria-label="Settings" style={{ color: "var(--on-navy)", display: "flex", padding: 4 }}>
+                <GearIcon />
+              </Link>
+            </div>
           </header>
 
           <main style={{ padding: "14px max(16px, env(safe-area-inset-right)) 8px max(16px, env(safe-area-inset-left))" }}>
@@ -143,6 +160,7 @@ export default function App() {
             <NavTab to="/progress" label="Progress" />
           </nav>
         </div>
+        </GymProvider>
       </PlanProvider>
     </BrowserRouter>
   );
