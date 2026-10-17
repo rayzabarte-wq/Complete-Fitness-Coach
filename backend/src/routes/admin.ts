@@ -63,26 +63,32 @@ adminRouter.get("/users", async (_req, res) => {
   });
 });
 
-async function actionableUser(req: AdminRequest, id: string) {
+// Either the account to act on, or why it can't be acted on. Spelled out so
+// that after `if (r.error)` TypeScript knows `r.user` is present.
+type ActionableResult =
+  | { user: { id: string; email: string }; error?: undefined }
+  | { user?: undefined; error: { status: number; message: string } };
+
+async function actionableUser(id: string): Promise<ActionableResult> {
   const user = await prisma.user.findUnique({ where: { id }, select: { id: true, email: true } });
-  if (!user) return { error: { status: 404, message: "No such user" } } as const;
-  if (isAdminEmail(user.email)) return { error: { status: 400, message: "Admin accounts can't be changed from here." } } as const;
-  return { user } as const;
+  if (!user) return { error: { status: 404, message: "No such user" } };
+  if (isAdminEmail(user.email)) return { error: { status: 400, message: "Admin accounts can't be changed from here." } };
+  return { user };
 }
 
 // POST /admin/users/:id/suspend and /reinstate. Suspending takes effect on
 // the person's very next request (requireAuth checks it) and blocks login.
 adminRouter.post("/users/:id/suspend", async (req: AdminRequest, res) => {
-  const r = await actionableUser(req, req.params.id);
-  if ("error" in r) return res.status(r.error.status).json({ error: r.error.message });
+  const r = await actionableUser(req.params.id);
+  if (r.error) return res.status(r.error.status).json({ error: r.error.message });
   await prisma.user.update({ where: { id: r.user.id }, data: { suspendedAt: new Date() } });
   await audit(req.adminEmail!, "suspend", r.user.email);
   res.json({ ok: true });
 });
 
 adminRouter.post("/users/:id/reinstate", async (req: AdminRequest, res) => {
-  const r = await actionableUser(req, req.params.id);
-  if ("error" in r) return res.status(r.error.status).json({ error: r.error.message });
+  const r = await actionableUser(req.params.id);
+  if (r.error) return res.status(r.error.status).json({ error: r.error.message });
   await prisma.user.update({ where: { id: r.user.id }, data: { suspendedAt: null } });
   await audit(req.adminEmail!, "reinstate", r.user.email);
   res.json({ ok: true });
@@ -96,8 +102,8 @@ const deleteSchema = z.object({ confirmEmail: z.string() });
 adminRouter.delete("/users/:id", async (req: AdminRequest, res) => {
   const parsed = deleteSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Type the person's email to confirm." });
-  const r = await actionableUser(req, req.params.id);
-  if ("error" in r) return res.status(r.error.status).json({ error: r.error.message });
+  const r = await actionableUser(req.params.id);
+  if (r.error) return res.status(r.error.status).json({ error: r.error.message });
   if (parsed.data.confirmEmail.trim().toLowerCase() !== r.user.email.toLowerCase()) {
     return res.status(400).json({ error: "That doesn't match the person's email." });
   }
