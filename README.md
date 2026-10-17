@@ -132,7 +132,7 @@ product, the intended sources are Apple Health (Renpho can write there) and
 manual entry. Both already work through the same `/ingest/body` endpoint and
 the manual form.
 
-**Steps.** A daily log imported from Apple Health by an iPhone Shortcut posting
+**Steps.** A daily log (days can also be added or corrected by hand under Log → Steps) imported from Apple Health by an iPhone Shortcut posting
 to `/ingest/steps` with a personal upload token (`routes/ingest.ts`). The goal
 is an *average* daily step goal. Progress compares your average with it, and
 the calendar ticks the days you reached it.

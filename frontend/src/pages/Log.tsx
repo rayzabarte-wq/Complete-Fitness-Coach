@@ -605,25 +605,98 @@ function RecentStrength() {
 
 function StepsLog() {
   const [data, setData] = useState<StepsResponse | null>(null);
-  useEffect(() => {
+  // Which day is being edited ("new" = the add-a-day form), and its draft value.
+  const [editing, setEditing] = useState<string | "new" | null>(null);
+  const [dateDraft, setDateDraft] = useState(() => formatLocalDateKey(new Date()));
+  const [stepsDraft, setStepsDraft] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(() => {
     const t = new Date();
-    api.getSteps(formatLocalDateKey(new Date(t.getFullYear(), t.getMonth(), t.getDate() - 13)), formatLocalDateKey(new Date(t.getFullYear(), t.getMonth(), t.getDate() + 1))).then(setData);
+    api
+      .getSteps(formatLocalDateKey(new Date(t.getFullYear(), t.getMonth(), t.getDate() - 13)), formatLocalDateKey(new Date(t.getFullYear(), t.getMonth(), t.getDate() + 1)))
+      .then(setData);
   }, []);
+  useEffect(load, [load]);
+
+  function startEdit(date: string | "new", steps?: number) {
+    setEditing(date);
+    setDateDraft(date === "new" ? formatLocalDateKey(new Date()) : date);
+    setStepsDraft(steps !== undefined ? String(steps) : "");
+    setError(null);
+  }
+
+  async function save() {
+    const n = Math.round(Number(stepsDraft.replace(/[,\s]/g, "")));
+    if (!Number.isFinite(n) || n < 0 || n > 200000) {
+      setError("Enter a number of steps between 0 and 200,000.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await api.setSteps(dateDraft, n);
+      setEditing(null);
+      load();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const editor = (
+    <div className="card" style={{ marginBottom: 8, padding: 12, display: "grid", gap: 8 }}>
+      {editing === "new" ? (
+        <label style={{ fontSize: 13 }}>
+          Day
+          <input type="date" value={dateDraft} max={formatLocalDateKey(new Date())} onChange={(e) => setDateDraft(e.target.value)} style={{ width: "100%", boxSizing: "border-box", padding: 10, marginTop: 4 }} />
+        </label>
+      ) : (
+        <div style={{ fontSize: 14, fontWeight: 600 }}>
+          {new Date(`${dateDraft}T12:00`).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}
+        </div>
+      )}
+      <label style={{ fontSize: 13 }}>
+        Steps
+        <input inputMode="numeric" value={stepsDraft} onChange={(e) => setStepsDraft(e.target.value)} placeholder="e.g. 8500" style={{ width: "100%", boxSizing: "border-box", padding: 10, marginTop: 4 }} />
+      </label>
+      {error && <div style={{ color: "var(--danger)", fontSize: 13 }}>{error}</div>}
+      <div style={{ display: "flex", gap: 8 }}>
+        <button className="button-primary" onClick={save} disabled={busy || !stepsDraft.trim() || !dateDraft}>
+          {busy ? "Saving…" : "Save"}
+        </button>
+        <button className="button-quiet" onClick={() => setEditing(null)}>
+          Cancel
+        </button>
+      </div>
+      <div className="text-dim" style={{ fontSize: 12 }}>If the Apple Health shortcut runs again for the same day, it replaces what you type here.</div>
+    </div>
+  );
+
   if (!data) return <p className="text-dim">Loading…</p>;
   return (
     <div>
       <p className="text-dim" style={{ fontSize: 13, marginTop: 0 }}>
-        Imported from Apple Health each day. Nothing to enter. Trends and your average goal are under{" "}
+        Imported from Apple Health each day, or add and correct a day by hand. Trends and your average goal are under{" "}
         <Link to="/progress" style={{ color: "var(--accent)" }}>
           Progress → Steps
         </Link>
         .
       </p>
+      {editing === "new" ? (
+        editor
+      ) : (
+        <button className="button-secondary" style={{ width: "100%", marginBottom: 8 }} onClick={() => startEdit("new")}>
+          Add or correct a day
+        </button>
+      )}
       {data.days.length === 0 && (
         <div className="card">
-          <p style={{ margin: 0, fontSize: 14 }}>No steps imported yet.</p>
+          <p style={{ margin: 0, fontSize: 14 }}>No steps recorded yet.</p>
           <p className="text-dim" style={{ fontSize: 13, marginBottom: 0 }}>
-            Set up the Apple Health shortcut in{" "}
+            Add a day above, or set up the Apple Health shortcut in{" "}
             <Link to="/settings" style={{ color: "var(--accent)" }}>
               Settings → Data import
             </Link>
@@ -631,18 +704,27 @@ function StepsLog() {
           </p>
         </div>
       )}
-      {[...data.days].reverse().map((d) => (
-        <div key={d.date} className="card" style={{ marginBottom: 6, padding: "10px 12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span style={{ fontSize: 14 }}>
-            <span className="swatch" style={{ background: ACTIVITY_COLORS.STEPS, marginRight: 8 }} />
-            {new Date(`${d.date}T12:00`).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}
-          </span>
-          <span style={{ fontSize: 14, fontWeight: 600 }}>
-            {d.steps.toLocaleString()}
-            {d.hitGoal === true && <span style={{ color: "var(--good)", marginLeft: 6 }}>✓</span>}
-          </span>
-        </div>
-      ))}
+      {[...data.days].reverse().map((d) =>
+        editing === d.date ? (
+          <div key={d.date}>{editor}</div>
+        ) : (
+          <div key={d.date} className="card" style={{ marginBottom: 6, padding: "10px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 14 }}>
+              <span className="swatch" style={{ background: ACTIVITY_COLORS.STEPS, marginRight: 8 }} />
+              {new Date(`${d.date}T12:00`).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}
+            </span>
+            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 14, fontWeight: 600 }}>
+                {d.steps.toLocaleString()}
+                {d.hitGoal === true && <span style={{ color: "var(--good)", marginLeft: 6 }}>✓</span>}
+              </span>
+              <button className="button-quiet" onClick={() => startEdit(d.date, d.steps)} aria-label={`Edit steps for ${d.date}`}>
+                Edit
+              </button>
+            </span>
+          </div>
+        )
+      )}
     </div>
   );
 }
