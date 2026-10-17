@@ -606,6 +606,16 @@ function errorMessage(error: unknown, status: number): string {
   return `Request failed: ${status}`;
 }
 
+export interface Availability {
+  /** Minutes available per day, index 0 = Sunday .. 6 = Saturday. */
+  minutesByDay: number[];
+  notes: string | null;
+  isSet: boolean;
+  updatedAt: string | null;
+  totalMinutes: number;
+  daysAvailable: number;
+}
+
 export interface SportProgress {
   days: number;
   sessions: number;
@@ -679,7 +689,7 @@ export type UsageEventName =
   | "log_steps_tab" | "log_nutrition_tab" | "log_other_sport_tab"
   | "workout_generated" | "workout_saved" | "gym_switched" | "gym_preset_applied"
   | "custom_equipment_added" | "custom_exercise_created" | "steps_saved" | "nutrition_saved"
-  | "body_scan_added" | "goal_created" | "message_dismissed" | "golf_round_logged" | "golf_goal_set" | "ambitions_saved" | "sport_goal_saved";
+  | "body_scan_added" | "goal_created" | "message_dismissed" | "golf_round_logged" | "golf_goal_set" | "ambitions_saved" | "sport_goal_saved" | "availability_saved";
 
 let trackingPausedUntil = 0;
 const lastSent = new Map<string, number>();
@@ -1084,6 +1094,11 @@ export const api = {
   adminWithdrawMessage: (id: string) => request<void>(`/admin/messages/${id}`, { method: "DELETE" }),
   adminUsage: () => request<AdminUsage>("/admin/usage"),
   adminLog: () => request<AdminLogEntry[]>("/admin/log"),
+
+  // --- Average weekly time for training ---------------------------------------
+  getAvailability: () => request<Availability>("/availability"),
+  saveAvailability: (data: { minutesByDay: number[]; notes: string | null }) =>
+    tracked("availability_saved", request<Availability>("/availability", { method: "PUT", body: JSON.stringify(data) })),
 
   // --- Ambitions: about me, and a sentence or two per sport ------------------
   getAmbitions: () => request<AmbitionsOverview>("/ambitions"),

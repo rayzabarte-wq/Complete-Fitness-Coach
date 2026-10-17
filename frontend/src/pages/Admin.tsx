@@ -352,6 +352,7 @@ const FEATURE_LABELS: Record<string, string> = {
   golf_goal_set: "Golf rounds goal set",
   ambitions_saved: "Ambitions written",
   sport_goal_saved: "Sport goal written",
+  availability_saved: "Weekly time saved",
 };
 
 // Totals per feature over the last 30 days. Never shows who used what.

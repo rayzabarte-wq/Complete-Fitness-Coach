@@ -1063,3 +1063,13 @@ Beyond the responsive layout itself, a few iOS-specific fixes are baked in:
   conversation about Strava import for how cardio data would eventually
   flow in automatically
 - Recommendation history / trend charts
+
+## Weekly time (Settings → Weekly time)
+
+Each person records how long they can usually train on each day of an average
+week (15-minute steps, up to 12 hours a day) plus an optional note. It is
+stored in `WeeklyAvailability` (`minutesByDay`, index 0 = Sunday) and read via
+`getAvailability()` in `backend/src/services/availability.ts`, which also
+reports whether it has been set. The 7-day workout proposal will combine it
+with the sport ambitions (`services/ambitions.ts`). It is included in the data
+export and removed with the account.

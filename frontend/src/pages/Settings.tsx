@@ -6,6 +6,7 @@ import Collapsible from "../components/Collapsible.js";
 import { APP_VERSION, ServerStatus, describeVersions, getServerStatus, versionsDiffer } from "../lib/diagnose.js";
 import { SESSION_TYPE_TREE } from "../lib/sessionTypes.js";
 import { ConsentSettings } from "../components/Consent.js";
+import WeeklyAvailability from "../components/WeeklyAvailability.js";
 
 // Settings lives behind the gear icon rather than a tab: it's a
 // set-and-forget place, not somewhere you go daily.
@@ -68,6 +69,10 @@ export default function Settings({ onLoggedOut }: { onLoggedOut: () => void }) {
 
       <Collapsible title="Gyms">
         <GymsSection />
+      </Collapsible>
+
+      <Collapsible title="Weekly time" id="weekly-time" hint="average week">
+        <WeeklyAvailability />
       </Collapsible>
 
       <Collapsible title="Workout types" id="workout-types">

@@ -76,6 +76,7 @@ model User {
   ambitions          String?
   ambitionsUpdatedAt DateTime?
   sportAmbitions     SportAmbition[]
+  weeklyAvailability WeeklyAvailability?
 
   announcementReads AnnouncementRead[]
   usageEvents       UsageEvent[]
@@ -1069,4 +1070,19 @@ model SportAmbition {
   updatedAt DateTime @updatedAt
 
   @@unique([userId, sport])
+}
+
+// How much time the person can usually give to training on each day of an
+// average week, plus anything else the planner should know. Read by the
+// weekly workout proposal (see services/availability.ts) together with their
+// sport ambitions. Separate from the per-sport minutes in the 3-month plan.
+model WeeklyAvailability {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String   @unique
+  // Seven values, index 0 = Sunday .. 6 = Saturday (the same convention as
+  // ScheduleConstraint.daysOfWeek). Minutes available that day; 0 = none.
+  minutesByDay Int[]
+  notes     String?
+  updatedAt DateTime @updatedAt
 }

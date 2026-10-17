@@ -32,6 +32,7 @@ import { adminRouter } from "./routes/admin.js";
 import { messagesRouter } from "./routes/messages.js";
 import { usageRouter } from "./routes/usage.js";
 import { ambitionsRouter } from "./routes/ambitions.js";
+import { availabilityRouter } from "./routes/availability.js";
 import { purgeOldUsage } from "./services/usage.js";
 import { requireAuth } from "./lib/requireAuth.js";
 
@@ -90,6 +91,7 @@ app.use("/nutrition", requireAuth, nutritionRouter);
 app.use("/messages", requireAuth, messagesRouter);
 app.use("/usage", requireAuth, usageRouter);
 app.use("/ambitions", requireAuth, ambitionsRouter);
+app.use("/availability", requireAuth, availabilityRouter);
 // Owner-only area (see lib/requireAdmin.ts): user list, suspend/delete, messages.
 app.use("/admin", requireAuth, adminRouter);
 
