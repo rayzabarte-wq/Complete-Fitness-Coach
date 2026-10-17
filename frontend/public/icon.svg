@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Complete Fitness Coach">
+  <!-- Teal tile; everything that matters sits inside the central 72% so the same art works as a maskable icon. -->
+  <rect width="512" height="512" fill="#1A6B71"/>
+  <!-- A progress ring, the same shape as the one on the Calendar, three quarters done. -->
+  <circle cx="256" cy="256" r="168" fill="none" stroke="#F8F3EA" stroke-opacity="0.22" stroke-width="34"/>
+  <circle cx="256" cy="256" r="168" fill="none" stroke="#F8F3EA" stroke-width="34" stroke-linecap="round"
+          stroke-dasharray="791.7 263.9" transform="rotate(-90 256 256)"/>
+  <!-- A bright marker where the ring has got to. -->
+  <circle cx="88" cy="256" r="24" fill="#F4B134" stroke="#1A6B71" stroke-width="6"/>
+  <!-- The sun in the middle. -->
+  <circle cx="256" cy="256" r="74" fill="#F4B134"/>
+  <g stroke="#F4B134" stroke-width="14" stroke-linecap="round">
+  <line x1="256.0" y1="152.0" x2="256.0" y2="132.0"/>
+  <line x1="329.5" y1="182.5" x2="343.7" y2="168.3"/>
+  <line x1="360.0" y1="256.0" x2="380.0" y2="256.0"/>
+  <line x1="329.5" y1="329.5" x2="343.7" y2="343.7"/>
+  <line x1="256.0" y1="360.0" x2="256.0" y2="380.0"/>
+  <line x1="182.5" y1="329.5" x2="168.3" y2="343.7"/>
+  <line x1="152.0" y1="256.0" x2="132.0" y2="256.0"/>
+  <line x1="182.5" y1="182.5" x2="168.3" y2="168.3"/>
+  </g>
+</svg>
