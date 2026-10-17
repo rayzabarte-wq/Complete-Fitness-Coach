@@ -44,7 +44,11 @@ const stepsBody = z.union([stepDaySchema, z.object({ days: z.array(stepDaySchema
 
 ingestRouter.post("/steps", async (req: IngestRequest, res) => {
   const parsed = stepsBody.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  if (!parsed.success) {
+    // A failed union only says "Invalid input"; for the one-day shape, say which field was wrong.
+    const single = Array.isArray(req.body?.days) ? null : stepDaySchema.safeParse(req.body);
+    return res.status(400).json({ error: single && !single.success ? single.error.flatten() : parsed.error.flatten() });
+  }
   const days = "days" in parsed.data ? parsed.data.days : [parsed.data];
   res.json(await saveStepDays(req.userId!, "APPLE_HEALTH", days));
 });
@@ -55,7 +59,10 @@ const nutritionBody = z.union([nutritionDaySchema, z.object({ days: z.array(nutr
 
 ingestRouter.post("/nutrition", async (req: IngestRequest, res) => {
   const parsed = nutritionBody.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  if (!parsed.success) {
+    const single = Array.isArray(req.body?.days) ? null : nutritionDaySchema.safeParse(req.body);
+    return res.status(400).json({ error: single && !single.success ? single.error.flatten() : parsed.error.flatten() });
+  }
   const days = "days" in parsed.data ? parsed.data.days : [parsed.data];
   res.json(await saveNutritionDays(req.userId!, "APPLE_HEALTH", days));
 });
