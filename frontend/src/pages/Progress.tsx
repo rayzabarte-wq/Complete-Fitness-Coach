@@ -17,6 +17,7 @@ import { ACTIVITY_COLORS, MUSCLE_LABELS } from "../lib/activity.js";
 import { TimeChart, DailyBarChart, Meter, Line, Marker } from "../components/charts.js";
 import PeriodCompare, { CompareRow } from "../components/PeriodCompare.js";
 import Collapsible from "../components/Collapsible.js";
+import Ambitions from "../components/Ambitions.js";
 
 // Progress: one tab, four sub-tabs. Goals (body goals + setting/revising
 // them, benchmarks, the quarterly review), Strength (lift progression),
@@ -123,6 +124,8 @@ function GoalsTab() {
   return (
     <div>
       {error && <p style={{ color: "var(--danger)" }}>{error}</p>}
+
+      <Ambitions />
 
       <Collapsible title="How you compare" rememberAs="progress-compare">
         <BenchmarksCard version={version} />

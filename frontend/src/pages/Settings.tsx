@@ -70,7 +70,7 @@ export default function Settings({ onLoggedOut }: { onLoggedOut: () => void }) {
         <GymsSection />
       </Collapsible>
 
-      <Collapsible title="Workout types">
+      <Collapsible title="Workout types" id="workout-types">
         <WorkoutTypesSection />
       </Collapsible>
 

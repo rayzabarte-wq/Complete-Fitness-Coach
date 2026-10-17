@@ -26,6 +26,8 @@ export const USAGE_EVENTS = [
   "message_dismissed",
   "golf_round_logged",
   "golf_goal_set",
+  "ambitions_saved",
+  "sport_goal_saved",
 ] as const;
 export type UsageEventName = (typeof USAGE_EVENTS)[number];
 

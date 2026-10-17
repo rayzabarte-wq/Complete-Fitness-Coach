@@ -350,6 +350,8 @@ const FEATURE_LABELS: Record<string, string> = {
   message_dismissed: "Message dismissed",
   golf_round_logged: "Golf round logged",
   golf_goal_set: "Golf rounds goal set",
+  ambitions_saved: "Ambitions written",
+  sport_goal_saved: "Sport goal written",
 };
 
 // Totals per feature over the last 30 days. Never shows who used what.

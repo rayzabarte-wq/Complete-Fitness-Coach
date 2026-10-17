@@ -1024,6 +1024,16 @@ Log → **Golf** (switch Golf on under Settings → Workout types if you can't s
 
 Upgrade note: adds migrations `20261017100000_golf_rounds` and `20261017120000_golf_rounds_strava`.
 
+## Ambitions and sport goals
+
+At the top of **Progress → Goals**.
+
+- **About you and your ambitions:** a few sentences (up to 600 characters) on who you are and what you want from sport or exercise. When you save, any sport it mentions that isn't switched on (golf, running, swimming, cycling, walking, strength and so on) is offered with a **Switch on** button, which ticks all of that sport's workout types, the same as Settings → Workout types (also linked). The matching is plain word matching on the server; the text isn't sent to the AI or anywhere else.
+- **Sport goals:** for each switched-on sport, a sentence or two (up to 300 characters) on what you want from it. It's shown next to **How it's going**: sessions completed (workouts logged for Strength) in the last 90 days, about how many a week, compared with the 90 days before, plus time trained. Golf also shows rounds played and best and average 18-hole score, with a link to the rounds log. A goal written over 3 months ago is flagged for a second look.
+- Both are free text, stored in your account, included in the data export and deleted with the account. Clearing a box and saving removes it.
+
+Upgrade note: adds migration `20261017210000_ambitions`.
+
 ## iPhone / Safari polish
 
 Beyond the responsive layout itself, a few iOS-specific fixes are baked in:

@@ -17,7 +17,7 @@ export const accountRouter = Router();
 accountRouter.get("/export", requireAuth, async (req: AuthedRequest, res) => {
   const userId = req.userId!;
 
-  const [user, sessions, recommendations, plannedSessions, nutritionLogs, trainingPlans, outlookConnected, stravaConnected, consents, bodyMeasurements, bodyGoals, stepDays, nutritionDays, trainingBlocks, gyms, customEquipment, customExercises, usageEvents, golfRounds, golfRoundGoals] =
+  const [user, sessions, recommendations, plannedSessions, nutritionLogs, trainingPlans, outlookConnected, stravaConnected, consents, bodyMeasurements, bodyGoals, stepDays, nutritionDays, trainingBlocks, gyms, customEquipment, customExercises, usageEvents, golfRounds, golfRoundGoals, sportAmbitions] =
     await Promise.all([
       prisma.user.findUniqueOrThrow({
         where: { id: userId },
@@ -32,6 +32,8 @@ accountRouter.get("/export", requireAuth, async (req: AuthedRequest, res) => {
           trainingDaysPerWeek: true,
           dailyStepGoal: true,
           visibleSessionTypes: true,
+          ambitions: true,
+          ambitionsUpdatedAt: true,
         },
       }),
       prisma.workoutSession.findMany({
@@ -65,6 +67,7 @@ accountRouter.get("/export", requireAuth, async (req: AuthedRequest, res) => {
       prisma.usageEvent.findMany({ where: { userId }, orderBy: { createdAt: "asc" }, select: { name: true, createdAt: true } }),
       prisma.golfRound.findMany({ where: { userId, deletedAt: null }, orderBy: { date: "asc" } }),
       prisma.golfRoundGoal.findMany({ where: { userId }, orderBy: { quarter: "asc" } }),
+      prisma.sportAmbition.findMany({ where: { userId }, orderBy: { sport: "asc" } }),
     ]);
 
   res.json({
@@ -81,6 +84,7 @@ accountRouter.get("/export", requireAuth, async (req: AuthedRequest, res) => {
     usageEvents,
     golfRounds,
     golfRoundGoals,
+    sportAmbitions,
     consentHistory: consents,
     bodyMeasurements,
     bodyGoals,

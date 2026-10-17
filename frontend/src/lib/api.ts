@@ -606,6 +606,33 @@ function errorMessage(error: unknown, status: number): string {
   return `Request failed: ${status}`;
 }
 
+export interface SportProgress {
+  days: number;
+  sessions: number;
+  previousSessions: number;
+  perWeek: number;
+  minutes: number;
+  /** Golf only. */
+  rounds?: number;
+  bestScore18?: number | null;
+  averageScore18?: number | null;
+}
+export interface SportAmbitionInfo {
+  sport: Sport;
+  /** True when at least one of the sport's workout types is switched on. */
+  active: boolean;
+  statement: string | null;
+  statementUpdatedAt: string | null;
+  progress: SportProgress | null;
+}
+export interface AmbitionsOverview {
+  ambitions: string | null;
+  ambitionsUpdatedAt: string | null;
+  /** Sports the text seems to be about that aren't switched on yet. */
+  suggestions: Sport[];
+  sports: SportAmbitionInfo[];
+}
+
 export interface GolfRound {
   id: string;
   date: string; // YYYY-MM-DD
@@ -652,7 +679,7 @@ export type UsageEventName =
   | "log_steps_tab" | "log_nutrition_tab" | "log_other_sport_tab"
   | "workout_generated" | "workout_saved" | "gym_switched" | "gym_preset_applied"
   | "custom_equipment_added" | "custom_exercise_created" | "steps_saved" | "nutrition_saved"
-  | "body_scan_added" | "goal_created" | "message_dismissed" | "golf_round_logged" | "golf_goal_set";
+  | "body_scan_added" | "goal_created" | "message_dismissed" | "golf_round_logged" | "golf_goal_set" | "ambitions_saved" | "sport_goal_saved";
 
 let trackingPausedUntil = 0;
 const lastSent = new Map<string, number>();
@@ -1057,6 +1084,13 @@ export const api = {
   adminWithdrawMessage: (id: string) => request<void>(`/admin/messages/${id}`, { method: "DELETE" }),
   adminUsage: () => request<AdminUsage>("/admin/usage"),
   adminLog: () => request<AdminLogEntry[]>("/admin/log"),
+
+  // --- Ambitions: about me, and a sentence or two per sport ------------------
+  getAmbitions: () => request<AmbitionsOverview>("/ambitions"),
+  saveAmbitions: (ambitions: string) =>
+    tracked("ambitions_saved", request<AmbitionsOverview>("/ambitions/text", { method: "PUT", body: JSON.stringify({ ambitions }) })),
+  saveSportStatement: (sport: Sport, statement: string) =>
+    tracked("sport_goal_saved", request<AmbitionsOverview>(`/ambitions/sports/${sport}`, { method: "PUT", body: JSON.stringify({ statement }) })),
 
   // --- Golf rounds and the quarterly rounds goal -------------------------------
   getGolfRounds: (quarter?: string) => request<GolfRoundsResponse>(`/golf-rounds${qs({ quarter })}`),

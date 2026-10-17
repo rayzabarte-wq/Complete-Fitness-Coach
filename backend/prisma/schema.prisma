@@ -70,6 +70,13 @@ model User {
   // lib/requireAuth.ts) — enough for "active this week", no finer.
   lastSeenAt  DateTime?
 
+  // A few sentences the person writes about themselves and what they want
+  // from sport and training (see routes/ambitions.ts). Kept to what they
+  // choose to write; never sent to the AI.
+  ambitions          String?
+  ambitionsUpdatedAt DateTime?
+  sportAmbitions     SportAmbition[]
+
   announcementReads AnnouncementRead[]
   usageEvents       UsageEvent[]
   golfRounds        GolfRound[]
@@ -1047,4 +1054,19 @@ model GolfRoundGoal {
   target  Int
 
   @@unique([userId, quarter])
+}
+
+// A sentence or two the person writes about what they want from one sport or
+// workout type, shown next to their progress in it so they can review one
+// against the other.
+model SportAmbition {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  sport     Sport
+  statement String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, sport])
 }
