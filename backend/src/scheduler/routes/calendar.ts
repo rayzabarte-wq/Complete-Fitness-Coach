@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../../lib/prisma.js";
 import { getTenDayForecast, isWeatherConfigured } from "../services/weather.js";
 import { getActivitiesForDate } from "../services/stravaSync.js";
+import { syncStravaActivities } from "../services/stravaImport.js";
 import { AuthedRequest } from "../../lib/requireAuth.js";
 import { addDays, dateToDayKey, dayKeyToDate, isDayKey } from "../../lib/dates.js";
 import { autofillWeek } from "../services/strengthAutofill.js";
@@ -258,6 +259,14 @@ calendarRouter.get("/:id/strava-activities", async (req: AuthedRequest, res) => 
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : "Failed to fetch Strava activities" });
   }
+});
+
+// POST /calendar/strava-sync - bring recent Strava activities (runs, walks,
+// hikes, rides, swims) into the calendar. Each completes a matching planned
+// session that day, or is recorded as a new completed one. At most every 5
+// minutes unless { force: true }.
+calendarRouter.post("/strava-sync", async (req: AuthedRequest, res) => {
+  res.json(await syncStravaActivities(req.userId!, req.body?.force === true));
 });
 
 const linkStravaSchema = z.object({

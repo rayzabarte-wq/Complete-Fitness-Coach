@@ -931,6 +931,9 @@ export const api = {
     return request<PlannedSession[]>(`/calendar${query ? `?${query}` : ""}`);
   },
 
+  syncStrava: (force = false) =>
+    request<{ connected: boolean; created: number; completed: number; error?: string }>("/calendar/strava-sync", { method: "POST", body: JSON.stringify({ force }) }),
+
   createPlannedSession: (data: {
     date: string;
     type: SessionType;

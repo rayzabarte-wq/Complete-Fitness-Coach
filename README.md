@@ -1089,3 +1089,22 @@ Whatever the model returns is trimmed to fit (`cleanProposal`): dates inside
 the window, one session per day, never longer than that day's free time. Nothing is
 saved until the person ticks sessions and adds them (through `POST /calendar`,
 with the drills in the session notes, like the single-session suggestion).
+
+## Automatic Strava sync (Calendar)
+
+Opening the Calendar runs `POST /calendar/strava-sync` (at most every 5
+minutes per person; the "Sync Strava" link forces it). It reads the last 14
+days of Strava activities (`scheduler/services/stravaImport.ts`) and, for each
+one not seen before:
+
+- a planned session the same day in the same sport and not yet done is
+  completed, with the activity's moving time as the actual time;
+- otherwise a new session is recorded as planned and completed.
+
+Mapping: Run/TrailRun/VirtualRun → run (Strava long run or 75+ min → Long run,
+Strava "workout" → Intervals, else Recovery); Walk → Walk; Hike → Hike;
+Ride/Gravel/MTB/E-bike → Cycling (Long from 2 h, else Easy); VirtualRide →
+Cycling - Turbo; Swim → Swim. Golf is handled by the golf rounds importer;
+weights and other types are ignored. Every activity handled is remembered in
+`StravaImport`, so deleting a session doesn't bring it back, and activities
+already linked by hand are left alone. The session type can be edited after.

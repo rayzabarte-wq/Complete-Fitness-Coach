@@ -77,6 +77,7 @@ model User {
   ambitionsUpdatedAt DateTime?
   sportAmbitions     SportAmbition[]
   weeklyAvailability WeeklyAvailability?
+  stravaImports      StravaImport[]
 
   announcementReads AnnouncementRead[]
   usageEvents       UsageEvent[]
@@ -1085,4 +1086,19 @@ model WeeklyAvailability {
   minutesByDay Int[]
   notes     String?
   updatedAt DateTime @updatedAt
+}
+
+// Every Strava activity the app has already dealt with (imported as a session
+// or matched to a planned one), so the automatic sync never brings the same
+// activity back, even after the person deletes the session it created.
+model StravaImport {
+  id               String   @id @default(cuid())
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId           String
+  stravaActivityId String
+  // What it became. Not a relation: deleting the session must not delete this row.
+  plannedSessionId String?
+  createdAt        DateTime @default(now())
+
+  @@unique([userId, stravaActivityId])
 }

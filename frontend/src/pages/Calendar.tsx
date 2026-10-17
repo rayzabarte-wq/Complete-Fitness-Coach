@@ -113,6 +113,30 @@ export default function Calendar() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showWeather]);
 
+  // Pull in recent Strava activities (runs, walks, rides, swims) whenever the
+  // Calendar opens; the server skips this if it ran in the last 5 minutes.
+  const [stravaNote, setStravaNote] = useState<{ connected: boolean; text: string | null }>({ connected: false, text: null });
+  const [syncing, setSyncing] = useState(false);
+  function syncStrava(force: boolean) {
+    setSyncing(true);
+    api
+      .syncStrava(force)
+      .then((r) => {
+        const parts = [
+          r.created ? `${r.created} new from Strava` : null,
+          r.completed ? `${r.completed} planned session${r.completed === 1 ? "" : "s"} completed` : null,
+        ].filter(Boolean);
+        setStravaNote({ connected: r.connected, text: r.error ?? (parts.length ? parts.join(", ") : force ? "Strava is up to date." : null) });
+        if (r.created || r.completed) loadWeek();
+      })
+      .catch(() => undefined)
+      .finally(() => setSyncing(false));
+  }
+  useEffect(() => {
+    syncStrava(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     loadWeek();
     setAutofillNotes(null);
@@ -208,6 +232,15 @@ export default function Calendar() {
       </div>
 
       <MessageCards />
+
+      {stravaNote.connected && (
+        <p className="text-dim" style={{ fontSize: 12, margin: "0 0 8px" }}>
+          {stravaNote.text ? `${stravaNote.text}. ` : ""}
+          <button type="button" className="button-quiet" style={{ fontSize: 12 }} disabled={syncing} onClick={() => syncStrava(true)}>
+            {syncing ? "Syncing…" : "Sync Strava"}
+          </button>
+        </p>
+      )}
 
       {visibleTypes.includes("GOLF_RANGE") && <GolfWeek onAdded={loadWeek} />}
 

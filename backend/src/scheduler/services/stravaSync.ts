@@ -212,3 +212,58 @@ export async function getGolfActivities(userId: string, from: Date, to: Date): P
   }
   return out;
 }
+
+export interface StravaActivityDetail extends StravaActivity {
+  sportType: string; // Strava's finer type, e.g. "TrailRun", "GravelRide"
+  workoutType: number | null; // Runs: 1 race, 2 long run, 3 workout
+}
+
+/** Every activity that started between two dates (plus a day either side, as
+ * Strava filters on UTC), newest first, with the details the importer needs. */
+export async function getActivitiesBetween(userId: string, from: Date, to: Date): Promise<StravaActivityDetail[]> {
+  const accessToken = await getValidAccessToken(userId);
+  if (!accessToken) {
+    throw new Error("Strava isn't connected");
+  }
+  const out: StravaActivityDetail[] = [];
+  for (let page = 1; page <= 5; page++) {
+    const params = new URLSearchParams({
+      after: String(Math.floor(from.getTime() / 1000) - 86400),
+      before: String(Math.floor(to.getTime() / 1000) + 86400),
+      per_page: "100",
+      page: String(page),
+    });
+    const res = await fetch(`${API_BASE}/athlete/activities?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to fetch Strava activities: ${res.status} ${await res.text()}`);
+    }
+    const batch = (await res.json()) as Array<{
+      id: number;
+      name: string;
+      type: string;
+      sport_type?: string;
+      workout_type?: number | null;
+      start_date_local: string;
+      moving_time: number;
+      elapsed_time?: number;
+      distance: number;
+    }>;
+    for (const a of batch) {
+      out.push({
+        id: String(a.id),
+        name: a.name,
+        type: a.type,
+        sportType: a.sport_type ?? a.type,
+        workoutType: a.workout_type ?? null,
+        startDate: a.start_date_local,
+        movingMinutes: Math.round(a.moving_time / 60),
+        elapsedMinutes: a.elapsed_time ? Math.round(a.elapsed_time / 60) : undefined,
+        distanceMiles: Math.round((a.distance / 1609.34) * 10) / 10,
+      });
+    }
+    if (batch.length < 100) break;
+  }
+  return out;
+}
