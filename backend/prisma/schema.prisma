@@ -72,6 +72,8 @@ model User {
 
   announcementReads AnnouncementRead[]
   usageEvents       UsageEvent[]
+  golfRounds        GolfRound[]
+  golfRoundGoals    GolfRoundGoal[]
   sessions         WorkoutSession[]
   recommendations  Recommendation[]
   plannedSessions  PlannedSession[]
@@ -1008,4 +1010,34 @@ model UsageEvent {
   @@index([name, createdAt])
   @@index([userId, createdAt])
   @@index([createdAt])
+}
+
+// A round of golf the person played and logged by hand. Counted towards the
+// quarterly rounds goal (GolfRoundGoal). Separate from PlannedSession rounds,
+// which arrive from Strava and only record that a round happened.
+model GolfRound {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  // The day played, stored as UTC midnight of the day key (see lib/dates.ts).
+  date      DateTime
+  course    String
+  // 9 or 18.
+  holes     Int
+  score     Int?
+  notes     String?
+  createdAt DateTime @default(now())
+
+  @@index([userId, date])
+}
+
+// How many rounds the person wants to play in a calendar quarter ("2026-Q4").
+model GolfRoundGoal {
+  id      String @id @default(cuid())
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId  String
+  quarter String
+  target  Int
+
+  @@unique([userId, quarter])
 }

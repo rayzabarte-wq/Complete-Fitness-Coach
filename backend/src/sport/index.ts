@@ -9,6 +9,7 @@ export { gymsRouter } from "./routes/gyms.js";
 export { sessionsRouter } from "./routes/sessions.js";
 export { workoutsRouter } from "./routes/workouts.js";
 export { golfRouter } from "./routes/golf.js";
+export { golfRoundsRouter } from "./routes/golfRounds.js";
 export { progressRouter } from "./routes/progress.js";
 
 // Training vocabulary and planning functions used outside this module:

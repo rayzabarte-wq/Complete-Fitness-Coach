@@ -348,6 +348,8 @@ const FEATURE_LABELS: Record<string, string> = {
   body_scan_added: "Body scan added",
   goal_created: "Body goal created",
   message_dismissed: "Message dismissed",
+  golf_round_logged: "Golf round logged",
+  golf_goal_set: "Golf rounds goal set",
 };
 
 // Totals per feature over the last 30 days. Never shows who used what.

@@ -1010,6 +1010,18 @@ Admin → **Feature use** shows, for the last 30 days, how many people used each
 
 Upgrade note: adds migration `20261016120000_usage_events`.
 
+## Golf rounds and a quarterly goal
+
+Log → **Golf** (switch Golf on under Settings → Workout types if you can't see the tab) starts with a Rounds section.
+
+- **Log a round:** date, course (suggests ones you've used), 9 or 18 holes, optional score and notes. Edit or delete later. If a Round was planned on the calendar for that day, it is ticked off.
+- **Quarterly goal:** pick a calendar quarter (the next one, this one, or the last three) and set how many rounds to play. Every round counts as one, whether 9 or 18 holes. You see rounds done, rounds to go, days left, about how many a week you still need, and whether you're on track.
+- **Scores:** average and best score are worked out from 18-hole rounds that have a score.
+- Rounds that arrive from Strava on the calendar are separate and are not counted towards the goal; only rounds logged here are.
+- Rounds and goals are included in the data export and deleted with the account.
+
+Upgrade note: adds migration `20261017100000_golf_rounds`.
+
 ## iPhone / Safari polish
 
 Beyond the responsive layout itself, a few iOS-specific fixes are baked in:

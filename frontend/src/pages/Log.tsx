@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import GolfRounds from "../components/GolfRounds.js";
 import { api, track, DailyWorkout, SavedWorkout, MovementPattern, PlannedSession, SessionType, StepsResponse, TodaySuggestion, NutritionResponse } from "../lib/api.js";
 import { usePlan, loggedSets } from "../lib/planContext.js";
 import { Gym, GYM_KIND_LABEL } from "../lib/equipment.js";
@@ -880,9 +881,10 @@ function PassiveSportLog({ sport }: { sport: Exclude<LogView, "STRENGTH" | "STEP
 
   return (
     <div>
+      {sport === "GOLF" && <GolfRounds />}
       <p className="text-dim" style={{ fontSize: 13, marginTop: 0 }}>
         {sport === "GOLF"
-          ? "Rounds come in from Strava (via Garmin) and are shown as they arrived. Range, short-game and putting practice are planned and logged from the calendar."
+          ? "Below: sessions from your calendar. Rounds from Strava (via Garmin) show here as they arrived, and tick off a planned round when you log it above. Range, short-game and putting practice are planned and logged from the calendar."
           : "Imported from Strava (via Garmin) and shown as it arrived. Nothing to enter here."}
       </p>
       {sessions === null && <p className="text-dim">Loading…</p>}

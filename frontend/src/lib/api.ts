@@ -606,6 +606,29 @@ function errorMessage(error: unknown, status: number): string {
   return `Request failed: ${status}`;
 }
 
+export interface GolfRound {
+  id: string;
+  date: string; // YYYY-MM-DD
+  course: string;
+  holes: 9 | 18;
+  score: number | null;
+  notes: string | null;
+}
+export type GolfRoundInput = Omit<GolfRound, "id">;
+export interface GolfRoundsResponse {
+  quarter: string;
+  target: number | null;
+  count: number;
+  remaining: number | null;
+  daysLeft: number;
+  neededPerWeek: number | null;
+  status: "done" | "missed" | "on_track" | "behind" | null;
+  averageScore18: number | null;
+  bestScore18: number | null;
+  rounds: GolfRound[];
+  courses: string[];
+}
+
 export interface AdminUsage {
   totalUsers: number;
   optedInUsers: number;
@@ -622,7 +645,7 @@ export type UsageEventName =
   | "log_steps_tab" | "log_nutrition_tab" | "log_other_sport_tab"
   | "workout_generated" | "workout_saved" | "gym_switched" | "gym_preset_applied"
   | "custom_equipment_added" | "custom_exercise_created" | "steps_saved" | "nutrition_saved"
-  | "body_scan_added" | "goal_created" | "message_dismissed";
+  | "body_scan_added" | "goal_created" | "message_dismissed" | "golf_round_logged" | "golf_goal_set";
 
 let trackingPausedUntil = 0;
 const lastSent = new Map<string, number>();
@@ -1027,6 +1050,17 @@ export const api = {
   adminWithdrawMessage: (id: string) => request<void>(`/admin/messages/${id}`, { method: "DELETE" }),
   adminUsage: () => request<AdminUsage>("/admin/usage"),
   adminLog: () => request<AdminLogEntry[]>("/admin/log"),
+
+  // --- Golf rounds and the quarterly rounds goal -------------------------------
+  getGolfRounds: (quarter?: string) => request<GolfRoundsResponse>(`/golf-rounds${qs({ quarter })}`),
+  addGolfRound: (data: GolfRoundInput) =>
+    tracked("golf_round_logged", request<GolfRound>("/golf-rounds", { method: "POST", body: JSON.stringify(data) })),
+  updateGolfRound: (id: string, data: GolfRoundInput) =>
+    request<GolfRound>(`/golf-rounds/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteGolfRound: (id: string) => request<void>(`/golf-rounds/${id}`, { method: "DELETE" }),
+  setGolfRoundGoal: (quarter: string, target: number) =>
+    tracked("golf_goal_set", request<void>("/golf-rounds/goal/set", { method: "PUT", body: JSON.stringify({ quarter, target }) })),
+  clearGolfRoundGoal: (quarter: string) => request<void>(`/golf-rounds/goal/${quarter}`, { method: "DELETE" }),
 
   // --- Nutrition ------------------------------------------------------------
   getNutrition: (from: string, to: string) => request<NutritionResponse>(`/nutrition${qs({ from, to })}`),
