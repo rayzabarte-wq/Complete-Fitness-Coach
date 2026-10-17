@@ -613,8 +613,10 @@ export interface GolfRound {
   holes: 9 | 18;
   score: number | null;
   notes: string | null;
+  /** "strava" when it came from (or was matched to) a Strava Golf activity. */
+  source: "manual" | "strava";
 }
-export type GolfRoundInput = Omit<GolfRound, "id">;
+export type GolfRoundInput = Omit<GolfRound, "id" | "source">;
 export interface GolfRoundsResponse {
   quarter: string;
   target: number | null;
@@ -627,6 +629,11 @@ export interface GolfRoundsResponse {
   bestScore18: number | null;
   rounds: GolfRound[];
   courses: string[];
+  stravaConnected: boolean;
+  /** Set when the automatic Strava check failed. */
+  syncError: string | null;
+  /** New rounds this check brought in from Strava. */
+  imported: number;
 }
 
 export interface AdminUsage {
@@ -1053,6 +1060,7 @@ export const api = {
 
   // --- Golf rounds and the quarterly rounds goal -------------------------------
   getGolfRounds: (quarter?: string) => request<GolfRoundsResponse>(`/golf-rounds${qs({ quarter })}`),
+  syncGolfRounds: (quarter: string) => request<GolfRoundsResponse>(`/golf-rounds/sync${qs({ quarter })}`, { method: "POST" }),
   addGolfRound: (data: GolfRoundInput) =>
     tracked("golf_round_logged", request<GolfRound>("/golf-rounds", { method: "POST", body: JSON.stringify(data) })),
   updateGolfRound: (id: string, data: GolfRoundInput) =>

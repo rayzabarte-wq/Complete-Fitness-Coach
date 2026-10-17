@@ -884,7 +884,7 @@ function PassiveSportLog({ sport }: { sport: Exclude<LogView, "STRENGTH" | "STEP
       {sport === "GOLF" && <GolfRounds />}
       <p className="text-dim" style={{ fontSize: 13, marginTop: 0 }}>
         {sport === "GOLF"
-          ? "Below: sessions from your calendar. Rounds from Strava (via Garmin) show here as they arrived, and tick off a planned round when you log it above. Range, short-game and putting practice are planned and logged from the calendar."
+          ? "Rounds are logged above, and golf rounds recorded on Strava (via Garmin) are added there automatically. Below are your golf sessions from the calendar. Range, short-game and putting practice are planned and logged from the calendar."
           : "Imported from Strava (via Garmin) and shown as it arrived. Nothing to enter here."}
       </p>
       {sessions === null && <p className="text-dim">Loading…</p>}

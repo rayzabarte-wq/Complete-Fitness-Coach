@@ -116,6 +116,7 @@ export interface StravaActivity {
   startDate: string; // ISO
   movingMinutes: number; // converted from Strava's moving_time (seconds)
   distanceMiles: number;
+  elapsedMinutes?: number; // start to finish, including stops
 }
 
 /** Activities on the given local calendar date (YYYY-MM-DD), for picking
@@ -160,4 +161,54 @@ export async function getActivitiesForDate(userId: string, dateKey: string): Pro
     movingMinutes: Math.round(a.moving_time / 60),
     distanceMiles: Math.round((a.distance / 1609.34) * 10) / 10,
   }));
+}
+
+/** Strava "Golf" activities that started between two dates (local days), newest
+ * first. Pages through the athlete's activities in that range. */
+export async function getGolfActivities(userId: string, from: Date, to: Date): Promise<StravaActivity[]> {
+  const accessToken = await getValidAccessToken(userId);
+  if (!accessToken) {
+    throw new Error("Strava isn't connected");
+  }
+
+  const out: StravaActivity[] = [];
+  for (let page = 1; page <= 5; page++) {
+    const params = new URLSearchParams({
+      // A day either side, because Strava filters on UTC and callers filter on local days.
+      after: String(Math.floor(from.getTime() / 1000) - 86400),
+      before: String(Math.floor(to.getTime() / 1000) + 86400),
+      per_page: "100",
+      page: String(page),
+    });
+    const res = await fetch(`${API_BASE}/athlete/activities?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to fetch Strava activities: ${res.status} ${await res.text()}`);
+    }
+    const batch = (await res.json()) as Array<{
+      id: number;
+      name: string;
+      type: string;
+      sport_type?: string;
+      start_date_local: string;
+      moving_time: number;
+      elapsed_time?: number;
+      distance: number;
+    }>;
+    for (const a of batch) {
+      if (a.type !== "Golf" && a.sport_type !== "Golf") continue;
+      out.push({
+        id: String(a.id),
+        name: a.name,
+        type: "Golf",
+        startDate: a.start_date_local,
+        movingMinutes: Math.round(a.moving_time / 60),
+        elapsedMinutes: a.elapsed_time ? Math.round(a.elapsed_time / 60) : undefined,
+        distanceMiles: Math.round((a.distance / 1609.34) * 10) / 10,
+      });
+    }
+    if (batch.length < 100) break;
+  }
+  return out;
 }

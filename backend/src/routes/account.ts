@@ -63,7 +63,7 @@ accountRouter.get("/export", requireAuth, async (req: AuthedRequest, res) => {
       prisma.customEquipment.findMany({ where: { userId }, orderBy: { name: "asc" } }),
       prisma.exercise.findMany({ where: { userId }, orderBy: { name: "asc" } }),
       prisma.usageEvent.findMany({ where: { userId }, orderBy: { createdAt: "asc" }, select: { name: true, createdAt: true } }),
-      prisma.golfRound.findMany({ where: { userId }, orderBy: { date: "asc" } }),
+      prisma.golfRound.findMany({ where: { userId, deletedAt: null }, orderBy: { date: "asc" } }),
       prisma.golfRoundGoal.findMany({ where: { userId }, orderBy: { quarter: "asc" } }),
     ]);
 

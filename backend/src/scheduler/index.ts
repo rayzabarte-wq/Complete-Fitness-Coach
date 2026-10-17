@@ -14,4 +14,4 @@ export { planRouter } from "./routes/plan.js";
 // and account.ts's data export/deletion needs connection status for both
 // integrations.
 export { isOutlookConnected, createEventForSession, updateEventForSession } from "./services/outlookCalendar.js";
-export { isStravaConnected } from "./services/stravaSync.js";
+export { isStravaConnected, getGolfActivities } from "./services/stravaSync.js";

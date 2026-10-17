@@ -1027,7 +1027,14 @@ model GolfRound {
   score     Int?
   notes     String?
   createdAt DateTime @default(now())
+  // Set when the round came from (or was matched to) a Strava "Golf"
+  // activity, so the same activity is never imported twice.
+  stravaActivityId String?
+  // A Strava round the person deleted stays here, hidden, so the next sync
+  // doesn't bring it back.
+  deletedAt DateTime?
 
+  @@unique([userId, stravaActivityId])
   @@index([userId, date])
 }
 

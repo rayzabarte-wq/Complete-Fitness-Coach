@@ -1017,10 +1017,12 @@ Log → **Golf** (switch Golf on under Settings → Workout types if you can't s
 - **Log a round:** date, course (suggests ones you've used), 9 or 18 holes, optional score and notes. Edit or delete later. If a Round was planned on the calendar for that day, it is ticked off.
 - **Quarterly goal:** pick a calendar quarter (the next one, this one, or the last three) and set how many rounds to play. Every round counts as one, whether 9 or 18 holes. You see rounds done, rounds to go, days left, about how many a week you still need, and whether you're on track.
 - **Scores:** average and best score are worked out from 18-hole rounds that have a score.
-- Rounds that arrive from Strava on the calendar are separate and are not counted towards the goal; only rounds logged here are.
+- **Strava:** with Strava connected (Settings → Connections), Golf activities (for example from a Garmin watch) are added automatically when you open the Rounds section, at most every 10 minutes, or straight away with **Sync now**. Strava doesn't give the course, holes or score: the activity name is used as the course, rounds under 2.5 hours are taken as 9 holes, and the score is left blank. Tap **Edit** to fix any of it and add the score.
+- A round you logged by hand for the same day is matched to the Strava activity, not counted twice. Logging a round by hand for a day that already has a Strava round is refused: edit the Strava one instead.
+- Deleting a Strava round hides it, so the next sync doesn't bring it back.
 - Rounds and goals are included in the data export and deleted with the account.
 
-Upgrade note: adds migration `20261017100000_golf_rounds`.
+Upgrade note: adds migrations `20261017100000_golf_rounds` and `20261017120000_golf_rounds_strava`.
 
 ## iPhone / Safari polish
 

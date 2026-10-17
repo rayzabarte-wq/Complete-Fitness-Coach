@@ -50,11 +50,24 @@ export default function GolfRounds() {
   // "new", a round id being edited, or null.
   const [editing, setEditing] = useState<string | "new" | null>(null);
   const [goalOpen, setGoalOpen] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   const load = useCallback(() => {
     api.getGolfRounds(quarter).then(setData).catch((e) => setError(e.message));
   }, [quarter]);
   useEffect(load, [load]);
+
+  async function sync() {
+    setSyncing(true);
+    setError(null);
+    try {
+      setData(await api.syncGolfRounds(quarter));
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   async function remove(r: GolfRound) {
     if (!window.confirm(`Delete the round at ${r.course} on ${r.date}?`)) return;
@@ -151,6 +164,16 @@ export default function GolfRounds() {
             </button>
           )}
 
+          {data.stravaConnected && (
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 8 }}>
+              <span className="text-dim" style={{ fontSize: 12 }}>
+                {data.syncError ?? "Golf rounds recorded on Strava are added here automatically. Tap Edit on one to add the score."}
+              </span>
+              <button className="button-quiet" onClick={sync} disabled={syncing} style={{ whiteSpace: "nowrap" }}>
+                {syncing ? "Checking…" : "Sync now"}
+              </button>
+            </div>
+          )}
           {data.rounds.length === 0 && <p className="text-dim" style={{ fontSize: 13 }}>No rounds logged in this quarter.</p>}
           {data.rounds.map((r) =>
             editing === r.id ? (
@@ -167,7 +190,14 @@ export default function GolfRounds() {
             ) : (
               <div key={r.id} className="card" style={{ marginBottom: 6, padding: "10px 12px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 14 }}>
-                  <span style={{ fontWeight: 600 }}>{r.course}</span>
+                  <span style={{ fontWeight: 600 }}>
+                    {r.course}
+                    {r.source === "strava" && (
+                      <span className="chip" style={{ marginLeft: 6, fontSize: 10, fontWeight: 500 }}>
+                        Strava
+                      </span>
+                    )}
+                  </span>
                   <span className="text-dim" style={{ whiteSpace: "nowrap" }}>
                     {new Date(`${r.date}T12:00`).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}
                   </span>
