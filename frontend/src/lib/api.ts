@@ -228,6 +228,30 @@ export interface GolfDrill {
   minutes: number;
 }
 
+export interface GolfWeekSession {
+  date: string;
+  type: GolfSessionType;
+  venue: "RANGE" | "HOME" | "COURSE";
+  minutes: number;
+  focus: string;
+  reason: string;
+  drills: GolfDrill[];
+}
+export interface GolfWeekFinding {
+  area: "DRIVING" | "APPROACH" | "SHORT_GAME" | "PUTTING" | "COURSE_MANAGEMENT" | "OTHER";
+  finding: string;
+  evidence: string;
+}
+export interface GolfWeekProposal {
+  from: string;
+  to: string;
+  summary: string;
+  findings: GolfWeekFinding[];
+  sessions: GolfWeekSession[];
+  caveats: string[];
+  basedOnRoundNotes: number;
+}
+
 export interface GolfSessionPlan {
   sessionType: GolfSessionType;
   focusSummary: string;
@@ -689,7 +713,7 @@ export type UsageEventName =
   | "log_steps_tab" | "log_nutrition_tab" | "log_other_sport_tab"
   | "workout_generated" | "workout_saved" | "gym_switched" | "gym_preset_applied"
   | "custom_equipment_added" | "custom_exercise_created" | "steps_saved" | "nutrition_saved"
-  | "body_scan_added" | "goal_created" | "message_dismissed" | "golf_round_logged" | "golf_goal_set" | "ambitions_saved" | "sport_goal_saved" | "availability_saved";
+  | "body_scan_added" | "goal_created" | "message_dismissed" | "golf_round_logged" | "golf_goal_set" | "ambitions_saved" | "sport_goal_saved" | "availability_saved" | "golf_week_proposed" | "golf_week_added";
 
 let trackingPausedUntil = 0;
 const lastSent = new Map<string, number>();
@@ -964,6 +988,9 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ activityId, movingMinutes }),
     }),
+
+  proposeGolfWeek: (from: string) =>
+    tracked("golf_week_proposed", request<GolfWeekProposal>("/golf/week", { method: "POST", body: JSON.stringify({ from }) })),
 
   generateGolfPlan: (type: GolfSessionType, estimatedMinutes?: number) =>
     request<GolfSessionPlan>(`/golf/plan/${type}`, {

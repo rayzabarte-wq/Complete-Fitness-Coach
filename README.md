@@ -1073,3 +1073,19 @@ stored in `WeeklyAvailability` (`minutesByDay`, index 0 = Sunday) and read via
 reports whether it has been set. The 7-day workout proposal will combine it
 with the sport ambitions (`services/ambitions.ts`). It is included in the data
 export and removed with the account.
+
+## Golf week proposal (Calendar → "Golf practice for the next 7 days")
+
+Shown on the Calendar when Golf is switched on. `POST /golf/week { from }`
+(`sport/services/golfWeek.ts`) asks Claude for 2 to 4 practice sessions across
+the next 7 days. Inputs: the notes on the last few rounds (`GolfRound.notes`,
+last 75 days; a round is never counted as practice history, only its notes
+are read, and its score is not sent), the last six completed range, short
+game and putting sessions with their notes, the golf ambition, and the free
+minutes each day (Weekly time less anything already planned). Weak driving or
+approach play leads to a range or home (garage) session on those shots, weak
+short game to a short-game session, weak putting to a putting session.
+Whatever the model returns is trimmed to fit (`cleanProposal`): dates inside
+the window, one session per day, never longer than that day's free time. Nothing is
+saved until the person ticks sessions and adds them (through `POST /calendar`,
+with the drills in the session notes, like the single-session suggestion).
