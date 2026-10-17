@@ -63,11 +63,15 @@ adminRouter.get("/users", async (_req, res) => {
   });
 });
 
-async function actionableUser(req: AdminRequest, id: string) {
+type ActionableUserResult =
+  | { error: { status: number; message: string } }
+  | { user: { id: string; email: string } };
+
+async function actionableUser(req: AdminRequest, id: string): Promise<ActionableUserResult> {
   const user = await prisma.user.findUnique({ where: { id }, select: { id: true, email: true } });
-  if (!user) return { error: { status: 404, message: "No such user" } } as const;
-  if (isAdminEmail(user.email)) return { error: { status: 400, message: "Admin accounts can't be changed from here." } } as const;
-  return { user } as const;
+  if (!user) return { error: { status: 404, message: "No such user" } };
+  if (isAdminEmail(user.email)) return { error: { status: 400, message: "Admin accounts can't be changed from here." } };
+  return { user };
 }
 
 // POST /admin/users/:id/suspend and /reinstate. Suspending takes effect on
