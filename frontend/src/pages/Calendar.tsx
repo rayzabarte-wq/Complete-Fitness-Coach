@@ -306,7 +306,7 @@ export default function Calendar() {
       {showWeather && <WeatherStrip forecast={forecast} error={weatherError} locationDenied={locationDenied} onRetryLocation={() => loadForecast(true)} />}
       {showWeather && forecast && !weatherError && (
         <p className="text-dim" style={{ fontSize: 12, margin: "-8px 0 12px" }}>
-          {usingSavedLocation ? "Using the location saved on this device. " : ""}
+          {usingSavedLocation ? "Using the location saved on this device. " : "Using your current location. "}
           <button type="button" className="button-quiet" style={{ fontSize: 12 }} disabled={updatingLocation} onClick={() => loadForecast(true)}>
             {updatingLocation ? "Updating…" : "Update location"}
           </button>

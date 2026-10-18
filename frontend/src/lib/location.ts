@@ -7,7 +7,7 @@ export interface Coords {
  * with coordinates, or null if denied/unavailable/unsupported. Never
  * rejects — every failure path just means "no location", handled by the
  * caller falling back gracefully. */
-export function requestLocation(): Promise<Coords | null> {
+export function requestLocation(timeoutMs = 10000): Promise<Coords | null> {
   return new Promise((resolve) => {
     if (!("geolocation" in navigator)) {
       resolve(null);
@@ -16,7 +16,7 @@ export function requestLocation(): Promise<Coords | null> {
     navigator.geolocation.getCurrentPosition(
       (pos) => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
       () => resolve(null),
-      { timeout: 10000 }
+      { timeout: timeoutMs, maximumAge: 5 * 60 * 1000 }
     );
   });
 }
@@ -58,21 +58,35 @@ export function forgetLocation(): void {
   }
 }
 
-/** The position to use for the weather: the remembered one without asking the
- * browser, otherwise a fresh (prompting) request that is then remembered.
- * `refresh` skips the remembered one. Reports whether it used the remembered one. */
+/** Whether the browser will give a position without asking. "unknown" where
+ * the Permissions API isn't available. */
+async function permissionState(): Promise<"granted" | "prompt" | "denied" | "unknown"> {
+  try {
+    const p = await navigator.permissions.query({ name: "geolocation" as PermissionName });
+    return p.state;
+  } catch {
+    return "unknown";
+  }
+}
+
+/** The position to use for the weather, without nagging for permission.
+ * - Location already allowed for this site: the current position, every time.
+ * - Otherwise a remembered position is used, so Safari isn't asked again.
+ * - Only with nothing remembered (the very first time), or when `refresh` is
+ *   true (the person tapped Update), is the browser asked.
+ * `fromSaved` says the remembered position was used rather than a fresh one. */
 export async function getLocation(refresh = false): Promise<{ coords: Coords | null; fromSaved: boolean }> {
-  if (!refresh) {
-    const saved = getSavedLocation();
-    if (saved) return { coords: saved, fromSaved: true };
+  const state = await permissionState();
+  const saved = getSavedLocation();
+
+  if (refresh || state === "granted" || (!saved && state !== "denied")) {
+    const fresh = await requestLocation(state === "granted" ? 6000 : 10000);
+    if (fresh) {
+      saveLocation(fresh);
+      return { coords: fresh, fromSaved: false };
+    }
   }
-  const fresh = await requestLocation();
-  if (fresh) {
-    saveLocation(fresh);
-    return { coords: fresh, fromSaved: false };
-  }
-  // Refresh was refused or failed: carry on with the remembered position if any.
-  const saved = refresh ? getSavedLocation() : null;
+  // Refused, timed out or not asked: carry on with the remembered position if any.
   return { coords: saved, fromSaved: saved !== null };
 }
 

@@ -1163,10 +1163,13 @@ opening beneath it: **Plan strength** lays out this week's strength sessions;
 Rows only appear for workout types switched on in Settings. To add another
 workout type, push a `Planner` onto the `planners` list in `pages/Calendar.tsx`.
 
-## Weather location is remembered
+## Weather location
 
-Safari asks for location permission on every visit, so the Calendar keeps the
-last position on the device (`localStorage`, rounded to about 1 km, valid for 30
-days; `lib/location.ts`) and uses it without asking. The browser is only asked
-the first time, or when "Update location" (under the forecast) or "Try again" is
-tapped. If a refresh is refused, the remembered position keeps being used.
+`getLocation()` in `lib/location.ts`: if location is already allowed for the
+site (checked with the Permissions API), the current position is used on every
+load, with no prompt. Otherwise the last position is reused from the device
+(`localStorage`, rounded to about 1 km, valid 30 days) so Safari isn't asked on
+every visit; the browser is only asked the very first time, or when "Update
+location" / "Try again" is tapped. A browser can't be made to give a position
+without permission; setting Safari → Settings → Websites → Location to Allow
+for the site is what makes "always current, never asked" work.
