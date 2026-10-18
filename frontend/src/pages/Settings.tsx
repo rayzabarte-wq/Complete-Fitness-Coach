@@ -8,6 +8,8 @@ import { SESSION_TYPE_TREE } from "../lib/sessionTypes.js";
 import { ConsentSettings } from "../components/Consent.js";
 import WeeklyAvailability from "../components/WeeklyAvailability.js";
 import GolfSettings from "../components/GolfSettings.js";
+import { InstallSteps } from "../components/InstallApp.js";
+import { isInstalled } from "../lib/install.js";
 
 // Settings lives behind the gear icon rather than a tab: it's a
 // set-and-forget place, not somewhere you go daily.
@@ -47,6 +49,12 @@ export default function Settings({ onLoggedOut }: { onLoggedOut: () => void }) {
             Some features won't work until both have been redeployed to the latest version. {describeVersions(server)}
           </p>
         </div>
+      )}
+
+      {!isInstalled() && (
+        <Collapsible title="Install the app" id="install" hint="home screen">
+          <InstallSteps />
+        </Collapsible>
       )}
 
       <Collapsible title="Training">{profile && <TrainingSection profile={profile} onSaved={reload} />}</Collapsible>

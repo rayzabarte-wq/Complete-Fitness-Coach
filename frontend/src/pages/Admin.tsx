@@ -357,6 +357,7 @@ const FEATURE_LABELS: Record<string, string> = {
   golf_week_added: "Golf week added to calendar",
   golf_profile_saved: "Golf handicap / shaping saved",
   golf_clubs_edited: "Golf bag edited",
+  app_install_clicked: "Install app tapped",
 };
 
 // Totals per feature over the last 30 days. Never shows who used what.

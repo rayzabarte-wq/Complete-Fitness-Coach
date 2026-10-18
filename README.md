@@ -1143,3 +1143,13 @@ the simpler checklist. Feel scores go to the next suggestion along with ticks an
   wedges but never the sand wedge or putter; short game uses wedges, sand wedge
   and irons (bunker drills need the sand wedge or another wedge); putting is the
   putter only; shot-shaping wording is dropped unless the player can shape.
+
+## Installing the app
+
+Settings → "Install the app" (hidden once installed) and a dismissible card on
+the phone Calendar. Chrome, Edge and Android get a one-tap **Install the app**
+button (the `beforeinstallprompt` event, caught in `lib/install.ts`, imported
+from `main.tsx`). iPhone and iPad have no install prompt, so the card shows the
+Share → Add to Home Screen steps. The home screen icon is
+`public/apple-touch-icon.png`. There is deliberately no service worker, so the
+installed app always loads the latest deploy.

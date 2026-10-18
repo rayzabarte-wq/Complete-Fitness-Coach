@@ -5,6 +5,7 @@ import { ACTIVITY_COLORS, FOCUS_LABELS, activityForSessionType } from "../lib/ac
 import { quoteForDate } from "../lib/quotes.js";
 import MessageCards from "../components/MessageCards.js";
 import GolfWeek from "../components/GolfWeek.js";
+import { InstallBanner } from "../components/InstallApp.js";
 import GolfDrillChecklist from "../components/GolfDrillChecklist.js";
 import { requestLocation, parseLocalDate, formatLocalDateKey } from "../lib/location.js";
 import {
@@ -233,6 +234,8 @@ export default function Calendar() {
       </div>
 
       <MessageCards />
+
+      <InstallBanner />
 
       {stravaNote.connected && (
         <p className="text-dim" style={{ fontSize: 12, margin: "0 0 8px" }}>

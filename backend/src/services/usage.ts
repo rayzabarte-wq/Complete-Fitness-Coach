@@ -33,6 +33,7 @@ export const USAGE_EVENTS = [
   "golf_week_added",
   "golf_profile_saved",
   "golf_clubs_edited",
+  "app_install_clicked",
 ] as const;
 export type UsageEventName = (typeof USAGE_EVENTS)[number];
 

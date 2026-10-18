@@ -747,7 +747,7 @@ export type UsageEventName =
   | "log_steps_tab" | "log_nutrition_tab" | "log_other_sport_tab"
   | "workout_generated" | "workout_saved" | "gym_switched" | "gym_preset_applied"
   | "custom_equipment_added" | "custom_exercise_created" | "steps_saved" | "nutrition_saved"
-  | "body_scan_added" | "goal_created" | "message_dismissed" | "golf_round_logged" | "golf_goal_set" | "ambitions_saved" | "sport_goal_saved" | "availability_saved" | "golf_week_proposed" | "golf_week_added" | "golf_profile_saved" | "golf_clubs_edited";
+  | "body_scan_added" | "goal_created" | "message_dismissed" | "golf_round_logged" | "golf_goal_set" | "ambitions_saved" | "sport_goal_saved" | "availability_saved" | "golf_week_proposed" | "golf_week_added" | "golf_profile_saved" | "golf_clubs_edited" | "app_install_clicked";
 
 let trackingPausedUntil = 0;
 const lastSent = new Map<string, number>();
