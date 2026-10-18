@@ -45,6 +45,8 @@ model User {
   // sport/services/splits.ts): 2-3 full body, 4 upper/lower, 5 push/pull/
   // legs/upper/lower, 6 push/pull/legs x2.
   trainingDaysPerWeek Int @default(4)
+  // Runs a week the run planner aims for (2 to 6).
+  runDaysPerWeek      Int @default(3)
   // Target AVERAGE daily steps — progress compares the rolling average to
   // it; the calendar ticks individual days that reached it.
   dailyStepGoal Int?

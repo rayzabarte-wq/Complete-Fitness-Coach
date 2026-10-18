@@ -30,6 +30,7 @@ accountRouter.get("/export", requireAuth, async (req: AuthedRequest, res) => {
           sex: true,
           heightCm: true,
           trainingDaysPerWeek: true,
+          runDaysPerWeek: true,
           dailyStepGoal: true,
           visibleSessionTypes: true,
           ambitions: true,

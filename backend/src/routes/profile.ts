@@ -29,6 +29,7 @@ profileRouter.get("/", async (req: AuthedRequest, res) => {
     sex: user.sex,
     heightCm: user.heightCm,
     trainingDaysPerWeek: user.trainingDaysPerWeek,
+    runDaysPerWeek: user.runDaysPerWeek,
     split: splitForDays(user.trainingDaysPerWeek),
     splitOptions: Array.from({ length: MAX_TRAINING_DAYS - MIN_TRAINING_DAYS + 1 }, (_, i) => {
       const days = MIN_TRAINING_DAYS + i;
@@ -46,6 +47,7 @@ const updateProfileSchema = z.object({
   sex: z.enum(["MALE", "FEMALE"]).nullable().optional(),
   heightCm: z.number().min(100).max(250).nullable().optional(),
   trainingDaysPerWeek: z.number().int().min(MIN_TRAINING_DAYS).max(MAX_TRAINING_DAYS).optional(),
+  runDaysPerWeek: z.number().int().min(2).max(6).optional(),
   dailyStepGoal: z.number().int().min(1000).max(50000).nullable().optional(),
 });
 
@@ -56,14 +58,14 @@ profileRouter.patch("/", async (req: AuthedRequest, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.flatten() });
   }
-  const { birthYear, sex, heightCm, trainingDaysPerWeek, dailyStepGoal } = parsed.data;
+  const { birthYear, sex, heightCm, trainingDaysPerWeek, runDaysPerWeek, dailyStepGoal } = parsed.data;
   const touchesProfile = [birthYear, sex, heightCm].some((v) => v !== undefined && v !== null);
   if (touchesProfile && !(await hasConsent(req.userId!, "PROFILE"))) {
     return res.status(403).json({ error: CONSENT_REQUIRED_MESSAGE.PROFILE });
   }
   await prisma.user.update({
     where: { id: req.userId },
-    data: { birthYear, sex, heightCm, trainingDaysPerWeek, dailyStepGoal },
+    data: { birthYear, sex, heightCm, trainingDaysPerWeek, runDaysPerWeek, dailyStepGoal },
   });
   res.status(204).send();
 });

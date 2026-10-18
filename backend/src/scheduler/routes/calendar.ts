@@ -8,6 +8,7 @@ import { syncStravaActivities } from "../services/stravaImport.js";
 import { AuthedRequest } from "../../lib/requireAuth.js";
 import { addDays, dateToDayKey, dayKeyToDate, isDayKey } from "../../lib/dates.js";
 import { autofillWeek } from "../services/strengthAutofill.js";
+import { planRunWeek } from "../services/runPlanner.js";
 
 export const calendarRouter = Router();
 
@@ -104,6 +105,21 @@ calendarRouter.post("/autofill", async (req: AuthedRequest, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err instanceof Error ? err.message : "Auto-fill failed" });
+  }
+});
+
+// POST /calendar/run-plan - plan the next 7 days of running from where the
+// calendar quarter's periodised plan has got to. See services/runPlanner.ts.
+calendarRouter.post("/run-plan", async (req: AuthedRequest, res) => {
+  const parsed = autofillSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+  try {
+    res.json(await planRunWeek(req.userId!, parsed.data.start, parsed.data.today));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err instanceof Error ? err.message : "Run planning failed" });
   }
 });
 

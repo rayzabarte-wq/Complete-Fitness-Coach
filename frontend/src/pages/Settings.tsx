@@ -1,6 +1,6 @@
 import { ReactNode, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api, auth, Profile, SessionType } from "../lib/api.js";
+import { api, auth, track, Profile, SessionType } from "../lib/api.js";
 import GymsSection from "../components/GymsSection.js";
 import Collapsible from "../components/Collapsible.js";
 import { APP_VERSION, ServerStatus, describeVersions, getServerStatus, versionsDiffer } from "../lib/diagnose.js";
@@ -57,7 +57,10 @@ export default function Settings({ onLoggedOut }: { onLoggedOut: () => void }) {
         </Collapsible>
       )}
 
-      <Collapsible title="Training">{profile && <TrainingSection profile={profile} onSaved={reload} />}</Collapsible>
+      <Collapsible title="Training">
+        {profile && <TrainingSection profile={profile} onSaved={reload} />}
+        {profile && <RunSection profile={profile} onSaved={reload} />}
+      </Collapsible>
 
       <Collapsible title="Profile">{profile && <ProfileSection profile={profile} onSaved={reload} />}</Collapsible>
 
@@ -182,6 +185,55 @@ function TrainingSection({ profile, onSaved }: { profile: Profile; onSaved: () =
           </p>
         </>
       )}
+    </div>
+  );
+}
+
+function RunSection({ profile, onSaved }: { profile: Profile; onSaved: () => void }) {
+  const [runs, setRuns] = useState(profile.runDaysPerWeek);
+  const [saving, setSaving] = useState(false);
+
+  async function save(n: number) {
+    setRuns(n);
+    setSaving(true);
+    try {
+      await api.updateProfile({ runDaysPerWeek: n });
+      track("run_days_saved");
+      onSaved();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="card" style={{ marginTop: 12 }}>
+      <strong>Runs per week</strong>
+      <div style={{ display: "flex", gap: 6, marginTop: 8 }} role="radiogroup" aria-label="Runs per week">
+        {[2, 3, 4, 5, 6].map((n) => (
+          <button
+            key={n}
+            role="radio"
+            aria-checked={runs === n}
+            onClick={() => save(n)}
+            disabled={saving}
+            style={{
+              flex: 1,
+              padding: "8px 0",
+              borderRadius: 8,
+              border: runs === n ? "none" : "1px solid var(--border)",
+              background: runs === n ? "var(--accent)" : "var(--surface)",
+              color: runs === n ? "var(--on-accent)" : "var(--text)",
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            {n}
+          </button>
+        ))}
+      </div>
+      <p className="text-dim" style={{ fontSize: 13, margin: "8px 0 0" }}>
+        Calendar → Plan → Running lays out the next 7 days from where you are in the quarter's 13-week plan: easy and recovery runs, a long run, and tempo, fartlek or intervals as the weeks build.
+      </p>
     </div>
   );
 }

@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "User" ADD COLUMN "runDaysPerWeek" INTEGER NOT NULL DEFAULT 3;

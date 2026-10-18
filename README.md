@@ -1209,3 +1209,19 @@ Log → Strength has an "Injuries or niggles" box above the session buttons (kep
 ## Golf practice sessions per week
 
 Settings → Golf has a "Golf practice sessions per week" selector (1 to 5, default 2), set out like strength days per week. Calendar → Plan → Golf practice (and Golf simulator) aims for that many sessions in the next 7 days. Practice sessions already on the calendar in that window (range, short game, putting or simulator) count towards the target and are kept, so the proposal only fills the gap, and it still fits each session into the free time from Settings → Weekly time. Stored as `GolfProfile.practiceSessionsPerWeek` (migration `20261018190000_golf_practice_sessions_per_week`, a plain column add with a default).
+
+## Run planning (Calendar → Plan → Running)
+
+Settings → Training has **Runs per week** (2 to 6, default 3), set out like strength days per week (`User.runDaysPerWeek`, migration `20261019090000_run_days_per_week`, a plain column add with a default). Calendar → Plan → Running lays out the next 7 days (`POST /calendar/run-plan`, `scheduler/services/runPlanner.ts`). It is deterministic, with no AI call, like strength auto-fill.
+
+**The periodised plan follows the calendar quarter** (Jan-Mar, Apr-Jun, Jul-Sep, Oct-Dec) as 13 weeks, and the 7 days take the week most of them fall in:
+
+| Weeks | Phase | Focus |
+|---|---|---|
+| 1-3, 4 lighter | Base | easy running, light fartlek, a growing long run |
+| 5-7, 8 lighter | Build | tempo (threshold) runs and fartlek |
+| 9-11 | Peak | intervals at 5k effort, tempo, the longest long run |
+| 12 | Taper | less volume, a little intensity (intervals) |
+| 13 | Reset | easy running, fartlek, optional 5k test |
+
+Principles it applies: mostly easy running with one or two quality sessions besides the long run (80/20), the long run growing about 10% a week at most, a lighter week every fourth week, hard sessions never on back-to-back days, and an easy day before the long run. The run types come from the sub-types under Run (Recovery, Tempo, Fartlek, Intervals, Long run); a week with n runs takes the first n of the phase's list. Session lengths start from your longest completed run in the last 6 weeks (Strava runs count), or modestly if there are none, and are cut to fit the free time from Settings → Weekly time. The long run goes on a weekend day when it can. Runs already on the calendar (including Strava ones) count towards the target and are kept; earlier auto-planned runs not yet done are replaced; a rest day the app planned itself gives way to a run. Strength auto-fill no longer clears auto-planned runs.

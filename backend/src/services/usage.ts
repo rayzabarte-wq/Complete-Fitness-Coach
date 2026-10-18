@@ -5,6 +5,8 @@ import { prisma } from "../lib/prisma.js";
 // usage.ts) and the Admin page (pages/Admin.tsx) use the same names.
 export const USAGE_EVENTS = [
   "page_calendar",
+  "run_week_planned",
+  "run_days_saved",
   "page_day",
   "page_log",
   "page_progress",

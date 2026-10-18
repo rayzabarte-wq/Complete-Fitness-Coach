@@ -128,7 +128,7 @@ export async function autofillWeek(userId: string, startKey: string, todayKey: s
   // Clear earlier auto-planned entries that haven't happened yet; keep
   // everything the person added or changed themselves.
   await prisma.plannedSession.deleteMany({
-    where: { userId, autoPlanned: true, completed: false, date: { gte: start > today ? start : today, lt: end } },
+    where: { userId, autoPlanned: true, completed: false, type: { in: ["STRENGTH", "REST"] }, date: { gte: start > today ? start : today, lt: end } },
   });
 
   const [user, sessions, lastFocus] = await Promise.all([

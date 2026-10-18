@@ -1,6 +1,6 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api, DayForecast, DaySummary, PlannedSession, SessionType, MovementPattern, StravaActivity, GolfSessionType } from "../lib/api.js";
+import { api, RunPlanResult, DayForecast, DaySummary, PlannedSession, SessionType, MovementPattern, StravaActivity, GolfSessionType } from "../lib/api.js";
 import { ACTIVITY_COLORS, FOCUS_LABELS, activityForSessionType } from "../lib/activity.js";
 import { quoteForDate } from "../lib/quotes.js";
 import MessageCards from "../components/MessageCards.js";
@@ -100,6 +100,9 @@ export default function Calendar() {
   const [autofilling, setAutofilling] = useState(false);
   const [autofillNotes, setAutofillNotes] = useState<string[] | null>(null);
   const [autofillError, setAutofillError] = useState<string | null>(null);
+  const [runPlanning, setRunPlanning] = useState(false);
+  const [runResult, setRunResult] = useState<RunPlanResult | null>(null);
+  const [runError, setRunError] = useState<string | null>(null);
   const [golfPlanOpen, setGolfPlanOpen] = useState(false);
   const [golfRun, setGolfRun] = useState(0);
   const [simPlanOpen, setSimPlanOpen] = useState(false);
@@ -195,6 +198,19 @@ export default function Calendar() {
     }
   }
 
+  async function planRuns() {
+    setRunPlanning(true);
+    setRunError(null);
+    try {
+      setRunResult(await api.planRunWeek(days[0].key, formatLocalDateKey(new Date())));
+      loadWeek();
+    } catch (err: any) {
+      setRunError(err.message ?? "Couldn't plan your running");
+    } finally {
+      setRunPlanning(false);
+    }
+  }
+
   // Everything that plans workouts lives in the Plan section. To add another
   // workout type, add an entry here.
   const planners: Planner[] = [];
@@ -217,6 +233,23 @@ export default function Calendar() {
               </ul>
             )}
             {autofillError && <p style={{ color: "var(--danger)", fontSize: 13, margin: 0 }}>{autofillError}</p>}
+          </>
+        ) : undefined,
+    });
+  }
+  if (visibleTypes.some((t) => t.startsWith("RUN_"))) {
+    planners.push({
+      key: "run",
+      title: "Running",
+      blurb: "Lay out the next 7 days of runs from where you are in this quarter's 13-week plan. Set runs per week in Settings → Training.",
+      buttonLabel: "Plan running",
+      busy: runPlanning,
+      onPress: planRuns,
+      body:
+        runResult || runError ? (
+          <>
+            {runResult && <RunPlanSummary result={runResult} />}
+            {runError && <p style={{ color: "var(--danger)", fontSize: 13, margin: 0 }}>{runError}</p>}
           </>
         ) : undefined,
     });
@@ -806,6 +839,54 @@ const GOLF_TRAINING_TYPES: SessionType[] = ["GOLF_RANGE", "GOLF_SHORT_GAME", "GO
 
 function isGolfTrainingType(type: SessionType): type is GolfSessionType {
   return GOLF_TRAINING_TYPES.includes(type);
+}
+
+const PHASE_COLOR: Record<RunPlanResult["phase"], string> = {
+  Base: "var(--accent-soft)",
+  Build: "var(--sun-soft)",
+  Peak: "var(--danger-soft)",
+  Taper: "var(--good-soft)",
+  Reset: "var(--surface-2)",
+};
+
+/** What the run planner did, and the quarter's 13 weeks with this one marked. */
+function RunPlanSummary({ result }: { result: RunPlanResult }) {
+  return (
+    <div>
+      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--navy)" }}>
+        {result.quarter} · week {result.week} of {result.outline.length} · {result.phase}
+      </div>
+      <div className="text-dim" style={{ fontSize: 12, margin: "2px 0 6px" }}>{result.theme}</div>
+      <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12 }} className="text-dim">
+        {result.notes.map((n, i) => (
+          <li key={i}>{n}</li>
+        ))}
+      </ul>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(13, 1fr)", gap: 2, marginTop: 8 }} aria-label="The quarter's 13 weeks">
+        {result.outline.map((w) => (
+          <div
+            key={w.week}
+            title={`Week ${w.week}: ${w.phase}${w.lighter ? " (lighter)" : ""}, long run about ${w.longRunMinutes} min`}
+            style={{
+              background: PHASE_COLOR[w.phase],
+              outline: w.week === result.week ? "2px solid var(--navy)" : undefined,
+              borderRadius: 4,
+              textAlign: "center",
+              fontSize: 10,
+              padding: "4px 0",
+              opacity: w.lighter ? 0.7 : 1,
+            }}
+          >
+            {w.week}
+          </div>
+        ))}
+      </div>
+      <div className="text-dim" style={{ fontSize: 11, marginTop: 4 }}>
+        Base 1-4 · Build 5-8 · Peak 9-11 · Taper 12 · Reset 13. Weeks 4, 8 and 12 are lighter. Long run this week about{" "}
+        {result.outline[result.week - 1].longRunMinutes} min.
+      </div>
+    </div>
+  );
 }
 
 function AddSessionForm({

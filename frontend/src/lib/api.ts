@@ -477,6 +477,7 @@ export interface Profile {
   sex: "MALE" | "FEMALE" | null;
   heightCm: number | null;
   trainingDaysPerWeek: number;
+  runDaysPerWeek: number;
   split: Split;
   splitOptions: { days: number; split: Split }[];
   dailyStepGoal: number | null;
@@ -638,6 +639,18 @@ export interface DaySummary {
   scan: { weightKg: number | null; bodyFatPct: number | null; muscleMassKg: number | null; source: string } | null;
 }
 
+export interface RunPlanResult {
+  added: number;
+  restReplaced: number;
+  quarter: string;
+  week: number;
+  phase: "Base" | "Build" | "Peak" | "Taper" | "Reset";
+  theme: string;
+  runsPerWeek: number;
+  outline: { week: number; phase: "Base" | "Build" | "Peak" | "Taper" | "Reset"; lighter: boolean; longRunMinutes: number }[];
+  notes: string[];
+}
+
 export interface AutofillResult {
   strengthAdded: number;
   restAdded: number;
@@ -759,7 +772,7 @@ export type UsageEventName =
   | "log_steps_tab" | "log_nutrition_tab" | "log_other_sport_tab"
   | "workout_generated" | "workout_saved" | "gym_switched" | "gym_preset_applied"
   | "custom_equipment_added" | "custom_exercise_created" | "steps_saved" | "nutrition_saved"
-  | "body_scan_added" | "goal_created" | "message_dismissed" | "golf_round_logged" | "golf_goal_set" | "ambitions_saved" | "sport_goal_saved" | "availability_saved" | "golf_week_proposed" | "golf_week_added" | "golf_profile_saved" | "golf_clubs_edited" | "app_install_clicked";
+  | "body_scan_added" | "goal_created" | "message_dismissed" | "golf_round_logged" | "golf_goal_set" | "ambitions_saved" | "sport_goal_saved" | "availability_saved" | "golf_week_proposed" | "golf_week_added" | "golf_profile_saved" | "golf_clubs_edited" | "app_install_clicked" | "run_week_planned" | "run_days_saved";
 
 let trackingPausedUntil = 0;
 const lastSent = new Map<string, number>();
@@ -1142,7 +1155,7 @@ export const api = {
 
   // --- Profile, consent ----------------------------------------------------
   getProfile: () => request<Profile>("/profile"),
-  updateProfile: (data: Partial<Pick<Profile, "birthYear" | "sex" | "heightCm" | "trainingDaysPerWeek" | "dailyStepGoal">>) =>
+  updateProfile: (data: Partial<Pick<Profile, "birthYear" | "sex" | "heightCm" | "trainingDaysPerWeek" | "runDaysPerWeek" | "dailyStepGoal">>) =>
     request<void>("/profile", { method: "PATCH", body: JSON.stringify(data) }),
   createIngestToken: () => request<{ token: string }>("/profile/ingest-token", { method: "POST" }),
   revokeIngestToken: () => request<void>("/profile/ingest-token", { method: "DELETE" }),
@@ -1229,4 +1242,6 @@ export const api = {
     request<DaySummary[]>(`/calendar/days${qs({ from, to, tzOffset: new Date().getTimezoneOffset() })}`),
   autofillWeek: (start: string, today: string) =>
     request<AutofillResult>("/calendar/autofill", { method: "POST", body: JSON.stringify({ start, today }) }),
+  planRunWeek: (start: string, today: string) =>
+    tracked("run_week_planned", request<RunPlanResult>("/calendar/run-plan", { method: "POST", body: JSON.stringify({ start, today }) })),
 };
