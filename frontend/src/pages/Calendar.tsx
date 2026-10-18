@@ -6,6 +6,7 @@ import { quoteForDate } from "../lib/quotes.js";
 import MessageCards from "../components/MessageCards.js";
 import GolfWeek from "../components/GolfWeek.js";
 import { InstallBanner } from "../components/InstallApp.js";
+import PlanPanel, { Planner } from "../components/PlanPanel.js";
 import GolfDrillChecklist from "../components/GolfDrillChecklist.js";
 import { requestLocation, parseLocalDate, formatLocalDateKey } from "../lib/location.js";
 import {
@@ -97,6 +98,8 @@ export default function Calendar() {
   const [autofilling, setAutofilling] = useState(false);
   const [autofillNotes, setAutofillNotes] = useState<string[] | null>(null);
   const [autofillError, setAutofillError] = useState<string | null>(null);
+  const [golfPlanOpen, setGolfPlanOpen] = useState(false);
+  const [golfRun, setGolfRun] = useState(0);
 
   const days = sevenDaysFrom(weekOffset);
   // Weather only matters for outdoor sports — with strength only switched
@@ -183,6 +186,46 @@ export default function Calendar() {
     }
   }
 
+  // Everything that plans workouts lives in the Plan section. To add another
+  // workout type, add an entry here.
+  const planners: Planner[] = [];
+  if (visibleTypes.includes("STRENGTH")) {
+    planners.push({
+      key: "strength",
+      title: "Strength",
+      blurb: "Lay out this week's strength sessions and rest days from your split and recovery.",
+      buttonLabel: "Plan strength",
+      busy: autofilling,
+      onPress: autofill,
+      body:
+        autofillNotes || autofillError ? (
+          <>
+            {autofillNotes && (
+              <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12 }} className="text-dim">
+                {autofillNotes.map((n, i) => (
+                  <li key={i}>{n}</li>
+                ))}
+              </ul>
+            )}
+            {autofillError && <p style={{ color: "var(--danger)", fontSize: 13, margin: 0 }}>{autofillError}</p>}
+          </>
+        ) : undefined,
+    });
+  }
+  if (visibleTypes.includes("GOLF_RANGE")) {
+    planners.push({
+      key: "golf",
+      title: "Golf practice",
+      blurb: "Propose range, short game and putting sessions for the next 7 days from your round notes and free time.",
+      buttonLabel: golfPlanOpen ? "Plan again" : "Plan golf practice",
+      onPress: () => {
+        setGolfPlanOpen(true);
+        setGolfRun((r) => r + 1); // a fresh proposal each press
+      },
+      body: golfPlanOpen ? <GolfWeek key={golfRun} embedded autoStart onAdded={loadWeek} onClose={() => setGolfPlanOpen(false)} /> : undefined,
+    });
+  }
+
   const forecastByDate = new Map((forecast ?? []).map((d) => [d.date, d]));
 
   const visibleSessions = sessions.filter((s) => s.type === "REST" || visibleTypes.includes(s.type));
@@ -246,8 +289,6 @@ export default function Calendar() {
         </p>
       )}
 
-      {visibleTypes.includes("GOLF_RANGE") && <GolfWeek onAdded={loadWeek} />}
-
       <figure className="card" style={{ margin: "0 0 12px", borderLeft: "4px solid var(--sun)" }}>
         <blockquote style={{ margin: 0, fontSize: 14, fontStyle: "italic", lineHeight: 1.45 }}>“{quote.text}”</blockquote>
         <figcaption className="text-dim" style={{ fontSize: 12, marginTop: 6 }}>
@@ -256,6 +297,8 @@ export default function Calendar() {
       </figure>
 
       {showWeather && <WeatherStrip forecast={forecast} error={weatherError} locationDenied={locationDenied} onRetryLocation={loadForecast} />}
+
+      <PlanPanel planners={planners} />
 
       <div className="card" style={{ marginBottom: 12 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
@@ -278,17 +321,6 @@ export default function Calendar() {
         <div className="text-dim" style={{ fontSize: 13, textAlign: "center" }}>
           {workoutCount} session{workoutCount === 1 ? "" : "s"} · {formatHoursMinutes(scheduledMinutes)} planned · {doneCount} done
         </div>
-        <button className="button-primary" onClick={autofill} disabled={autofilling} style={{ width: "100%", marginTop: 10 }}>
-          {autofilling ? "Planning your week…" : "Auto-fill strength for this week"}
-        </button>
-        {autofillNotes && (
-          <ul style={{ margin: "8px 0 0", paddingLeft: 18, fontSize: 12 }} className="text-dim">
-            {autofillNotes.map((n, i) => (
-              <li key={i}>{n}</li>
-            ))}
-          </ul>
-        )}
-        {autofillError && <p style={{ color: "var(--danger)", fontSize: 13, marginBottom: 0 }}>{autofillError}</p>}
         {weekOffset !== 0 && (
           <button
             onClick={() => setWeekOffset(0)}

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { api, track, GolfWeekProposal, GolfWeekSession } from "../lib/api.js";
 import { formatLocalDateKey } from "../lib/location.js";
 import { formatMinutes } from "./WeeklyAvailability.js";
@@ -27,13 +27,30 @@ function notesFor(s: GolfWeekSession): string {
   return [`Focus: ${s.focus}`, `Where: ${VENUE_LABEL[s.venue]}`, `Why: ${s.reason}`].join("\n");
 }
 
-export default function GolfWeek({ onAdded }: { onAdded: () => void }) {
+export default function GolfWeek({
+  onAdded,
+  embedded = false,
+  autoStart = false,
+  onClose,
+}: {
+  onAdded: () => void;
+  /** Inside the Calendar's Plan section: no card of its own, and a Close button. */
+  embedded?: boolean;
+  /** Start building the proposal as soon as it appears. */
+  autoStart?: boolean;
+  onClose?: () => void;
+}) {
   const [proposal, setProposal] = useState<GolfWeekProposal | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (autoStart) propose();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function propose() {
     setBusy(true);
@@ -83,17 +100,36 @@ export default function GolfWeek({ onAdded }: { onAdded: () => void }) {
     });
   }
 
+  const Wrapper = embedded ? Fragment : "div";
+  const wrapperProps = embedded ? {} : { className: "card", style: { marginBottom: 12 } };
+
   return (
-    <div className="card" style={{ marginBottom: 12 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-        <div>
-          <strong>Golf practice for the next 7 days</strong>
-          <div className="text-dim" style={{ fontSize: 12 }}>From your round notes, recent practice and the time you have free</div>
+    <Wrapper {...(wrapperProps as any)}>
+      {embedded ? (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+          <span className="text-dim" style={{ fontSize: 12 }}>From your round notes, recent practice and the time you have free</span>
+          <span style={{ display: "flex", gap: 4 }}>
+            <button type="button" className="button-quiet" onClick={propose} disabled={busy || adding}>
+              {busy ? "Thinking…" : "Redo"}
+            </button>
+            {onClose && (
+              <button type="button" className="button-quiet" onClick={onClose}>
+                Close
+              </button>
+            )}
+          </span>
         </div>
-        <button type="button" className="button-secondary" onClick={propose} disabled={busy || adding}>
-          {busy ? "Thinking…" : proposal ? "Redo" : "Plan it"}
-        </button>
-      </div>
+      ) : (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+          <div>
+            <strong>Golf practice for the next 7 days</strong>
+            <div className="text-dim" style={{ fontSize: 12 }}>From your round notes, recent practice and the time you have free</div>
+          </div>
+          <button type="button" className="button-secondary" onClick={propose} disabled={busy || adding}>
+            {busy ? "Thinking…" : proposal ? "Redo" : "Plan it"}
+          </button>
+        </div>
+      )}
       {error && <p style={{ color: "var(--danger)", fontSize: 13 }}>{error}</p>}
       {done && <p style={{ fontSize: 13 }}>{done}</p>}
 
@@ -143,6 +179,6 @@ export default function GolfWeek({ onAdded }: { onAdded: () => void }) {
           )}
         </div>
       )}
-    </div>
+    </Wrapper>
   );
 }

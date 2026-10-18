@@ -1074,9 +1074,9 @@ reports whether it has been set. The 7-day workout proposal will combine it
 with the sport ambitions (`services/ambitions.ts`). It is included in the data
 export and removed with the account.
 
-## Golf week proposal (Calendar → "Golf practice for the next 7 days")
+## Golf week proposal (Calendar → Plan → Golf practice)
 
-Shown on the Calendar when Golf is switched on. `POST /golf/week { from }`
+Shown in the Calendar's Plan section when Golf is switched on. `POST /golf/week { from }`
 (`sport/services/golfWeek.ts`) asks Claude for 2 to 4 practice sessions across
 the next 7 days. Inputs: the notes on the last few rounds (`GolfRound.notes`,
 last 75 days; a round is never counted as practice history, only its notes
@@ -1153,3 +1153,12 @@ from `main.tsx`). iPhone and iPad have no install prompt, so the card shows the
 Share → Add to Home Screen steps. The home screen icon is
 `public/apple-touch-icon.png`. There is deliberately no service worker, so the
 installed app always loads the latest deploy.
+
+## The Calendar's Plan section
+
+One collapsible "Plan" section (`components/PlanPanel.tsx`) holds every planner.
+Each is a row (title, one line on what it does, a button) with its result
+opening beneath it: **Plan strength** lays out this week's strength sessions;
+**Plan golf practice** builds the next 7 days of range, short game and putting.
+Rows only appear for workout types switched on in Settings. To add another
+workout type, push a `Planner` onto the `planners` list in `pages/Calendar.tsx`.
