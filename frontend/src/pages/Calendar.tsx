@@ -25,6 +25,7 @@ const DEFAULT_MINUTES: Record<SessionType, number> = {
   GOLF_ROUND: 240,
   GOLF_SHORT_GAME: 30,
   GOLF_PUTTING: 20,
+  GOLF_SIMULATOR: 45,
   RUN_RECOVERY: 30,
   RUN_TEMPO: 35,
   RUN_FARTLEK: 35,
@@ -102,6 +103,8 @@ export default function Calendar() {
   const [autofillError, setAutofillError] = useState<string | null>(null);
   const [golfPlanOpen, setGolfPlanOpen] = useState(false);
   const [golfRun, setGolfRun] = useState(0);
+  const [simPlanOpen, setSimPlanOpen] = useState(false);
+  const [simRun, setSimRun] = useState(0);
 
   const days = sevenDaysFrom(weekOffset);
   // Weather only matters for outdoor sports — with strength only switched
@@ -230,6 +233,20 @@ export default function Calendar() {
         setGolfRun((r) => r + 1); // a fresh proposal each press
       },
       body: golfPlanOpen ? <GolfWeek key={golfRun} embedded autoStart onAdded={loadWeek} onClose={() => setGolfPlanOpen(false)} /> : undefined,
+    });
+  }
+
+  if (visibleTypes.includes("GOLF_SIMULATOR")) {
+    planners.push({
+      key: "golf-simulator",
+      title: "Golf simulator",
+      blurb: "Propose indoor simulator sessions for the next 7 days, using only clubs that fit your space (set in Settings → Golf).",
+      buttonLabel: simPlanOpen ? "Plan again" : "Plan simulator sessions",
+      onPress: () => {
+        setSimPlanOpen(true);
+        setSimRun((r) => r + 1);
+      },
+      body: simPlanOpen ? <GolfWeek key={simRun} mode="simulator" embedded autoStart onAdded={loadWeek} onClose={() => setSimPlanOpen(false)} /> : undefined,
     });
   }
 
@@ -786,7 +803,7 @@ function defaultSubType(categoryLabel: string, visibleTypes: SessionType[]): Ses
   return firstVisible?.type ?? category.children[0].type;
 }
 
-const GOLF_TRAINING_TYPES: SessionType[] = ["GOLF_RANGE", "GOLF_SHORT_GAME", "GOLF_PUTTING"];
+const GOLF_TRAINING_TYPES: SessionType[] = ["GOLF_RANGE", "GOLF_SHORT_GAME", "GOLF_PUTTING", "GOLF_SIMULATOR"];
 
 function isGolfTrainingType(type: SessionType): type is GolfSessionType {
   return GOLF_TRAINING_TYPES.includes(type);

@@ -26,6 +26,7 @@ const sessionTypeSchema = z.enum([
   "GOLF_ROUND",
   "GOLF_SHORT_GAME",
   "GOLF_PUTTING",
+  "GOLF_SIMULATOR",
   "RUN_RECOVERY",
   "RUN_TEMPO",
   "RUN_FARTLEK",

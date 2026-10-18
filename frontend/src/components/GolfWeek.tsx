@@ -7,8 +7,8 @@ import { formatMinutes } from "./WeeklyAvailability.js";
 // from the notes on recent rounds, recent practice, the golf ambition and the
 // time free each day. Nothing is added until the person chooses.
 
-const TYPE_LABEL = { GOLF_RANGE: "Range", GOLF_SHORT_GAME: "Short game", GOLF_PUTTING: "Putting" } as const;
-const VENUE_LABEL = { RANGE: "At the range", HOME: "At home / garage", COURSE: "At the course" } as const;
+const TYPE_LABEL = { GOLF_RANGE: "Range", GOLF_SHORT_GAME: "Short game", GOLF_PUTTING: "Putting", GOLF_SIMULATOR: "Simulator" } as const;
+const VENUE_LABEL = { RANGE: "At the range", HOME: "At home / garage", COURSE: "At the course", SIMULATOR: "Indoor simulator" } as const;
 const AREA_LABEL = {
   DRIVING: "Driving",
   APPROACH: "Approach shots",
@@ -32,7 +32,9 @@ export default function GolfWeek({
   embedded = false,
   autoStart = false,
   onClose,
+  mode = "outdoor",
 }: {
+  mode?: "outdoor" | "simulator";
   onAdded: () => void;
   /** Inside the Calendar's Plan section: no card of its own, and a Close button. */
   embedded?: boolean;
@@ -57,7 +59,7 @@ export default function GolfWeek({
     setError(null);
     setDone(null);
     try {
-      const p = await api.proposeGolfWeek(formatLocalDateKey(new Date()));
+      const p = await api.proposeGolfWeek(formatLocalDateKey(new Date()), mode);
       setProposal(p);
       setPicked(new Set(p.sessions.map((s) => s.date)));
     } catch (e: any) {
@@ -122,7 +124,7 @@ export default function GolfWeek({
       ) : (
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
           <div>
-            <strong>Golf practice for the next 7 days</strong>
+            <strong>{mode === "simulator" ? "Simulator sessions" : "Golf practice"} for the next 7 days</strong>
             <div className="text-dim" style={{ fontSize: 12 }}>From your round notes, recent practice and the time you have free</div>
           </div>
           <button type="button" className="button-secondary" onClick={propose} disabled={busy || adding}>

@@ -180,6 +180,7 @@ export type SessionType =
   | "GOLF_ROUND"
   | "GOLF_SHORT_GAME"
   | "GOLF_PUTTING"
+  | "GOLF_SIMULATOR"
   | "RUN_RECOVERY"
   | "RUN_TEMPO"
   | "RUN_FARTLEK"
@@ -235,7 +236,7 @@ export interface StravaActivity {
   distanceMiles: number;
 }
 
-export type GolfSessionType = "GOLF_RANGE" | "GOLF_SHORT_GAME" | "GOLF_PUTTING";
+export type GolfSessionType = "GOLF_RANGE" | "GOLF_SHORT_GAME" | "GOLF_PUTTING" | "GOLF_SIMULATOR";
 
 export interface GolfDrill {
   name: string;
@@ -256,6 +257,12 @@ export interface GolfClubInfo {
 export interface GolfBagOverview {
   handicap: number | null;
   canShapeShots: boolean | null;
+  /** Longest club usable in the indoor simulator; null = no restrictions. */
+  simulatorLongestClub: string | null;
+  /** The clubs that fit the indoor space. */
+  simulatorClubs: string[];
+  /** Club names from longest to shortest. */
+  clubsByLength: string[];
   clubs: GolfClubInfo[];
   handicapHistory: { date: string; handicap: number }[];
   /** Which club types each kind of practice may use. */
@@ -265,7 +272,7 @@ export interface GolfBagOverview {
 export interface GolfWeekSession {
   date: string;
   type: GolfSessionType;
-  venue: "RANGE" | "HOME" | "COURSE";
+  venue: "RANGE" | "HOME" | "COURSE" | "SIMULATOR";
   minutes: number;
   focus: string;
   reason: string;
@@ -1029,15 +1036,15 @@ export const api = {
     }),
 
   getGolfBag: () => request<GolfBagOverview>("/golf-bag"),
-  saveGolfProfile: (data: { handicap?: number | null; canShapeShots?: boolean | null }) =>
+  saveGolfProfile: (data: { handicap?: number | null; canShapeShots?: boolean | null; simulatorLongestClub?: string | null }) =>
     tracked("golf_profile_saved", request<GolfBagOverview>("/golf-bag/profile", { method: "PUT", body: JSON.stringify(data) })),
   addGolfClub: (data: { name: string; type: GolfClubType }) =>
     tracked("golf_clubs_edited", request<GolfBagOverview>("/golf-bag/clubs", { method: "POST", body: JSON.stringify(data) })),
   deleteGolfClub: (id: string) => tracked("golf_clubs_edited", request<GolfBagOverview>(`/golf-bag/clubs/${id}`, { method: "DELETE" })),
   addStandardGolfBag: () => tracked("golf_clubs_edited", request<GolfBagOverview>("/golf-bag/clubs/standard", { method: "POST" })),
 
-  proposeGolfWeek: (from: string) =>
-    tracked("golf_week_proposed", request<GolfWeekProposal>("/golf/week", { method: "POST", body: JSON.stringify({ from }) })),
+  proposeGolfWeek: (from: string, mode: "outdoor" | "simulator" = "outdoor") =>
+    tracked("golf_week_proposed", request<GolfWeekProposal>("/golf/week", { method: "POST", body: JSON.stringify({ from, mode }) })),
 
   generateGolfPlan: (type: GolfSessionType, estimatedMinutes?: number) =>
     request<GolfSessionPlan>(`/golf/plan/${type}`, {

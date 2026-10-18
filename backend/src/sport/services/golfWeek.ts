@@ -4,7 +4,7 @@ import { addDays, dateToDayKey, dayKeyToDate } from "../../lib/dates.js";
 import { getAvailability } from "../../services/availability.js";
 import { progressFor } from "../../services/ambitions.js";
 import { describeDrills, type GolfSessionType } from "./golfPlanner.js";
-import { bagPromptBlock, checkDrill, loadGolfBag, type GolfBag } from "./golfBag.js";
+import { SIMULATOR_GUIDE, bagPromptBlock, checkDrill, loadGolfBag, type GolfBag } from "./golfBag.js";
 
 // Proposes golf practice for the next 7 days. It reads what the person wrote
 // about their recent rounds (a round itself is never counted as practice
@@ -12,8 +12,9 @@ import { bagPromptBlock, checkDrill, loadGolfBag, type GolfBag } from "./golfBag
 // their golf ambition, and how much time each day has left. Nothing is saved:
 // the person reviews the proposal and adds the sessions they want.
 
-const TYPES: GolfSessionType[] = ["GOLF_RANGE", "GOLF_SHORT_GAME", "GOLF_PUTTING"];
-const TYPE_LABEL: Record<GolfSessionType, string> = { GOLF_RANGE: "Range / full swing", GOLF_SHORT_GAME: "Short game", GOLF_PUTTING: "Putting" };
+const OUTDOOR_TYPES: GolfSessionType[] = ["GOLF_RANGE", "GOLF_SHORT_GAME", "GOLF_PUTTING"];
+const SIMULATOR_TYPES: GolfSessionType[] = ["GOLF_SIMULATOR"];
+const TYPE_LABEL: Record<GolfSessionType, string> = { GOLF_SIMULATOR: "Indoor simulator", GOLF_RANGE: "Range / full swing", GOLF_SHORT_GAME: "Short game", GOLF_PUTTING: "Putting" };
 const AREAS = ["DRIVING", "APPROACH", "SHORT_GAME", "PUTTING", "COURSE_MANAGEMENT", "OTHER"] as const;
 export type WeaknessArea = (typeof AREAS)[number];
 const MIN_SESSION = 15;
@@ -24,7 +25,7 @@ export interface WeekSession {
   date: string; // day key
   type: GolfSessionType;
   /** Range = at the driving range; Home = garage/net/mat, no ball flight needed. */
-  venue: "RANGE" | "HOME" | "COURSE";
+  venue: "RANGE" | "HOME" | "COURSE" | "SIMULATOR";
   minutes: number;
   focus: string;
   reason: string;
@@ -44,7 +45,8 @@ export interface GolfWeekProposal {
 
 const clip = (s: string | null | undefined, n: number) => (s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 
-export async function proposeGolfWeek(userId: string, fromKey: string): Promise<GolfWeekProposal> {
+export async function proposeGolfWeek(userId: string, fromKey: string, mode: "outdoor" | "simulator" = "outdoor"): Promise<GolfWeekProposal> {
+  const TYPES = mode === "simulator" ? SIMULATOR_TYPES : OUTDOOR_TYPES;
   const start = dayKeyToDate(fromKey);
   const end = addDays(start, 7); // exclusive
   const dayKeys = Array.from({ length: 7 }, (_, i) => dateToDayKey(addDays(start, i)));
@@ -62,7 +64,7 @@ export async function proposeGolfWeek(userId: string, fromKey: string): Promise<
       select: { date: true, course: true, holes: true, notes: true },
     }),
     prisma.plannedSession.findMany({
-      where: { userId, completed: true, type: { in: TYPES }, date: { lt: end } },
+      where: { userId, completed: true, type: { in: [...OUTDOOR_TYPES, ...SIMULATOR_TYPES] }, date: { lt: end } },
       orderBy: { date: "desc" },
       take: 6,
       select: { date: true, type: true, notes: true, drills: true, actualMinutes: true, estimatedMinutes: true },
@@ -135,14 +137,18 @@ ${availability.notes ? `Their note on their time: ${clip(availability.notes, 300
 
 RULES
 - Propose 2 to 4 sessions in total, at most one per day, only on days with at least ${MIN_SESSION} minutes free, and never longer than that day's free minutes. Fewer, better-aimed sessions beat filling every day. Spread them out; do not stack hard sessions on consecutive days unless time forces it.
-- type is one of GOLF_RANGE (full swing: driving, irons, approach), GOLF_SHORT_GAME, GOLF_PUTTING.
-- venue is RANGE (driving range), HOME (garage net or mat, short on time, no ball flight needed) or COURSE (practice area at a course). Prefer HOME for sessions of 30 minutes or less and for drills that do not need ball flight; use RANGE when ball flight or driver distance matters.
+${
+    mode === "simulator"
+      ? `- Every session is an INDOOR GOLF SIMULATOR session: type is GOLF_SIMULATOR and venue is SIMULATOR. Aim each one at a different weakness from the notes where there is more than one.\n\n${SIMULATOR_GUIDE}`
+      : `- type is one of GOLF_RANGE (full swing: driving, irons, approach), GOLF_SHORT_GAME, GOLF_PUTTING.
+- venue is RANGE (driving range), HOME (garage net or mat, short on time, no ball flight needed) or COURSE (practice area at a course). Prefer HOME for sessions of 30 minutes or less and for drills that do not need ball flight; use RANGE when ball flight or driver distance matters.`
+  }
 - Each session has 3 to 6 drills, each with ONE club, and concrete instructions (number of balls or putts, distance, target, a pass mark). Drill minutes must add up to the session minutes.
 - Pitch every drill at the player's handicap and shot-shaping ability as described above.
 - Do not plan a round. The summary is two sentences at most.
 
 Respond with ONLY a JSON object, no other text, in this exact shape:
-{"summary": string, "findings": [{"area": "DRIVING"|"APPROACH"|"SHORT_GAME"|"PUTTING"|"COURSE_MANAGEMENT"|"OTHER", "finding": string, "evidence": "a short quote or paraphrase from their notes, or 'general' if none"}], "sessions": [{"date": "YYYY-MM-DD", "type": "GOLF_RANGE"|"GOLF_SHORT_GAME"|"GOLF_PUTTING", "venue": "RANGE"|"HOME"|"COURSE", "minutes": number, "focus": string, "reason": string, "drills": [{"name": string, "club": "exact club name from the bag, or null if the bag was not entered", "detail": string, "minutes": number}]}]}`;
+{"summary": string, "findings": [{"area": "DRIVING"|"APPROACH"|"SHORT_GAME"|"PUTTING"|"COURSE_MANAGEMENT"|"OTHER", "finding": string, "evidence": "a short quote or paraphrase from their notes, or 'general' if none"}], "sessions": [{"date": "YYYY-MM-DD", "type": ${mode === "simulator" ? '"GOLF_SIMULATOR"' : '"GOLF_RANGE"|"GOLF_SHORT_GAME"|"GOLF_PUTTING"'}, "venue": ${mode === "simulator" ? '"SIMULATOR"' : '"RANGE"|"HOME"|"COURSE"'}, "minutes": number, "focus": string, "reason": string, "drills": [{"name": string, "club": "exact club name from the bag, or null if the bag was not entered", "detail": string, "minutes": number}]}]}`;
 
   const answer = await askClaude(prompt);
   const raw = answer.replace(/```json|```/g, "").trim();
@@ -154,11 +160,11 @@ Respond with ONLY a JSON object, no other text, in this exact shape:
   } catch (err) {
     throw new Error(`Failed to parse Claude's response as JSON: ${(err as Error).message}`);
   }
-  return { ...base, ...cleanProposal(parsed, free, bag), caveats };
+  return { ...base, ...cleanProposal(parsed, free, bag, TYPES), caveats };
 }
 
 /** Keeps only what fits the person's real constraints, whatever the model returned. Exported for tests. */
-export function cleanProposal(parsed: any, free: Map<string, number>, bag: GolfBag) {
+export function cleanProposal(parsed: any, free: Map<string, number>, bag: GolfBag, types: GolfSessionType[] = OUTDOOR_TYPES) {
   const findings: WeekFinding[] = (Array.isArray(parsed?.findings) ? parsed.findings : [])
     .filter((f: any) => f && typeof f.finding === "string")
     .slice(0, 5)
@@ -174,7 +180,7 @@ export function cleanProposal(parsed: any, free: Map<string, number>, bag: GolfB
   for (const s of rawSessions.sort((a, b) => String(a?.date).localeCompare(String(b?.date)))) {
     const date = typeof s?.date === "string" ? s.date : "";
     const cap = free.get(date) ?? 0; // also rejects dates outside the window
-    if (cap < MIN_SESSION || seen.has(date) || !TYPES.includes(s?.type)) continue;
+    if (cap < MIN_SESSION || seen.has(date) || !types.includes(s?.type)) continue;
 
     // Drop trailing drills until they fit the day's free time.
     const drills: WeekDrill[] = [];
@@ -194,7 +200,7 @@ export function cleanProposal(parsed: any, free: Map<string, number>, bag: GolfB
     sessions.push({
       date,
       type: s.type,
-      venue: s.venue === "HOME" || s.venue === "COURSE" ? s.venue : "RANGE",
+      venue: s.type === "GOLF_SIMULATOR" ? "SIMULATOR" : s.venue === "HOME" || s.venue === "COURSE" ? s.venue : "RANGE",
       minutes: total,
       focus: clip(s.focus, 200),
       reason: clip(s.reason, 300),

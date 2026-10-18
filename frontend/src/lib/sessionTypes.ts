@@ -30,6 +30,7 @@ export const SESSION_TYPE_TREE: SessionTypeCategory[] = [
       { type: "GOLF_ROUND", label: "Round" },
       { type: "GOLF_SHORT_GAME", label: "Short Game" },
       { type: "GOLF_PUTTING", label: "Putting" },
+      { type: "GOLF_SIMULATOR", label: "Simulator" },
     ],
   },
   {

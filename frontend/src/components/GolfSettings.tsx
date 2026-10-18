@@ -150,6 +150,39 @@ export default function GolfSettings() {
         </div>
       )}
 
+      {bag.clubs.length > 0 && (
+        <div style={{ marginTop: 18 }}>
+          <strong style={{ fontSize: 14 }}>Indoor golf simulator</strong>
+          <p className="text-dim" style={{ fontSize: 13, margin: "4px 0 8px" }}>
+            Is there a limit on the longest club you can swing in the space? Simulator sessions only use clubs up to this one.
+          </p>
+          <label htmlFor="sim-longest" className="text-dim" style={{ fontSize: 12 }}>Longest club you can use</label>
+          <div style={{ marginTop: 4 }}>
+            <select
+              id="sim-longest"
+              value={bag.simulatorLongestClub ?? ""}
+              disabled={busy}
+              onChange={(e) => run(() => api.saveGolfProfile({ simulatorLongestClub: e.target.value || null }), "Simulator limit saved.")}
+              style={{ padding: 8, width: "100%" }}
+            >
+              <option value="">No restrictions</option>
+              {bag.clubsByLength
+                .filter((n) => bag.clubs.find((c) => c.name === n && c.type !== "PUTTER" && c.type !== "SAND_WEDGE"))
+                .map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+            </select>
+          </div>
+          <p className="text-dim" style={{ fontSize: 12, margin: "4px 0 0" }}>
+            {bag.simulatorLongestClub
+              ? `Simulator sessions will use: ${bag.simulatorClubs.join(", ") || "no clubs"}.`
+              : "Simulator sessions can use any full-swing club in the bag."}
+          </p>
+        </div>
+      )}
+
       <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
         <input
           placeholder="Add a club, e.g. 4 iron"

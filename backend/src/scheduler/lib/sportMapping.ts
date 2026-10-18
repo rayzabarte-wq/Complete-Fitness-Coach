@@ -6,7 +6,7 @@ import type { Sport, SessionType } from "@prisma/client";
 // REST has no Sport — it's excluded from planning and dashboard math.
 export const SPORT_SESSION_TYPES: Record<Sport, SessionType[]> = {
   STRENGTH: ["STRENGTH"],
-  GOLF: ["GOLF_RANGE", "GOLF_ROUND", "GOLF_SHORT_GAME", "GOLF_PUTTING"],
+  GOLF: ["GOLF_RANGE", "GOLF_ROUND", "GOLF_SHORT_GAME", "GOLF_PUTTING", "GOLF_SIMULATOR"],
   RUN: ["RUN_RECOVERY", "RUN_TEMPO", "RUN_FARTLEK", "RUN_INTERVALS", "RUN_LONG_RUN"],
   WALK: ["WALK_WALK", "WALK_HIKE"],
   CYCLING: ["CYCLING_EASY", "CYCLING_LONG", "CYCLING_HILLS"],

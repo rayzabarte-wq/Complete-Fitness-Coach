@@ -1173,3 +1173,20 @@ every visit; the browser is only asked the very first time, or when "Update
 location" / "Try again" is tapped. A browser can't be made to give a position
 without permission; setting Safari → Settings → Websites → Location to Allow
 for the site is what makes "always current, never asked" work.
+
+## Indoor golf simulator sessions
+
+A new session type, `GOLF_SIMULATOR` ("Golf → Simulator" in Settings → Workout
+types and the Calendar; existing golf users have it switched on by migration).
+The Calendar's Plan section gets a **Golf simulator** row (when that type is on)
+that proposes simulator sessions for the next 7 days (`POST /golf/week` with
+`mode: "simulator"`), and "Suggest a session (AI)" works for it on a single
+session. Drills use launch-monitor style work (gapping, dispersion, target
+games, skills challenges), never bunker shots or a putter.
+
+Settings → Golf → **Indoor golf simulator** sets the longest club that fits the
+space ("No restrictions", or any club in the bag, `GolfProfile.simulatorLongestClub`).
+Clubs are ordered by length (`clubRank` in `sport/services/golfBag.ts`: driver,
+woods, hybrids, irons, wedges; by the number or loft in the name); simulator
+sessions only use the chosen club and shorter ones, in the prompt and enforced
+on the answer. Settings shows which clubs that leaves.

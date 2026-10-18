@@ -7,7 +7,7 @@ import { AuthedRequest } from "../../lib/requireAuth.js";
 
 export const golfRouter = Router();
 
-const golfTypeSchema = z.enum(["GOLF_RANGE", "GOLF_SHORT_GAME", "GOLF_PUTTING"]);
+const golfTypeSchema = z.enum(["GOLF_RANGE", "GOLF_SHORT_GAME", "GOLF_PUTTING", "GOLF_SIMULATOR"]);
 
 const generatePlanSchema = z.object({
   estimatedMinutes: z.number().int().positive().optional(),
@@ -20,7 +20,7 @@ golfRouter.post("/plan/:type", async (req: AuthedRequest, res) => {
   const parsedType = golfTypeSchema.safeParse(req.params.type.toUpperCase());
   if (!parsedType.success) {
     return res.status(400).json({
-      error: "type must be one of GOLF_RANGE, GOLF_SHORT_GAME, GOLF_PUTTING (Round isn't supported — nothing to generate drills for)",
+      error: "type must be one of GOLF_RANGE, GOLF_SHORT_GAME, GOLF_PUTTING, GOLF_SIMULATOR (Round isn't supported — nothing to generate drills for)",
     });
   }
 
@@ -48,9 +48,10 @@ golfRouter.post("/plan/:type", async (req: AuthedRequest, res) => {
 // app adds the sessions the person accepts through POST /calendar.
 golfRouter.post("/week", async (req: AuthedRequest, res) => {
   const from = req.body?.from;
+  const mode = req.body?.mode === "simulator" ? "simulator" : "outdoor";
   if (!isDayKey(from)) return res.status(400).json({ error: "from must be a day like 2026-10-18" });
   try {
-    res.json(await proposeGolfWeek(req.userId!, from));
+    res.json(await proposeGolfWeek(req.userId!, from, mode));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err instanceof Error ? err.message : "Failed to propose a golf week" });

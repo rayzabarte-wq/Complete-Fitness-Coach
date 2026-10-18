@@ -10,7 +10,7 @@ import { formatLocalDateKey } from "../lib/location.js";
 // and the ✓ button to tick it off, plus a 1–10 "feel" row like RPE. Every
 // change is saved straight away; "Finish practice" marks the session done.
 
-const PRACTICE_TYPES = ["GOLF_RANGE", "GOLF_SHORT_GAME", "GOLF_PUTTING"];
+const PRACTICE_TYPES = ["GOLF_RANGE", "GOLF_SHORT_GAME", "GOLF_PUTTING", "GOLF_SIMULATOR"];
 const DAY_MS = 86400_000;
 
 /** Sessions made before drills were stored hold the plan as text in the notes:
@@ -206,7 +206,14 @@ export default function GolfPracticeLog({ onChanged }: { onChanged?: () => void 
           key={i}
           index={i}
           drill={d}
-          clubOptions={bag ? bag.clubs.filter((c) => bag.allowed[active.type as GolfSessionType]?.includes(c.type)).map((c) => c.name) : []}
+          clubOptions={
+            bag
+              ? bag.clubs
+                  .filter((c) => bag.allowed[active.type as GolfSessionType]?.includes(c.type))
+                  .filter((c) => active.type !== "GOLF_SIMULATOR" || bag.simulatorClubs.includes(c.name))
+                  .map((c) => c.name)
+              : []
+          }
           onPatch={(p) => patch(i, p)}
         />
       ))}

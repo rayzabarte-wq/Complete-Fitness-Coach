@@ -7,7 +7,7 @@ import { DAY_MS, dateToDayKey } from "../../lib/dates.js";
 // Both golf planners build their prompts from this and then enforce its rules
 // on whatever the model returns.
 
-export type PracticeType = "GOLF_RANGE" | "GOLF_SHORT_GAME" | "GOLF_PUTTING";
+export type PracticeType = "GOLF_RANGE" | "GOLF_SHORT_GAME" | "GOLF_PUTTING" | "GOLF_SIMULATOR";
 
 /** Which club types each kind of practice may use. A sand wedge isn't hit at
  * the range, and putting practice is the putter only. */
@@ -15,7 +15,34 @@ export const ALLOWED_CLUBS: Record<PracticeType, GolfClubType[]> = {
   GOLF_RANGE: ["DRIVER", "WOOD", "HYBRID", "IRON", "WEDGE"],
   GOLF_SHORT_GAME: ["IRON", "WEDGE", "SAND_WEDGE"],
   GOLF_PUTTING: ["PUTTER"],
+  // Indoors, hitting off a mat into a screen: full swings, so like the range.
+  GOLF_SIMULATOR: ["DRIVER", "WOOD", "HYBRID", "IRON", "WEDGE"],
 };
+
+/**
+ * How long a club is, as a sortable number (smaller = longer): driver, then
+ * woods, hybrids, irons, wedges, then the putter; within a type by the number
+ * in the name (a 3 wood is longer than a 5 wood) or, for wedges, by loft
+ * ("50°", or pitching / gap / sand / lob). Good enough to order a normal bag.
+ */
+export function clubRank(c: BagClub): number {
+  const base: Record<GolfClubType, number> = { DRIVER: 0, WOOD: 100, HYBRID: 200, IRON: 300, WEDGE: 400, SAND_WEDGE: 450, PUTTER: 900 };
+  const n = c.name.match(/(\d+)\s*°/)?.[1] ?? c.name.match(/\d+/)?.[0];
+  let within = n ? Number(n) : 50;
+  if (c.type === "WEDGE" || c.type === "SAND_WEDGE") {
+    if (!/°/.test(c.name)) {
+      if (/pitch|\bpw\b/i.test(c.name)) within = 46;
+      else if (/gap|approach|\baw\b|\bgw\b/i.test(c.name)) within = 50;
+      else if (/sand|\bsw\b/i.test(c.name)) within = 56;
+      else if (/lob|\blw\b/i.test(c.name)) within = 60;
+    }
+  }
+  return base[c.type] + within;
+}
+
+export function sortByLength<T extends BagClub>(clubs: T[]): T[] {
+  return [...clubs].sort((a, b) => clubRank(a) - clubRank(b));
+}
 
 export const STANDARD_BAG: { name: string; type: GolfClubType }[] = [
   { name: "Driver", type: "DRIVER" },
@@ -39,6 +66,8 @@ export interface ClubCoverage { name: string; sessions: number; lastPracticed: s
 export interface GolfBag {
   handicap: number | null;
   canShapeShots: boolean | null;
+  /** Longest club usable in the indoor simulator, null = no restriction. */
+  simulatorLongestClub: string | null;
   clubs: BagClub[];
   coverage: ClubCoverage[];
 }
@@ -51,7 +80,7 @@ export async function loadGolfBag(userId: string): Promise<GolfBag> {
     prisma.golfProfile.findUnique({ where: { userId } }),
     prisma.golfClub.findMany({ where: { userId }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }], select: { name: true, type: true } }),
     prisma.plannedSession.findMany({
-      where: { userId, completed: true, date: { gte: since }, type: { in: ["GOLF_RANGE", "GOLF_SHORT_GAME", "GOLF_PUTTING"] } },
+      where: { userId, completed: true, date: { gte: since }, type: { in: ["GOLF_RANGE", "GOLF_SHORT_GAME", "GOLF_PUTTING", "GOLF_SIMULATOR"] } },
       select: { date: true, drills: true },
     }),
   ]);
@@ -70,10 +99,18 @@ export async function loadGolfBag(userId: string): Promise<GolfBag> {
     const e = byClub.get(c.name);
     return { name: c.name, sessions: e?.sessions.size ?? 0, lastPracticed: e?.last ? dateToDayKey(e.last) : null };
   });
-  return { handicap: profile?.handicap ?? null, canShapeShots: profile?.canShapeShots ?? null, clubs, coverage };
+  return { handicap: profile?.handicap ?? null, canShapeShots: profile?.canShapeShots ?? null, simulatorLongestClub: profile?.simulatorLongestClub ?? null, clubs, coverage };
+}
+
+/** The clubs that fit the indoor space: nothing longer than the chosen longest club. */
+export function simulatorClubs(bag: GolfBag): BagClub[] {
+  const longest = bag.clubs.find((c) => c.name === bag.simulatorLongestClub);
+  const cutoff = longest ? clubRank(longest) : -Infinity;
+  return bag.clubs.filter((c) => ALLOWED_CLUBS.GOLF_SIMULATOR.includes(c.type) && clubRank(c) >= cutoff);
 }
 
 export function clubsFor(type: PracticeType, bag: GolfBag): BagClub[] {
+  if (type === "GOLF_SIMULATOR") return simulatorClubs(bag);
   return bag.clubs.filter((c) => ALLOWED_CLUBS[type].includes(c.type));
 }
 
@@ -103,6 +140,15 @@ export function bagPromptBlock(bag: GolfBag, types: PracticeType[]): string {
       const list = clubsFor(t, bag);
       lines.push(`- ${t}: ${list.length ? list.map((c) => c.name).join(", ") : "(none in their bag)"}`);
     }
+    if (types.includes("GOLF_SIMULATOR")) {
+      const limit = bag.clubs.find((c) => c.name === bag.simulatorLongestClub);
+      if (limit) {
+        const excluded = bag.clubs.filter((c) => ALLOWED_CLUBS.GOLF_SIMULATOR.includes(c.type) && !simulatorClubs(bag).includes(c)).map((c) => c.name);
+        lines.push(`- SIMULATOR SPACE LIMIT: the longest club they can swing indoors is the ${limit.name}. Never use a longer club in a simulator session${excluded.length ? ` (not allowed: ${excluded.join(", ")})` : ""}.`);
+      } else {
+        lines.push("- Simulator space: no restriction on club length.");
+      }
+    }
     lines.push(
       "",
       `CLUB COVERAGE (drills ticked done in the last ${COVERAGE_DAYS} days, with the date last practised)`,
@@ -115,11 +161,16 @@ export function bagPromptBlock(bag: GolfBag, types: PracticeType[]): string {
       "CLUB RULES (strict)",
       "- Every drill has a club: the exact name from the list above, matching the session type's allowed clubs. One club per drill; use separate drills for separate clubs.",
       "- A sand wedge is never used at the range. Putting practice uses only the putter, with no other club. Range sessions use driver, woods, hybrids, irons and the other wedges.",
+      "- Indoor golf simulator sessions (GOLF_SIMULATOR) use only the clubs listed for them, full swings off a mat into a screen. They never include bunker shots, and putting only if the simulator has a putting surface, which is not assumed.",
       "- Short game covers chipping and pitching from grass and from the BUNKER. Bunker drills use the sand wedge (or the nearest wedge if they have none), and say so in the drill."
     );
   }
   return lines.join("\n");
 }
+
+/** What makes a good indoor simulator session, for the prompts. */
+export const SIMULATOR_GUIDE = `INDOOR GOLF SIMULATOR SESSIONS
+Hitting off a mat into a screen, with launch-monitor numbers (carry distance, ball speed, spin, dispersion, face and path where shown). Use that data: club gapping and carry-distance ladders, dispersion games (e.g. 10 balls, count how many finish inside a fairway-width or a target circle), start-line gates, a wedge distance matrix, closest-to-pin target games and the simulator's own skills challenges. A short virtual 9 holes is fine when time allows, with the club for each shot named. Do not include anything that needs real turf or outdoor ball flight (divot depth, bunker shots, wind), and do not assume a putting surface.`;
 
 // Shot-shaping vocabulary. A drill that fixes a slice or hook is fine; one that
 // asks for a deliberate draw/fade is not, for a player who can't shape the ball.
@@ -147,6 +198,7 @@ export function checkDrill(d: RawDrill, type: PracticeType, bag: GolfBag): { clu
     return putter ? { club: putter.name } : { club: null };
   }
   if (!named || !allowed.some((c) => c.name === named.name)) return "drop";
+  if (type === "GOLF_SIMULATOR" && BUNKER_RE.test(text)) return "drop";
   // Bunker work needs a sand wedge, or failing that another wedge.
   if (type === "GOLF_SHORT_GAME" && BUNKER_RE.test(text) && named.type !== "SAND_WEDGE" && named.type !== "WEDGE") return "drop";
   return { club: named.name };

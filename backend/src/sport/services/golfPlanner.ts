@@ -1,21 +1,23 @@
 import { prisma } from "../../lib/prisma.js";
 import { askClaude } from "../../lib/claude.js";
-import { bagPromptBlock, checkDrill, loadGolfBag } from "./golfBag.js";
+import { SIMULATOR_GUIDE, bagPromptBlock, checkDrill, loadGolfBag } from "./golfBag.js";
 
 // Deliberately excludes GOLF_ROUND — a round isn't a practice session to
 // generate drills for, it's the real thing.
-export type GolfSessionType = "GOLF_RANGE" | "GOLF_SHORT_GAME" | "GOLF_PUTTING";
+export type GolfSessionType = "GOLF_RANGE" | "GOLF_SHORT_GAME" | "GOLF_PUTTING" | "GOLF_SIMULATOR";
 
 const GOLF_TYPE_LABELS: Record<GolfSessionType, string> = {
   GOLF_RANGE: "Range",
   GOLF_SHORT_GAME: "Short Game",
   GOLF_PUTTING: "Putting",
+  GOLF_SIMULATOR: "Indoor Golf Simulator",
 };
 
 const DEFAULT_MINUTES: Record<GolfSessionType, number> = {
   GOLF_RANGE: 45,
   GOLF_SHORT_GAME: 30,
   GOLF_PUTTING: 20,
+  GOLF_SIMULATOR: 45,
 };
 
 /** One line per drill on a session's checklist: done or not, and the person's comment. */
@@ -95,7 +97,7 @@ export async function generateGolfSessionPlan(
 
   const prompt = `You are a golf coach designing a structured ${targetMinutes}-minute practice session focused on ${GOLF_TYPE_LABELS[type]}.
 
-${bagPromptBlock(bag, [type])}
+${bagPromptBlock(bag, [type])}${type === "GOLF_SIMULATOR" ? `\n\n${SIMULATOR_GUIDE}` : ""}
 
 Most recent completed sessions of this type (most recent first — weight the first one, your last session of this type, as the strongest signal for what to adjust):
 ${lastSessionText}

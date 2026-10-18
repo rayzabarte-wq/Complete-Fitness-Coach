@@ -13,7 +13,7 @@ export const SPORT_LABELS: Record<Sport, string> = {
 /** The workout types each sport switches on (Settings → Workout types). */
 export const SPORT_TYPES: Record<Sport, SessionType[]> = {
   STRENGTH: ["STRENGTH"],
-  GOLF: ["GOLF_RANGE", "GOLF_ROUND", "GOLF_SHORT_GAME", "GOLF_PUTTING"],
+  GOLF: ["GOLF_RANGE", "GOLF_ROUND", "GOLF_SHORT_GAME", "GOLF_PUTTING", "GOLF_SIMULATOR"],
   RUN: ["RUN_RECOVERY", "RUN_TEMPO", "RUN_FARTLEK", "RUN_INTERVALS", "RUN_LONG_RUN"],
   WALK: ["WALK_WALK", "WALK_HIKE"],
   CYCLING: ["CYCLING_EASY", "CYCLING_LONG", "CYCLING_HILLS"],

@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../../lib/prisma.js";
 import { AuthedRequest } from "../../lib/requireAuth.js";
-import { ALLOWED_CLUBS, STANDARD_BAG, loadGolfBag } from "../services/golfBag.js";
+import { ALLOWED_CLUBS, STANDARD_BAG, loadGolfBag, simulatorClubs, sortByLength } from "../services/golfBag.js";
 import { dateToDayKey } from "../../lib/dates.js";
 
 // The player's golf profile (handicap, whether they shape shots) and the clubs
@@ -22,6 +22,11 @@ async function overview(userId: string) {
   return {
     handicap: bag.handicap,
     canShapeShots: bag.canShapeShots,
+    // null = no restrictions. simulatorClubs are the clubs that fit the indoor space.
+    simulatorLongestClub: bag.simulatorLongestClub,
+    simulatorClubs: simulatorClubs(bag).map((c) => c.name),
+    // Club names from longest to shortest, for choosing the longest one.
+    clubsByLength: sortByLength(bag.clubs).map((c) => c.name),
     clubs: clubs.map((c) => ({
       id: c.id,
       name: c.name,
@@ -42,6 +47,8 @@ golfBagRouter.get("/", async (req: AuthedRequest, res) => {
 const profileSchema = z.object({
   handicap: z.number().min(-10).max(54).nullish(),
   canShapeShots: z.boolean().nullish(),
+  // Name of a club in the bag, or null for no restrictions.
+  simulatorLongestClub: z.string().trim().max(40).nullish(),
 });
 
 // PUT /golf-bag/profile { handicap?, canShapeShots? }
@@ -49,9 +56,17 @@ golfBagRouter.put("/profile", async (req: AuthedRequest, res) => {
   const parsed = profileSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Handicap must be between -10 and 54" });
   const userId = req.userId!;
-  const data: { handicap?: number | null; canShapeShots?: boolean | null } = {};
+  const data: { handicap?: number | null; canShapeShots?: boolean | null; simulatorLongestClub?: string | null } = {};
   if (parsed.data.handicap !== undefined) data.handicap = parsed.data.handicap === null ? null : Math.round(parsed.data.handicap * 10) / 10;
   if (parsed.data.canShapeShots !== undefined) data.canShapeShots = parsed.data.canShapeShots;
+
+  if (parsed.data.simulatorLongestClub !== undefined) {
+    const name = parsed.data.simulatorLongestClub;
+    if (name !== null && !(await prisma.golfClub.findUnique({ where: { userId_name: { userId, name } } }))) {
+      return res.status(400).json({ error: "Choose one of the clubs in your bag" });
+    }
+    data.simulatorLongestClub = name;
+  }
 
   const before = await prisma.golfProfile.findUnique({ where: { userId } });
   await prisma.golfProfile.upsert({ where: { userId }, update: data, create: { userId, ...data } });
@@ -83,7 +98,12 @@ golfBagRouter.post("/clubs", async (req: AuthedRequest, res) => {
 
 // DELETE /golf-bag/clubs/:id
 golfBagRouter.delete("/clubs/:id", async (req: AuthedRequest, res) => {
-  await prisma.golfClub.deleteMany({ where: { id: req.params.id, userId: req.userId! } });
+  const club = await prisma.golfClub.findFirst({ where: { id: req.params.id, userId: req.userId! } });
+  if (club) {
+    await prisma.golfClub.delete({ where: { id: club.id } });
+    // If it was the simulator's longest club, the limit goes back to none.
+    await prisma.golfProfile.updateMany({ where: { userId: req.userId!, simulatorLongestClub: club.name }, data: { simulatorLongestClub: null } });
+  }
   res.json(await overview(req.userId!));
 });
 
