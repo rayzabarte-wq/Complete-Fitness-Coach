@@ -1064,8 +1064,8 @@ export const api = {
   deleteGolfClub: (id: string) => tracked("golf_clubs_edited", request<GolfBagOverview>(`/golf-bag/clubs/${id}`, { method: "DELETE" })),
   addStandardGolfBag: () => tracked("golf_clubs_edited", request<GolfBagOverview>("/golf-bag/clubs/standard", { method: "POST" })),
 
-  proposeGolfWeek: (from: string, mode: "outdoor" | "simulator" = "outdoor") =>
-    tracked("golf_week_proposed", request<GolfWeekProposal>("/golf/week", { method: "POST", body: JSON.stringify({ from, mode }) })),
+  proposeGolfWeek: (from: string) =>
+    tracked("golf_week_proposed", request<GolfWeekProposal>("/golf/week", { method: "POST", body: JSON.stringify({ from }) })),
 
   generateGolfPlan: (type: GolfSessionType, estimatedMinutes?: number) =>
     request<GolfSessionPlan>(`/golf/plan/${type}`, {

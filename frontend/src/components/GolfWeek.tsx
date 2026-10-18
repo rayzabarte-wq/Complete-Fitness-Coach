@@ -32,9 +32,7 @@ export default function GolfWeek({
   embedded = false,
   autoStart = false,
   onClose,
-  mode = "outdoor",
 }: {
-  mode?: "outdoor" | "simulator";
   onAdded: () => void;
   /** Inside the Calendar's Plan section: no card of its own, and a Close button. */
   embedded?: boolean;
@@ -59,7 +57,7 @@ export default function GolfWeek({
     setError(null);
     setDone(null);
     try {
-      const p = await api.proposeGolfWeek(formatLocalDateKey(new Date()), mode);
+      const p = await api.proposeGolfWeek(formatLocalDateKey(new Date()));
       setProposal(p);
       setPicked(new Set(p.sessions.map((s) => s.date)));
     } catch (e: any) {
@@ -123,7 +121,7 @@ export default function GolfWeek({
       ) : (
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
           <div>
-            <strong>{mode === "simulator" ? "Simulator sessions" : "Golf practice"} for the next 7 days</strong>
+            <strong>Golf practice for the next 7 days</strong>
             <div className="text-dim" style={{ fontSize: 12 }}>From your round notes, recent practice and the time you have free</div>
           </div>
           <button type="button" className="button-secondary" onClick={propose} disabled={busy || adding}>

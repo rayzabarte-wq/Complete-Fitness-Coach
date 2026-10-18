@@ -45,8 +45,12 @@ export interface GolfWeekProposal {
 
 const clip = (s: string | null | undefined, n: number) => (s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 
-export async function proposeGolfWeek(userId: string, fromKey: string, mode: "outdoor" | "simulator" = "outdoor"): Promise<GolfWeekProposal> {
-  const TYPES = mode === "simulator" ? SIMULATOR_TYPES : OUTDOOR_TYPES;
+export async function proposeGolfWeek(userId: string, fromKey: string): Promise<GolfWeekProposal> {
+  // The indoor simulator is one of the practice types, offered when the person
+  // has switched it on under their session types.
+  const shown = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { visibleSessionTypes: true } });
+  const hasSimulator = shown.visibleSessionTypes.includes("GOLF_SIMULATOR");
+  const TYPES: GolfSessionType[] = hasSimulator ? [...OUTDOOR_TYPES, ...SIMULATOR_TYPES] : OUTDOOR_TYPES;
   const start = dayKeyToDate(fromKey);
   const end = addDays(start, 7); // exclusive
   const dayKeys = Array.from({ length: 7 }, (_, i) => dateToDayKey(addDays(start, i)));
@@ -148,18 +152,19 @@ ${availability.notes ? `Their note on their time: ${clip(availability.notes, 300
 
 RULES
 - Propose exactly ${target} session${target === 1 ? "" : "s" } (their target is ${bag.practiceSessionsPerWeek} a week, some may already be planned), fewer only if too few days have the time free, at most one per day, only on days with at least ${MIN_SESSION} minutes free, and never longer than that day's free minutes. Fewer, better-aimed sessions beat filling every day. Spread them out; do not stack hard sessions on consecutive days unless time forces it.
-${
-    mode === "simulator"
-      ? `- Every session is an INDOOR GOLF SIMULATOR session: type is GOLF_SIMULATOR and venue is SIMULATOR. Aim each one at a different weakness from the notes where there is more than one.\n\n${SIMULATOR_GUIDE}`
-      : `- type is one of GOLF_RANGE (full swing: driving, irons, approach), GOLF_SHORT_GAME, GOLF_PUTTING.
-- venue is RANGE (driving range), HOME (garage net or mat, short on time, no ball flight needed) or COURSE (practice area at a course). Prefer HOME for sessions of 30 minutes or less and for drills that do not need ball flight; use RANGE when ball flight or driver distance matters.`
+- type is one of ${TYPES.join(", ")}.
+  GOLF_RANGE = full swing: driving, irons, approach. GOLF_SHORT_GAME = chipping, pitching and bunkers. GOLF_PUTTING = putter only.${hasSimulator ? "\n  GOLF_SIMULATOR = hitting indoors into a screen with launch-monitor data (see the simulator notes below)." : ""}
+- venue is RANGE (driving range), HOME (garage net or mat, short on time, no ball flight needed), COURSE (practice area at a course)${hasSimulator ? " or SIMULATOR (the indoor simulator, always the venue for GOLF_SIMULATOR and only for it)" : ""}. Prefer HOME for sessions of 30 minutes or less and for drills that do not need ball flight; use RANGE when ball flight or driver distance matters.${
+    hasSimulator
+      ? `\n- The simulator is one practice type among the others, not a separate programme. Choose it where its data helps most (distance control and gapping, dispersion, approach and driving numbers) or where outdoor practice is unlikely to suit; use the other types where real turf, bunkers, putting or ball flight outdoors matter. Mix the types according to the weaknesses in the notes. Not every week needs a simulator session.\n\n${SIMULATOR_GUIDE}`
+      : ""
   }
 - Each session has 3 to 6 drills, each with ONE club, and concrete instructions (number of balls or putts, distance, target, a pass mark). Drill minutes must add up to the session minutes.
 - Pitch every drill at the player's handicap and shot-shaping ability as described above.
 - Do not plan a round. The summary is two sentences at most.
 
 Respond with ONLY a JSON object, no other text, in this exact shape:
-{"summary": string, "findings": [{"area": "DRIVING"|"APPROACH"|"SHORT_GAME"|"PUTTING"|"COURSE_MANAGEMENT"|"OTHER", "finding": string, "evidence": "a short quote or paraphrase from their notes, or 'general' if none"}], "sessions": [{"date": "YYYY-MM-DD", "type": ${mode === "simulator" ? '"GOLF_SIMULATOR"' : '"GOLF_RANGE"|"GOLF_SHORT_GAME"|"GOLF_PUTTING"'}, "venue": ${mode === "simulator" ? '"SIMULATOR"' : '"RANGE"|"HOME"|"COURSE"'}, "minutes": number, "focus": string, "reason": string, "drills": [{"name": string, "club": "exact club name from the bag, or null if the bag was not entered", "detail": string, "minutes": number}]}]}`;
+{"summary": string, "findings": [{"area": "DRIVING"|"APPROACH"|"SHORT_GAME"|"PUTTING"|"COURSE_MANAGEMENT"|"OTHER", "finding": string, "evidence": "a short quote or paraphrase from their notes, or 'general' if none"}], "sessions": [{"date": "YYYY-MM-DD", "type": ${TYPES.map((t) => `"${t}"`).join("|")}, "venue": ${hasSimulator ? '"RANGE"|"HOME"|"COURSE"|"SIMULATOR"' : '"RANGE"|"HOME"|"COURSE"'}, "minutes": number, "focus": string, "reason": string, "drills": [{"name": string, "club": "exact club name from the bag, or null if the bag was not entered", "detail": string, "minutes": number}]}]}`;
 
   const answer = await askClaude(prompt);
   const raw = answer.replace(/```json|```/g, "").trim();

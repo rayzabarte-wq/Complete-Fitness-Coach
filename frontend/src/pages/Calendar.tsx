@@ -105,8 +105,6 @@ export default function Calendar() {
   const [runError, setRunError] = useState<string | null>(null);
   const [golfPlanOpen, setGolfPlanOpen] = useState(false);
   const [golfRun, setGolfRun] = useState(0);
-  const [simPlanOpen, setSimPlanOpen] = useState(false);
-  const [simRun, setSimRun] = useState(0);
 
   const days = sevenDaysFrom(weekOffset);
   // Weather only matters for outdoor sports — with strength only switched
@@ -254,31 +252,17 @@ export default function Calendar() {
         ) : undefined,
     });
   }
-  if (visibleTypes.includes("GOLF_RANGE")) {
+  if (GOLF_TRAINING_TYPES.some((t) => visibleTypes.includes(t))) {
     planners.push({
       key: "golf",
       title: "Golf practice",
-      blurb: "Add range, short game and putting sessions for the next 7 days from your round notes and free time. Drills are built in Log when you start each one.",
+      blurb: "Add golf practice for the next 7 days from your round notes and free time: range, short game, putting and, if you have switched it on, indoor simulator sessions. Drills are built in Log when you start each one.",
       buttonLabel: golfPlanOpen ? "Plan again" : "Plan golf practice",
       onPress: () => {
         setGolfPlanOpen(true);
         setGolfRun((r) => r + 1); // a fresh proposal each press
       },
       body: golfPlanOpen ? <GolfWeek key={golfRun} embedded autoStart onAdded={loadWeek} onClose={() => setGolfPlanOpen(false)} /> : undefined,
-    });
-  }
-
-  if (visibleTypes.includes("GOLF_SIMULATOR")) {
-    planners.push({
-      key: "golf-simulator",
-      title: "Golf simulator",
-      blurb: "Propose indoor simulator sessions for the next 7 days, using only clubs that fit your space (set in Settings → Golf).",
-      buttonLabel: simPlanOpen ? "Plan again" : "Plan simulator sessions",
-      onPress: () => {
-        setSimPlanOpen(true);
-        setSimRun((r) => r + 1);
-      },
-      body: simPlanOpen ? <GolfWeek key={simRun} mode="simulator" embedded autoStart onAdded={loadWeek} onClose={() => setSimPlanOpen(false)} /> : undefined,
     });
   }
 

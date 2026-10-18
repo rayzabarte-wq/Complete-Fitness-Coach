@@ -288,7 +288,7 @@ export default function GolfSettings() {
         <div style={{ marginTop: 18 }}>
           <strong style={{ fontSize: 14 }}>Indoor golf simulator</strong>
           <p className="text-dim" style={{ fontSize: 13, margin: "4px 0 8px" }}>
-            Is there a limit on the longest club you can swing in the space? Simulator sessions only use clubs up to this one.
+            The simulator is one of the golf practice types, proposed alongside range, short game and putting when you have switched Simulator on in Settings → Session types. Is there a limit on the longest club you can swing in the space? Simulator sessions only use clubs up to this one.
           </p>
           <label htmlFor="sim-longest" className="text-dim" style={{ fontSize: 12 }}>Longest club you can use</label>
           <div style={{ marginTop: 4 }}>

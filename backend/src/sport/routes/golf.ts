@@ -48,10 +48,9 @@ golfRouter.post("/plan/:type", async (req: AuthedRequest, res) => {
 // app adds the sessions the person accepts through POST /calendar.
 golfRouter.post("/week", async (req: AuthedRequest, res) => {
   const from = req.body?.from;
-  const mode = req.body?.mode === "simulator" ? "simulator" : "outdoor";
   if (!isDayKey(from)) return res.status(400).json({ error: "from must be a day like 2026-10-18" });
   try {
-    res.json(await proposeGolfWeek(req.userId!, from, mode));
+    res.json(await proposeGolfWeek(req.userId!, from));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err instanceof Error ? err.message : "Failed to propose a golf week" });
