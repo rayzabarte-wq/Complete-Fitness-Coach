@@ -250,6 +250,8 @@ export interface GolfClubInfo {
   id: string;
   name: string;
   type: GolfClubType;
+  /** Loft in degrees (from the name, else typical for that club); null for the putter. Clubs are listed by it. */
+  loft: number | null;
   /** Sessions in the last 90 days where a drill with this club was ticked off. */
   sessions: number;
   lastPracticed: string | null;
@@ -1040,6 +1042,8 @@ export const api = {
     tracked("golf_profile_saved", request<GolfBagOverview>("/golf-bag/profile", { method: "PUT", body: JSON.stringify(data) })),
   addGolfClub: (data: { name: string; type: GolfClubType }) =>
     tracked("golf_clubs_edited", request<GolfBagOverview>("/golf-bag/clubs", { method: "POST", body: JSON.stringify(data) })),
+  updateGolfClub: (id: string, data: { name?: string; type?: GolfClubType }) =>
+    tracked("golf_clubs_edited", request<GolfBagOverview>(`/golf-bag/clubs/${id}`, { method: "PATCH", body: JSON.stringify(data) })),
   deleteGolfClub: (id: string) => tracked("golf_clubs_edited", request<GolfBagOverview>(`/golf-bag/clubs/${id}`, { method: "DELETE" })),
   addStandardGolfBag: () => tracked("golf_clubs_edited", request<GolfBagOverview>("/golf-bag/clubs/standard", { method: "POST" })),
 

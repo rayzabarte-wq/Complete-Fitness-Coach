@@ -1190,3 +1190,14 @@ Clubs are ordered by length (`clubRank` in `sport/services/golfBag.ts`: driver,
 woods, hybrids, irons, wedges; by the number or loft in the name); simulator
 sessions only use the chosen club and shorter ones, in the prompt and enforced
 on the answer. Settings shows which clubs that leaves.
+
+## Editing and ordering the bag
+
+Each club in Settings → Golf has Edit (name and type) and Remove. The bag is
+always listed longest to shortest by loft (`estimatedLoft` in
+`sport/services/golfBag.ts`): degrees in the name win ("Gap wedge (50°)",
+"52 wedge"), otherwise the typical loft for the number (7 iron ≈ 34°, 3 wood
+≈ 15°, 4 hybrid ≈ 22°) or name (pitching 46°, gap 50°, sand 56°, lob 60°); the
+putter goes last. Renaming a club re-sorts it, and carries over to the
+simulator's longest-club limit and to the club recorded on past drills
+(`PATCH /golf-bag/clubs/:id`). Typing a name picks the type ("7 iron" → Iron).

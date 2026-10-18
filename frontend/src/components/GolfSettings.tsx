@@ -17,6 +17,19 @@ export const CLUB_TYPE_LABEL: Record<GolfClubType, string> = {
 };
 const TYPES = Object.keys(CLUB_TYPE_LABEL) as GolfClubType[];
 
+/** Best guess at a club's type from what it is called, so typing "7 iron" picks Iron. */
+export function guessClubType(name: string): GolfClubType | null {
+  const n = name.toLowerCase();
+  if (/putter/.test(n)) return "PUTTER";
+  if (/driver/.test(n)) return "DRIVER";
+  if (/sand|\bsw\b/.test(n)) return "SAND_WEDGE";
+  if (/wedge|\bpw\b|\bgw\b|\baw\b|\blw\b|\buw\b/.test(n)) return "WEDGE";
+  if (/hybrid|rescue|utility/.test(n)) return "HYBRID";
+  if (/wood|\bmetal\b/.test(n)) return "WOOD";
+  if (/iron/.test(n)) return "IRON";
+  return null;
+}
+
 export default function GolfSettings() {
   const [bag, setBag] = useState<GolfBagOverview | null>(null);
   const [handicap, setHandicap] = useState("");
@@ -25,6 +38,10 @@ export default function GolfSettings() {
   const [busy, setBusy] = useState(false);
   const [name, setName] = useState("");
   const [type, setType] = useState<GolfClubType>("IRON");
+  const [typeTouched, setTypeTouched] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editType, setEditType] = useState<GolfClubType>("IRON");
 
   function apply(b: GolfBagOverview) {
     setBag(b);
@@ -134,52 +151,70 @@ export default function GolfSettings() {
         </div>
       ) : (
         <div style={{ marginTop: 6 }}>
-          {bag.clubs.map((c) => (
-            <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 14 }}>{c.name}</div>
-                <div className="text-dim" style={{ fontSize: 12 }}>
-                  {CLUB_TYPE_LABEL[c.type]} · {c.sessions ? `practised in ${c.sessions} session${c.sessions === 1 ? "" : "s"}, last ${c.lastPracticed}` : "not practised yet"}
-                </div>
+          <p className="text-dim" style={{ fontSize: 12, margin: "0 0 4px" }}>
+            Listed from the longest club to the shortest, by loft. The loft comes from the number or degrees in the name (for example "7 iron" or "Gap wedge (50°)"), so renaming a club re-sorts it.
+          </p>
+          {bag.clubs.map((c) =>
+            editingId === c.id ? (
+              <div key={c.id} style={{ display: "flex", gap: 6, padding: "8px 0", borderBottom: "1px solid var(--border)", flexWrap: "wrap" }}>
+                <input
+                  aria-label={`Name of ${c.name}`}
+                  value={editName}
+                  maxLength={40}
+                  onChange={(e) => {
+                    setEditName(e.target.value);
+                    const g = guessClubType(e.target.value);
+                    if (g) setEditType(g);
+                  }}
+                  style={{ flex: 1, minWidth: 120, padding: 8 }}
+                />
+                <select aria-label="Club type" value={editType} onChange={(e) => setEditType(e.target.value as GolfClubType)} style={{ padding: 8 }}>
+                  {TYPES.map((t) => (
+                    <option key={t} value={t}>
+                      {CLUB_TYPE_LABEL[t]}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className="button-primary"
+                  disabled={busy || !editName.trim()}
+                  onClick={() => run(() => api.updateGolfClub(c.id, { name: editName.trim(), type: editType }).then((b) => (setEditingId(null), b)), "Club updated.")}
+                >
+                  Save
+                </button>
+                <button type="button" className="button-quiet" onClick={() => setEditingId(null)}>
+                  Cancel
+                </button>
               </div>
-              <button type="button" className="button-quiet" disabled={busy} aria-label={`Remove ${c.name}`} onClick={() => run(() => api.deleteGolfClub(c.id))}>
-                Remove
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {bag.clubs.length > 0 && (
-        <div style={{ marginTop: 18 }}>
-          <strong style={{ fontSize: 14 }}>Indoor golf simulator</strong>
-          <p className="text-dim" style={{ fontSize: 13, margin: "4px 0 8px" }}>
-            Is there a limit on the longest club you can swing in the space? Simulator sessions only use clubs up to this one.
-          </p>
-          <label htmlFor="sim-longest" className="text-dim" style={{ fontSize: 12 }}>Longest club you can use</label>
-          <div style={{ marginTop: 4 }}>
-            <select
-              id="sim-longest"
-              value={bag.simulatorLongestClub ?? ""}
-              disabled={busy}
-              onChange={(e) => run(() => api.saveGolfProfile({ simulatorLongestClub: e.target.value || null }), "Simulator limit saved.")}
-              style={{ padding: 8, width: "100%" }}
-            >
-              <option value="">No restrictions</option>
-              {bag.clubsByLength
-                .filter((n) => bag.clubs.find((c) => c.name === n && c.type !== "PUTTER" && c.type !== "SAND_WEDGE"))
-                .map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-            </select>
-          </div>
-          <p className="text-dim" style={{ fontSize: 12, margin: "4px 0 0" }}>
-            {bag.simulatorLongestClub
-              ? `Simulator sessions will use: ${bag.simulatorClubs.join(", ") || "no clubs"}.`
-              : "Simulator sessions can use any full-swing club in the bag."}
-          </p>
+            ) : (
+              <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 14 }}>{c.name}</div>
+                  <div className="text-dim" style={{ fontSize: 12 }}>
+                    {CLUB_TYPE_LABEL[c.type]}
+                    {c.loft !== null ? ` · about ${c.loft}°` : ""} · {c.sessions ? `practised in ${c.sessions} session${c.sessions === 1 ? "" : "s"}, last ${c.lastPracticed}` : "not practised yet"}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="button-quiet"
+                  disabled={busy}
+                  aria-label={`Edit ${c.name}`}
+                  onClick={() => {
+                    setEditingId(c.id);
+                    setEditName(c.name);
+                    setEditType(c.type);
+                  }}
+                >
+                  Edit
+                </button>
+                <button type="button" className="button-quiet" disabled={busy} aria-label={`Remove ${c.name}`} onClick={() => run(() => api.deleteGolfClub(c.id))}>
+                  Remove
+                </button>
+              </div>
+            )
+          )}
         </div>
       )}
 
@@ -189,10 +224,22 @@ export default function GolfSettings() {
           aria-label="Club name"
           value={name}
           maxLength={40}
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e) => {
+            setName(e.target.value);
+            const g = guessClubType(e.target.value);
+            if (g && !typeTouched) setType(g);
+          }}
           style={{ flex: 1, padding: 8, minWidth: 0 }}
         />
-        <select value={type} onChange={(e) => setType(e.target.value as GolfClubType)} aria-label="Club type" style={{ padding: 8 }}>
+        <select
+          value={type}
+          onChange={(e) => {
+            setType(e.target.value as GolfClubType);
+            setTypeTouched(true);
+          }}
+          aria-label="Club type"
+          style={{ padding: 8 }}
+        >
           {TYPES.map((t) => (
             <option key={t} value={t}>
               {CLUB_TYPE_LABEL[t]}
@@ -203,7 +250,7 @@ export default function GolfSettings() {
           type="button"
           className="button-secondary"
           disabled={busy || !name.trim()}
-          onClick={() => run(() => api.addGolfClub({ name: name.trim(), type }).then((b) => (setName(""), b)))}
+          onClick={() => run(() => api.addGolfClub({ name: name.trim(), type }).then((b) => (setName(""), setTypeTouched(false), b)))}
         >
           Add
         </button>

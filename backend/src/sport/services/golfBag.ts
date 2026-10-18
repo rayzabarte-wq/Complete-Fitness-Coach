@@ -20,28 +20,51 @@ export const ALLOWED_CLUBS: Record<PracticeType, GolfClubType[]> = {
 };
 
 /**
- * How long a club is, as a sortable number (smaller = longer): driver, then
- * woods, hybrids, irons, wedges, then the putter; within a type by the number
- * in the name (a 3 wood is longer than a 5 wood) or, for wedges, by loft
- * ("50°", or pitching / gap / sand / lob). Good enough to order a normal bag.
+ * A club's loft in degrees: from the degrees in its name ("Gap wedge (50°)",
+ * "56 wedge"), else the typical loft for its number ("7 iron" ≈ 34°, "3 wood" ≈ 15°,
+ * "4 hybrid" ≈ 22°) or its name ("pitching", "gap", "sand", "lob"). Lower loft =
+ * longer club, so sorting by this gives the bag in order from driver to wedges,
+ * with hybrids and woods falling between where their loft puts them. The putter
+ * goes last. Good enough to order a normal bag.
  */
-export function clubRank(c: BagClub): number {
-  const base: Record<GolfClubType, number> = { DRIVER: 0, WOOD: 100, HYBRID: 200, IRON: 300, WEDGE: 400, SAND_WEDGE: 450, PUTTER: 900 };
-  const n = c.name.match(/(\d+)\s*°/)?.[1] ?? c.name.match(/\d+/)?.[0];
-  let within = n ? Number(n) : 50;
-  if (c.type === "WEDGE" || c.type === "SAND_WEDGE") {
-    if (!/°/.test(c.name)) {
-      if (/pitch|\bpw\b/i.test(c.name)) within = 46;
-      else if (/gap|approach|\baw\b|\bgw\b/i.test(c.name)) within = 50;
-      else if (/sand|\bsw\b/i.test(c.name)) within = 56;
-      else if (/lob|\blw\b/i.test(c.name)) within = 60;
+export function estimatedLoft(c: BagClub): number {
+  if (c.type === "PUTTER") return 999;
+  const name = c.name;
+  const deg = name.match(/(\d{1,2}(?:\.\d)?)\s*(?:°|deg)/i)?.[1];
+  if (deg) return Number(deg);
+  const n = Number(name.match(/\d+/)?.[0]);
+  const hasN = Number.isFinite(n);
+
+  switch (c.type) {
+    case "DRIVER":
+      return 10.5;
+    case "WOOD": {
+      const woods: Record<number, number> = { 1: 10.5, 2: 13, 3: 15, 4: 16.5, 5: 18, 7: 21, 9: 24 };
+      return hasN ? woods[n] ?? 15 + (n - 3) * 1.5 : 15;
+    }
+    case "HYBRID":
+      return hasN ? 17 + (n - 2) * 2.5 : 22;
+    case "IRON": {
+      const irons: Record<number, number> = { 1: 16, 2: 18, 3: 21, 4: 24, 5: 27, 6: 30, 7: 34, 8: 38, 9: 42 };
+      return hasN ? irons[n] ?? 21 + (n - 3) * 3.3 : 30;
+    }
+    default: {
+      // Wedges. A bare number of 40 or more is degrees ("52 wedge").
+      if (hasN && n >= 40) return n;
+      if (/pitch|\bpw\b/i.test(name)) return 46;
+      if (/gap|approach|\baw\b|\bgw\b|\buw\b/i.test(name)) return 50;
+      if (/sand|\bsw\b/i.test(name)) return 56;
+      if (/lob|\blw\b/i.test(name)) return 60;
+      return c.type === "SAND_WEDGE" ? 56 : 52;
     }
   }
-  return base[c.type] + within;
 }
 
+/** Kept for the simulator's longest-club cutoff: smaller = longer club. */
+export const clubRank = estimatedLoft;
+
 export function sortByLength<T extends BagClub>(clubs: T[]): T[] {
-  return [...clubs].sort((a, b) => clubRank(a) - clubRank(b));
+  return [...clubs].sort((a, b) => clubRank(a) - clubRank(b) || a.name.localeCompare(b.name));
 }
 
 export const STANDARD_BAG: { name: string; type: GolfClubType }[] = [
@@ -95,11 +118,11 @@ export async function loadGolfBag(userId: string): Promise<GolfBag> {
       byClub.set(d.club, e);
     }
   }
-  const coverage = clubs.map((c) => {
+  const coverage = sortByLength(clubs).map((c) => {
     const e = byClub.get(c.name);
     return { name: c.name, sessions: e?.sessions.size ?? 0, lastPracticed: e?.last ? dateToDayKey(e.last) : null };
   });
-  return { handicap: profile?.handicap ?? null, canShapeShots: profile?.canShapeShots ?? null, simulatorLongestClub: profile?.simulatorLongestClub ?? null, clubs, coverage };
+  return { handicap: profile?.handicap ?? null, canShapeShots: profile?.canShapeShots ?? null, simulatorLongestClub: profile?.simulatorLongestClub ?? null, clubs: sortByLength(clubs), coverage };
 }
 
 /** The clubs that fit the indoor space: nothing longer than the chosen longest club. */
