@@ -57,7 +57,7 @@ export default function GolfDrillChecklist({ session, onUpdated }: { session: Pl
           <div style={{ display: "grid", gridTemplateColumns: "1fr 36px", gap: 8, alignItems: "start" }}>
             <div>
               <div style={{ fontSize: 14, fontWeight: 600, textDecoration: d.done ? "line-through" : undefined, opacity: d.done ? 0.7 : 1 }}>
-                {d.name}
+                {d.club ? `${d.club}: ` : ""}{d.name}
                 {d.minutes > 0 && <span className="text-dim" style={{ fontWeight: 400 }}> · {d.minutes} min</span>}
               </div>
               {d.detail && (

@@ -41,6 +41,8 @@ const drillsSchema = z
   .array(
     z.object({
       name: z.string().trim().min(1).max(80),
+      // The exact club used, from the person's bag.
+      club: z.string().trim().max(40).nullish(),
       detail: z.string().trim().max(400).default(""),
       minutes: z.number().int().min(0).max(240).default(0),
       done: z.boolean().default(false),

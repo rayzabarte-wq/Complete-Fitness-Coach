@@ -200,6 +200,8 @@ export type ActualTimeSource = "MANUAL" | "STRAVA";
 /** One drill on a golf practice session: ticked off and commented on like a strength set. */
 export interface PlannedDrill {
   name: string;
+  /** The exact club used, from the bag. */
+  club?: string | null;
   detail: string;
   minutes: number;
   done: boolean;
@@ -237,8 +239,27 @@ export type GolfSessionType = "GOLF_RANGE" | "GOLF_SHORT_GAME" | "GOLF_PUTTING";
 
 export interface GolfDrill {
   name: string;
+  club?: string | null;
   detail: string;
   minutes: number;
+}
+
+export type GolfClubType = "DRIVER" | "WOOD" | "HYBRID" | "IRON" | "WEDGE" | "SAND_WEDGE" | "PUTTER";
+export interface GolfClubInfo {
+  id: string;
+  name: string;
+  type: GolfClubType;
+  /** Sessions in the last 90 days where a drill with this club was ticked off. */
+  sessions: number;
+  lastPracticed: string | null;
+}
+export interface GolfBagOverview {
+  handicap: number | null;
+  canShapeShots: boolean | null;
+  clubs: GolfClubInfo[];
+  handicapHistory: { date: string; handicap: number }[];
+  /** Which club types each kind of practice may use. */
+  allowed: Record<GolfSessionType, GolfClubType[]>;
 }
 
 export interface GolfWeekSession {
@@ -726,7 +747,7 @@ export type UsageEventName =
   | "log_steps_tab" | "log_nutrition_tab" | "log_other_sport_tab"
   | "workout_generated" | "workout_saved" | "gym_switched" | "gym_preset_applied"
   | "custom_equipment_added" | "custom_exercise_created" | "steps_saved" | "nutrition_saved"
-  | "body_scan_added" | "goal_created" | "message_dismissed" | "golf_round_logged" | "golf_goal_set" | "ambitions_saved" | "sport_goal_saved" | "availability_saved" | "golf_week_proposed" | "golf_week_added";
+  | "body_scan_added" | "goal_created" | "message_dismissed" | "golf_round_logged" | "golf_goal_set" | "ambitions_saved" | "sport_goal_saved" | "availability_saved" | "golf_week_proposed" | "golf_week_added" | "golf_profile_saved" | "golf_clubs_edited";
 
 let trackingPausedUntil = 0;
 const lastSent = new Map<string, number>();
@@ -1006,6 +1027,14 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ activityId, movingMinutes }),
     }),
+
+  getGolfBag: () => request<GolfBagOverview>("/golf-bag"),
+  saveGolfProfile: (data: { handicap?: number | null; canShapeShots?: boolean | null }) =>
+    tracked("golf_profile_saved", request<GolfBagOverview>("/golf-bag/profile", { method: "PUT", body: JSON.stringify(data) })),
+  addGolfClub: (data: { name: string; type: GolfClubType }) =>
+    tracked("golf_clubs_edited", request<GolfBagOverview>("/golf-bag/clubs", { method: "POST", body: JSON.stringify(data) })),
+  deleteGolfClub: (id: string) => tracked("golf_clubs_edited", request<GolfBagOverview>(`/golf-bag/clubs/${id}`, { method: "DELETE" })),
+  addStandardGolfBag: () => tracked("golf_clubs_edited", request<GolfBagOverview>("/golf-bag/clubs/standard", { method: "POST" })),
 
   proposeGolfWeek: (from: string) =>
     tracked("golf_week_proposed", request<GolfWeekProposal>("/golf/week", { method: "POST", body: JSON.stringify({ from }) })),

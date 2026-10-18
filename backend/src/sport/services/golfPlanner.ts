@@ -1,5 +1,6 @@
 import { prisma } from "../../lib/prisma.js";
 import { askClaude } from "../../lib/claude.js";
+import { bagPromptBlock, checkDrill, loadGolfBag } from "./golfBag.js";
 
 // Deliberately excludes GOLF_ROUND — a round isn't a practice session to
 // generate drills for, it's the real thing.
@@ -28,6 +29,8 @@ export function describeDrills(drills: unknown): string {
 
 export interface GolfDrill {
   name: string;
+  /** The exact club, from the person's bag (null if the bag isn't entered). */
+  club: string | null;
   detail: string;
   minutes: number;
 }
@@ -57,6 +60,7 @@ export async function generateGolfSessionPlan(
   // module's table, not Sport's — acceptable while everything shares one
   // database, but if Sport and Scheduler ever become separately deployed
   // apps, this read becomes an API call to Scheduler instead.
+  const bag = await loadGolfBag(userId);
   const [recentSessions, recentRounds] = await Promise.all([
     prisma.plannedSession.findMany({
       where: { userId, type, completed: true },
@@ -91,16 +95,18 @@ export async function generateGolfSessionPlan(
 
   const prompt = `You are a golf coach designing a structured ${targetMinutes}-minute practice session focused on ${GOLF_TYPE_LABELS[type]}.
 
+${bagPromptBlock(bag, [type])}
+
 Most recent completed sessions of this type (most recent first — weight the first one, your last session of this type, as the strongest signal for what to adjust):
 ${lastSessionText}
 
 Most recent rounds played (their notes may mention weaknesses or takeaways from actual on-course play, sometimes copied from a stats app like Arccos — e.g. strokes gained by category, greens in regulation, up-and-down rate):
 ${roundText}
 
-Design a practice session with specific drills, not just general advice. Each drill needs a clear name, concrete instructions (what to do, how many balls/reps/putts, what distance or target), and a time allocation. The drill times should sum to approximately ${targetMinutes} minutes. Prioritize addressing whatever the last same-type session's notes flagged; if a recent round's notes point to a relevant weakness for this session type (e.g. a putting session following a round with poor strokes gained putting), factor that in too. If neither source gives a specific signal, use sound general practice structure for ${GOLF_TYPE_LABELS[type]}.
+Design a practice session with specific drills, not just general advice. Pitch every drill at the player's handicap and shot-shaping ability as described above, and give every drill ONE club. Each drill needs a clear name, concrete instructions (what to do, how many balls/reps/putts, what distance or target), and a time allocation. The drill times should sum to approximately ${targetMinutes} minutes. Prioritize addressing whatever the last same-type session's notes flagged; if a recent round's notes point to a relevant weakness for this session type (e.g. a putting session following a round with poor strokes gained putting), factor that in too. If neither source gives a specific signal, use sound general practice structure for ${GOLF_TYPE_LABELS[type]}.
 
 Respond with ONLY a JSON object, no other text, in this exact shape:
-{"focusSummary": "one sentence on the session's main focus", "drills": [{"name": string, "detail": string, "minutes": number}], "totalMinutes": number, "reasoning": "one or two sentences on why this structure, naming which feedback (last session or a recent round) it responds to, if any"}`;
+{"focusSummary": "one sentence on the session's main focus", "drills": [{"name": string, "club": "exact club name from the bag, or null if the bag was not entered", "detail": string, "minutes": number}], "totalMinutes": number, "reasoning": "one or two sentences on why this structure, naming which feedback (last session or a recent round) it responds to, if any"}`;
 
   const answer = await askClaude(prompt);
 
@@ -117,11 +123,20 @@ Respond with ONLY a JSON object, no other text, in this exact shape:
     throw new Error(`Failed to parse Claude's response as JSON: ${(err as Error).message}`);
   }
 
+  // Enforce the bag and shot-shaping rules whatever the model returned.
+  const drills: GolfDrill[] = [];
+  for (const d of Array.isArray(parsed.drills) ? parsed.drills : []) {
+    const checked = checkDrill(d, type, bag);
+    if (checked === "drop" || typeof d.name !== "string") continue;
+    drills.push({ name: d.name, club: checked.club, detail: String(d.detail ?? ""), minutes: Math.max(1, Math.round(Number(d.minutes) || 0)) });
+  }
+  if (drills.length === 0) throw new Error("The suggestion didn't fit your bag and settings. Please try again.");
+
   return {
     sessionType: type,
     focusSummary: parsed.focusSummary,
-    drills: parsed.drills,
-    totalMinutes: parsed.totalMinutes,
+    drills,
+    totalMinutes: drills.reduce((sum, d) => sum + d.minutes, 0),
     reasoning: parsed.reasoning,
   };
 }

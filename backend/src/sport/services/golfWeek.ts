@@ -4,6 +4,7 @@ import { addDays, dateToDayKey, dayKeyToDate } from "../../lib/dates.js";
 import { getAvailability } from "../../services/availability.js";
 import { progressFor } from "../../services/ambitions.js";
 import { describeDrills, type GolfSessionType } from "./golfPlanner.js";
+import { bagPromptBlock, checkDrill, loadGolfBag, type GolfBag } from "./golfBag.js";
 
 // Proposes golf practice for the next 7 days. It reads what the person wrote
 // about their recent rounds (a round itself is never counted as practice
@@ -18,7 +19,7 @@ export type WeaknessArea = (typeof AREAS)[number];
 const MIN_SESSION = 15;
 const ROUND_LOOKBACK_DAYS = 75;
 
-export interface WeekDrill { name: string; detail: string; minutes: number }
+export interface WeekDrill { name: string; club: string | null; detail: string; minutes: number }
 export interface WeekSession {
   date: string; // day key
   type: GolfSessionType;
@@ -48,7 +49,7 @@ export async function proposeGolfWeek(userId: string, fromKey: string): Promise<
   const end = addDays(start, 7); // exclusive
   const dayKeys = Array.from({ length: 7 }, (_, i) => dateToDayKey(addDays(start, i)));
 
-  const [availability, plannedInWindow, rounds, practice, ambition, progress] = await Promise.all([
+  const [availability, plannedInWindow, rounds, practice, ambition, progress, bag] = await Promise.all([
     getAvailability(userId),
     prisma.plannedSession.findMany({
       where: { userId, date: { gte: start, lt: end }, type: { not: "REST" } },
@@ -68,6 +69,7 @@ export async function proposeGolfWeek(userId: string, fromKey: string): Promise<
     }),
     prisma.sportAmbition.findUnique({ where: { userId_sport: { userId, sport: "GOLF" } }, select: { statement: true } }),
     progressFor(userId, "GOLF"),
+    loadGolfBag(userId),
   ]);
 
   // Minutes still free each day = what they said they can give, less what is
@@ -84,6 +86,10 @@ export async function proposeGolfWeek(userId: string, fromKey: string): Promise<
   if (!availability.isSet) caveats.push("You haven't set your weekly time yet (Settings → Weekly time), so no days have time free. Set it and try again.");
   else if (usableDays.length === 0) caveats.push("No day in the next 7 has at least 15 free minutes once your planned sessions are counted.");
   if (rounds.length === 0) caveats.push("No notes on recent rounds, so this is a balanced week rather than one aimed at a weakness. Adding notes to a round (Log → Golf) sharpens it.");
+
+  if (bag.handicap === null) caveats.push("Add your handicap in Settings → Golf so practice is pitched at your level.");
+  if (bag.canShapeShots === null) caveats.push("Say whether you can shape shots in Settings → Golf. Until then no shot-shaping drills are offered.");
+  if (bag.clubs.length === 0) caveats.push("Add your clubs in Settings → Golf so each drill can name the exact club and practice can cover the whole bag.");
 
   const base = { from: fromKey, to: dayKeys[6], basedOnRoundNotes: rounds.length };
   if (usableDays.length === 0) return { ...base, summary: "", findings: [], sessions: [], caveats };
@@ -111,6 +117,8 @@ The golfer's own notes on recent rounds are the main evidence (a round is not pr
 - Putting weak → a putting session.
 Weight newer rounds more. If the notes name something specific (e.g. "pulled 7-iron", "three-putts from distance"), build drills around it. Do not invent weaknesses the notes do not support; if they are thin, say so in the findings and keep the week balanced.
 
+${bagPromptBlock(bag, TYPES)}
+
 THEIR GOLF AMBITION (their words)
 ${clip(ambition?.statement, 400) || "Not written."}
 Last 90 days: ${progress.rounds ?? 0} rounds, ${progress.sessions} practice sessions.
@@ -129,11 +137,12 @@ RULES
 - Propose 2 to 4 sessions in total, at most one per day, only on days with at least ${MIN_SESSION} minutes free, and never longer than that day's free minutes. Fewer, better-aimed sessions beat filling every day. Spread them out; do not stack hard sessions on consecutive days unless time forces it.
 - type is one of GOLF_RANGE (full swing: driving, irons, approach), GOLF_SHORT_GAME, GOLF_PUTTING.
 - venue is RANGE (driving range), HOME (garage net or mat, short on time, no ball flight needed) or COURSE (practice area at a course). Prefer HOME for sessions of 30 minutes or less and for drills that do not need ball flight; use RANGE when ball flight or driver distance matters.
-- Each session has 2 to 5 drills with concrete instructions (number of balls or putts, distance, target, a pass mark). Drill minutes must add up to the session minutes.
+- Each session has 3 to 6 drills, each with ONE club, and concrete instructions (number of balls or putts, distance, target, a pass mark). Drill minutes must add up to the session minutes.
+- Pitch every drill at the player's handicap and shot-shaping ability as described above.
 - Do not plan a round. The summary is two sentences at most.
 
 Respond with ONLY a JSON object, no other text, in this exact shape:
-{"summary": string, "findings": [{"area": "DRIVING"|"APPROACH"|"SHORT_GAME"|"PUTTING"|"COURSE_MANAGEMENT"|"OTHER", "finding": string, "evidence": "a short quote or paraphrase from their notes, or 'general' if none"}], "sessions": [{"date": "YYYY-MM-DD", "type": "GOLF_RANGE"|"GOLF_SHORT_GAME"|"GOLF_PUTTING", "venue": "RANGE"|"HOME"|"COURSE", "minutes": number, "focus": string, "reason": string, "drills": [{"name": string, "detail": string, "minutes": number}]}]}`;
+{"summary": string, "findings": [{"area": "DRIVING"|"APPROACH"|"SHORT_GAME"|"PUTTING"|"COURSE_MANAGEMENT"|"OTHER", "finding": string, "evidence": "a short quote or paraphrase from their notes, or 'general' if none"}], "sessions": [{"date": "YYYY-MM-DD", "type": "GOLF_RANGE"|"GOLF_SHORT_GAME"|"GOLF_PUTTING", "venue": "RANGE"|"HOME"|"COURSE", "minutes": number, "focus": string, "reason": string, "drills": [{"name": string, "club": "exact club name from the bag, or null if the bag was not entered", "detail": string, "minutes": number}]}]}`;
 
   const answer = await askClaude(prompt);
   const raw = answer.replace(/```json|```/g, "").trim();
@@ -145,11 +154,11 @@ Respond with ONLY a JSON object, no other text, in this exact shape:
   } catch (err) {
     throw new Error(`Failed to parse Claude's response as JSON: ${(err as Error).message}`);
   }
-  return { ...base, ...cleanProposal(parsed, free), caveats };
+  return { ...base, ...cleanProposal(parsed, free, bag), caveats };
 }
 
 /** Keeps only what fits the person's real constraints, whatever the model returned. Exported for tests. */
-export function cleanProposal(parsed: any, free: Map<string, number>) {
+export function cleanProposal(parsed: any, free: Map<string, number>, bag: GolfBag) {
   const findings: WeekFinding[] = (Array.isArray(parsed?.findings) ? parsed.findings : [])
     .filter((f: any) => f && typeof f.finding === "string")
     .slice(0, 5)
@@ -173,8 +182,10 @@ export function cleanProposal(parsed: any, free: Map<string, number>) {
     for (const d of Array.isArray(s.drills) ? s.drills : []) {
       const minutes = Math.round(Number(d?.minutes));
       if (typeof d?.name !== "string" || !Number.isFinite(minutes) || minutes <= 0) continue;
+      const checked = checkDrill(d, s.type, bag);
+      if (checked === "drop") continue;
       if (total + minutes > cap) break;
-      drills.push({ name: clip(d.name, 80), detail: clip(d.detail, 400), minutes });
+      drills.push({ name: clip(d.name, 80), club: checked.club, detail: clip(d.detail, 400), minutes });
       total += minutes;
     }
     if (drills.length === 0 || total < MIN_SESSION) continue;

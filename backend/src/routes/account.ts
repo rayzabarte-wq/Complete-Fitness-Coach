@@ -17,7 +17,7 @@ export const accountRouter = Router();
 accountRouter.get("/export", requireAuth, async (req: AuthedRequest, res) => {
   const userId = req.userId!;
 
-  const [user, sessions, recommendations, plannedSessions, nutritionLogs, trainingPlans, outlookConnected, stravaConnected, consents, bodyMeasurements, bodyGoals, stepDays, nutritionDays, trainingBlocks, gyms, customEquipment, customExercises, usageEvents, golfRounds, golfRoundGoals, sportAmbitions, weeklyAvailability, stravaImports] =
+  const [user, sessions, recommendations, plannedSessions, nutritionLogs, trainingPlans, outlookConnected, stravaConnected, consents, bodyMeasurements, bodyGoals, stepDays, nutritionDays, trainingBlocks, gyms, customEquipment, customExercises, usageEvents, golfRounds, golfRoundGoals, sportAmbitions, weeklyAvailability, stravaImports, golfProfile, golfClubs, golfHandicaps] =
     await Promise.all([
       prisma.user.findUniqueOrThrow({
         where: { id: userId },
@@ -70,6 +70,9 @@ accountRouter.get("/export", requireAuth, async (req: AuthedRequest, res) => {
       prisma.sportAmbition.findMany({ where: { userId }, orderBy: { sport: "asc" } }),
       prisma.weeklyAvailability.findUnique({ where: { userId }, select: { minutesByDay: true, notes: true, updatedAt: true } }),
       prisma.stravaImport.findMany({ where: { userId }, select: { stravaActivityId: true, createdAt: true } }),
+      prisma.golfProfile.findUnique({ where: { userId }, select: { handicap: true, canShapeShots: true, updatedAt: true } }),
+      prisma.golfClub.findMany({ where: { userId }, select: { name: true, type: true } }),
+      prisma.golfHandicapEntry.findMany({ where: { userId }, orderBy: { date: "asc" }, select: { handicap: true, date: true } }),
     ]);
 
   res.json({
@@ -89,6 +92,9 @@ accountRouter.get("/export", requireAuth, async (req: AuthedRequest, res) => {
     sportAmbitions,
     weeklyAvailability,
     stravaImports,
+    golfProfile,
+    golfClubs,
+    golfHandicaps,
     consentHistory: consents,
     bodyMeasurements,
     bodyGoals,

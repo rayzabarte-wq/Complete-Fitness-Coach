@@ -60,7 +60,7 @@ export default function GolfWeek({ onAdded }: { onAdded: () => void }) {
       for (const s of chosen) {
         await api.createPlannedSession({ date: new Date(s.date).toISOString(), type: s.type, notes: notesFor(s),
           estimatedMinutes: s.minutes,
-          drills: s.drills.map((d) => ({ name: d.name, detail: d.detail, minutes: d.minutes, done: false, comment: "" })),
+          drills: s.drills.map((d) => ({ name: d.name, club: d.club ?? null, detail: d.detail, minutes: d.minutes, done: false, comment: "" })),
         });
         added++;
       }
@@ -128,7 +128,7 @@ export default function GolfWeek({ onAdded }: { onAdded: () => void }) {
               <ol style={{ margin: "6px 0 0 26px", paddingLeft: 16, fontSize: 13 }}>
                 {s.drills.map((d, i) => (
                   <li key={i}>
-                    <strong>{d.name}</strong> ({d.minutes} min) — {d.detail}
+                    <strong>{d.club ? `${d.club}: ` : ""}{d.name}</strong> ({d.minutes} min) — {d.detail}
                   </li>
                 ))}
               </ol>

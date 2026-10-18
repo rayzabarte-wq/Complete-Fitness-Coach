@@ -1126,3 +1126,20 @@ practice session laid out like the strength log: a header card (saved status,
 progress, focus), then a card per drill with a numbered row (comment, ✓ button)
 and a 1–10 "Feel" row like RPE, then "Finish practice". The Calendar card keeps
 the simpler checklist. Feel scores go to the next suggestion along with ticks and comments.
+
+## Golf level, shot shaping and the bag (Settings → Golf)
+
+- **Handicap** (`GolfProfile.handicap`, with a history in `GolfHandicapEntry`
+  each time it changes) sets how the coach pitches practice: fundamentals and
+  simple targets for high handicaps, precision and scoring games for low ones.
+- **Can you shape the ball?** (`canShapeShots`, yes/no). Anything but "yes",
+  including not answered, means no shot-shaping drills; practice adds
+  consistency work from the person's comments and round notes instead.
+- **Clubs** (`GolfClub`: name and type). Each drill names one exact club, which
+  can be changed in Log → Golf ("Club used"). Over the last 90 days the coach
+  sees which clubs were practised and gives the never-practised ones priority.
+- Rules, in `sport/services/golfBag.ts`, are both put in the prompt and enforced
+  on the answer (`checkDrill`): range uses driver, woods, hybrids, irons and
+  wedges but never the sand wedge or putter; short game uses wedges, sand wedge
+  and irons (bunker drills need the sand wedge or another wedge); putting is the
+  putter only; shot-shaping wording is dropped unless the player can shape.

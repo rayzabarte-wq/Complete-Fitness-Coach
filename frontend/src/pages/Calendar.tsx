@@ -764,7 +764,7 @@ function GolfSuggestion({
       onApply(
         notes,
         plan.totalMinutes,
-        plan.drills.map((d) => ({ name: d.name, detail: d.detail, minutes: d.minutes, done: false, comment: "" }))
+        plan.drills.map((d) => ({ name: d.name, club: d.club ?? null, detail: d.detail, minutes: d.minutes, done: false, comment: "" }))
       );
     } catch (err: any) {
       setError(err.message ?? "Failed to generate a session");

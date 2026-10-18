@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api, GolfSessionType, PlannedDrill, PlannedSession } from "../lib/api.js";
+import { api, GolfBagOverview, GolfSessionType, PlannedDrill, PlannedSession } from "../lib/api.js";
 import { ACTIVITY_COLORS, activityForSessionType } from "../lib/activity.js";
 import { fullLabelFor } from "../lib/sessionTypes.js";
 import { formatLocalDateKey } from "../lib/location.js";
@@ -36,6 +36,10 @@ export default function GolfPracticeLog({ onChanged }: { onChanged?: () => void 
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [finishing, setFinishing] = useState(false);
+  const [bag, setBag] = useState<GolfBagOverview | null>(null);
+  useEffect(() => {
+    api.getGolfBag().then(setBag).catch(() => undefined);
+  }, []);
 
   const load = useCallback(() => {
     const from = new Date(Date.now() - 3 * DAY_MS).toISOString();
@@ -198,7 +202,13 @@ export default function GolfPracticeLog({ onChanged }: { onChanged?: () => void 
       )}
 
       {drills.map((d, i) => (
-        <DrillCard key={i} index={i} drill={d} onPatch={(p) => patch(i, p)} />
+        <DrillCard
+          key={i}
+          index={i}
+          drill={d}
+          clubOptions={bag ? bag.clubs.filter((c) => bag.allowed[active.type as GolfSessionType]?.includes(c.type)).map((c) => c.name) : []}
+          onPatch={(p) => patch(i, p)}
+        />
       ))}
 
       <div className="card" style={{ marginBottom: 12, display: "flex", gap: 8 }}>
@@ -228,7 +238,7 @@ export default function GolfPracticeLog({ onChanged }: { onChanged?: () => void 
   );
 }
 
-function DrillCard({ index, drill, onPatch }: { index: number; drill: PlannedDrill; onPatch: (p: Partial<PlannedDrill>) => void }) {
+function DrillCard({ index, drill, clubOptions, onPatch }: { index: number; drill: PlannedDrill; clubOptions: string[]; onPatch: (p: Partial<PlannedDrill>) => void }) {
   // Typed comment is held locally and saved when the box loses focus.
   const [comment, setComment] = useState(drill.comment);
   useEffect(() => setComment(drill.comment), [drill.comment]);
@@ -236,9 +246,28 @@ function DrillCard({ index, drill, onPatch }: { index: number; drill: PlannedDri
   return (
     <div className="card" style={{ marginBottom: 12 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-        <strong>{drill.name}</strong>
+        <strong>{drill.club ? `${drill.club}: ` : ""}{drill.name}</strong>
         <span className="text-dim" style={{ fontSize: 12 }}>{drill.minutes > 0 ? `${drill.minutes} min` : ""}</span>
       </div>
+      {clubOptions.length > 0 && (
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6 }}>
+          <label className="text-dim" style={{ fontSize: 12 }} htmlFor={`club-${index}`}>Club used</label>
+          <select
+            id={`club-${index}`}
+            value={drill.club ?? ""}
+            onChange={(e) => onPatch({ club: e.target.value || null })}
+            style={{ padding: 4, fontSize: 13 }}
+          >
+            <option value="">Not recorded</option>
+            {drill.club && !clubOptions.includes(drill.club) && <option value={drill.club}>{drill.club}</option>}
+            {clubOptions.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
       {drill.detail && (
         <div className="text-dim" style={{ fontSize: 12, marginTop: 4, paddingBottom: 8, borderBottom: "1px solid var(--border)" }}>
           Plan: {drill.detail}

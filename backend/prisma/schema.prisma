@@ -78,6 +78,9 @@ model User {
   sportAmbitions     SportAmbition[]
   weeklyAvailability WeeklyAvailability?
   stravaImports      StravaImport[]
+  golfProfile        GolfProfile?
+  golfClubs          GolfClub[]
+  golfHandicaps      GolfHandicapEntry[]
 
   announcementReads AnnouncementRead[]
   usageEvents       UsageEvent[]
@@ -1106,4 +1109,51 @@ model StravaImport {
   createdAt        DateTime @default(now())
 
   @@unique([userId, stravaActivityId])
+}
+
+// What the golf coach needs to know to pitch practice at the right level.
+model GolfProfile {
+  id            String   @id @default(cuid())
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        String   @unique
+  // Current handicap index (history is kept in GolfHandicapEntry).
+  handicap      Float?
+  // Can they shape the ball on purpose (draw/fade)? null = not answered yet,
+  // treated as "no" so no shot-shaping drills are offered.
+  canShapeShots Boolean?
+  updatedAt     DateTime @updatedAt
+}
+
+// One row each time the handicap is recorded or changed, so it can be tracked.
+model GolfHandicapEntry {
+  id       String   @id @default(cuid())
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId   String
+  handicap Float
+  date     DateTime @default(now())
+
+  @@index([userId, date])
+}
+
+enum GolfClubType {
+  DRIVER
+  WOOD
+  HYBRID
+  IRON
+  WEDGE
+  SAND_WEDGE
+  PUTTER
+}
+
+// A club in the person's bag. Drills name the exact club used.
+model GolfClub {
+  id        String       @id @default(cuid())
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  name      String
+  type      GolfClubType
+  sortOrder Int          @default(0)
+  createdAt DateTime     @default(now())
+
+  @@unique([userId, name])
 }
