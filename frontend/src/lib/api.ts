@@ -204,6 +204,8 @@ export interface PlannedDrill {
   minutes: number;
   done: boolean;
   comment: string;
+  /** How well it went, 1 to 10. */
+  rating?: number | null;
 }
 
 export interface PlannedSession {

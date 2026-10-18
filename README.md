@@ -1120,3 +1120,9 @@ made from "Suggest a session (AI)" or the golf week proposal get their drills
 this way; older sessions keep the plan as text in the notes. Drill ticks and
 comments are fed back into the next suggestion and the next week's proposal, so
 unfinished drills and "pulled the 7-iron left" shape what comes next.
+
+Log → Golf (`components/GolfPracticeLog.tsx`) shows the next unfinished
+practice session laid out like the strength log: a header card (saved status,
+progress, focus), then a card per drill with a numbered row (comment, ✓ button)
+and a 1–10 "Feel" row like RPE, then "Finish practice". The Calendar card keeps
+the simpler checklist. Feel scores go to the next suggestion along with ticks and comments.

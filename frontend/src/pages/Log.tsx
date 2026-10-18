@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { useGyms, useShowGymMenu } from "../lib/gymContext.js";
 import GolfRounds from "../components/GolfRounds.js";
 import GolfDrillChecklist from "../components/GolfDrillChecklist.js";
+import GolfPracticeLog from "../components/GolfPracticeLog.js";
 import { api, track, DailyWorkout, SavedWorkout, MovementPattern, PlannedSession, SessionType, StepsResponse, TodaySuggestion, NutritionResponse } from "../lib/api.js";
 import { usePlan, loggedSets } from "../lib/planContext.js";
 import { formatLocalDateKey } from "../lib/location.js";
@@ -844,10 +845,11 @@ function PassiveSportLog({ sport }: { sport: Exclude<LogView, "STRENGTH" | "STEP
 
   return (
     <div>
+      {sport === "GOLF" && <GolfPracticeLog onChanged={load} />}
       {sport === "GOLF" && <GolfRounds />}
       <p className="text-dim" style={{ fontSize: 13, marginTop: 0 }}>
         {sport === "GOLF"
-          ? "Rounds are logged above, and golf rounds recorded on Strava (via Garmin) are added there automatically. Below are your golf sessions from the calendar. Range, short-game and putting practice are planned from the calendar; tick off each drill and comment on it here or there."
+          ? "Rounds are logged above, and golf rounds recorded on Strava (via Garmin) are added there automatically. Below are your golf sessions from the calendar. Range, short-game and putting practice is planned from the calendar and ticked off above."
           : "Imported from Strava (via Garmin) and shown as it arrived. Nothing to enter here."}
       </p>
       {sessions === null && <p className="text-dim">Loading…</p>}
@@ -864,7 +866,7 @@ function PassiveSportLog({ sport }: { sport: Exclude<LogView, "STRENGTH" | "STEP
           <div className="text-dim" style={{ fontSize: 12, marginTop: 2 }}>
             {s.actualMinutes != null ? `${s.actualMinutes} min${s.actualSource === "STRAVA" ? " · from Strava" : ""}` : s.completed ? "Done" : s.drills?.length ? "Practice" : "Not synced yet"}
           </div>
-          {s.drills && s.drills.length > 0 && <GolfDrillChecklist session={s} onUpdated={load} />}
+          {s.completed && s.drills && s.drills.length > 0 && <GolfDrillChecklist session={s} onUpdated={load} />}
         </div>
       ))}
     </div>

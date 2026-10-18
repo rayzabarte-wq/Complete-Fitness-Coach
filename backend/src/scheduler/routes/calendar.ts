@@ -45,6 +45,8 @@ const drillsSchema = z
       minutes: z.number().int().min(0).max(240).default(0),
       done: z.boolean().default(false),
       comment: z.string().trim().max(500).default(""),
+      // How well it went, 1 to 10 (like RPE on a strength set). Optional.
+      rating: z.number().int().min(1).max(10).nullish(),
     })
   )
   .max(10);

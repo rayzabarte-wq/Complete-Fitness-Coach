@@ -22,7 +22,7 @@ export function describeDrills(drills: unknown): string {
   if (!Array.isArray(drills)) return "";
   return drills
     .filter((d) => d && typeof d.name === "string")
-    .map((d) => `${d.name} (${d.done ? "done" : "not done"}${d.comment ? `: "${String(d.comment).replace(/\s+/g, " ").slice(0, 300)}"` : ""})`)
+    .map((d) => `${d.name} (${d.done ? "done" : "not done"}${d.rating ? `, felt ${d.rating}/10` : ""}${d.comment ? `: "${String(d.comment).replace(/\s+/g, " ").slice(0, 300)}"` : ""})`)
     .join("; ");
 }
 
