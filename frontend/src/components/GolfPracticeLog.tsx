@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api, PlannedDrill, PlannedSession } from "../lib/api.js";
+import { api, GolfSessionType, PlannedDrill, PlannedSession } from "../lib/api.js";
 import { ACTIVITY_COLORS, activityForSessionType } from "../lib/activity.js";
 import { fullLabelFor } from "../lib/sessionTypes.js";
 import { formatLocalDateKey } from "../lib/location.js";
@@ -12,6 +12,17 @@ import { formatLocalDateKey } from "../lib/location.js";
 
 const PRACTICE_TYPES = ["GOLF_RANGE", "GOLF_SHORT_GAME", "GOLF_PUTTING"];
 const DAY_MS = 86400_000;
+
+/** Sessions made before drills were stored hold the plan as text in the notes:
+ * "1. Name (10 min) — detail". Turns those lines back into drills. */
+export function drillsFromNotes(notes: string | null): PlannedDrill[] {
+  const out: PlannedDrill[] = [];
+  for (const line of (notes ?? "").split("\n")) {
+    const m = line.match(/^\s*\d+\.\s*(.+?)\s*\((\d+)\s*min\)\s*[—–-]\s*(.*)$/);
+    if (m) out.push({ name: m[1].slice(0, 80), minutes: Number(m[2]), detail: m[3].slice(0, 400), done: false, comment: "" });
+  }
+  return out.slice(0, 10);
+}
 
 function dayLabel(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
@@ -32,7 +43,7 @@ export default function GolfPracticeLog({ onChanged }: { onChanged?: () => void 
     api
       .getPlannedSessions(from, to)
       .then((all) => {
-        const open = all.filter((s) => PRACTICE_TYPES.includes(s.type) && !s.completed && s.drills && s.drills.length > 0);
+        const open = all.filter((s) => PRACTICE_TYPES.includes(s.type) && !s.completed);
         setSessions(open);
         setActiveId((cur) => (cur && open.some((s) => s.id === cur) ? cur : open[0]?.id ?? null));
       })
@@ -43,9 +54,13 @@ export default function GolfPracticeLog({ onChanged }: { onChanged?: () => void 
   const active = sessions?.find((s) => s.id === activeId) ?? null;
   // Switch drills only when a different session is chosen, not on every reload.
   useEffect(() => {
-    setDrills(active?.drills ?? []);
+    const stored = active?.drills ?? [];
+    const fromText = stored.length === 0 && active ? drillsFromNotes(active.notes) : [];
+    setDrills(stored.length ? stored : fromText);
     setSync("saved");
     setSavedAt(null);
+    // An older text plan becomes a checklist the first time it is opened.
+    if (active && fromText.length) api.updatePlannedSession(active.id, { drills: fromText }).then(load).catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeId]);
 
@@ -60,6 +75,37 @@ export default function GolfPracticeLog({ onChanged }: { onChanged?: () => void 
     } catch {
       setSync("error");
     }
+  }
+
+  const [building, setBuilding] = useState(false);
+  const [buildError, setBuildError] = useState<string | null>(null);
+  const [newName, setNewName] = useState("");
+
+  async function buildWithAi() {
+    if (!active) return;
+    setBuilding(true);
+    setBuildError(null);
+    try {
+      const plan = await api.generateGolfPlan(active.type as GolfSessionType, active.estimatedMinutes ?? undefined);
+      const built = plan.drills.map((d) => ({ name: d.name, detail: d.detail, minutes: d.minutes, done: false, comment: "" }));
+      await api.updatePlannedSession(active.id, {
+        drills: built,
+        ...(active.notes ? {} : { notes: `Focus: ${plan.focusSummary}\nWhy: ${plan.reasoning}` }),
+      });
+      setDrills(built);
+      load();
+    } catch (e: any) {
+      setBuildError(e.message ?? "Couldn't build the drills");
+    } finally {
+      setBuilding(false);
+    }
+  }
+
+  function addDrill() {
+    const name = newName.trim();
+    if (!name || drills.length >= 10) return;
+    setNewName("");
+    persist([...drills, { name: name.slice(0, 80), detail: "", minutes: 0, done: false, comment: "" }]).then(load);
   }
 
   const patch = (i: number, p: Partial<PlannedDrill>) => persist(drills.map((d, n) => (n === i ? { ...d, ...p } : d)));
@@ -138,9 +184,37 @@ export default function GolfPracticeLog({ onChanged }: { onChanged?: () => void 
         ))}
       </div>
 
+      {drills.length === 0 && (
+        <div className="card" style={{ marginBottom: 12 }}>
+          <strong>No drills yet</strong>
+          <p className="text-dim" style={{ fontSize: 13, margin: "4px 0 8px" }}>
+            This session was added without a plan. Have one built from your round notes and recent practice, or add your own drills below.
+          </p>
+          <button className="button-secondary" onClick={buildWithAi} disabled={building} style={{ width: "100%" }}>
+            {building ? "Building drills…" : "Build drills (AI)"}
+          </button>
+          {buildError && <p style={{ color: "var(--danger)", fontSize: 12, margin: "6px 0 0" }}>{buildError}</p>}
+        </div>
+      )}
+
       {drills.map((d, i) => (
         <DrillCard key={i} index={i} drill={d} onPatch={(p) => patch(i, p)} />
       ))}
+
+      <div className="card" style={{ marginBottom: 12, display: "flex", gap: 8 }}>
+        <input
+          placeholder="Add a drill (e.g. 50 yd wedges to a target)"
+          aria-label="Add a drill"
+          value={newName}
+          maxLength={80}
+          onChange={(e) => setNewName(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && addDrill()}
+          style={{ flex: 1, padding: 6 }}
+        />
+        <button className="button-quiet" onClick={addDrill} disabled={!newName.trim() || drills.length >= 10}>
+          Add
+        </button>
+      </div>
 
       <button className="button-primary" onClick={finish} disabled={finishing || doneCount === 0} style={{ width: "100%", marginTop: 8 }}>
         {finishing ? "Saving..." : "Finish practice"}
