@@ -91,7 +91,7 @@ export default function GolfPracticeLog({ onChanged }: { onChanged?: () => void 
     setBuildError(null);
     try {
       const plan = await api.generateGolfPlan(active.type as GolfSessionType, active.estimatedMinutes ?? undefined);
-      const built = plan.drills.map((d) => ({ name: d.name, detail: d.detail, minutes: d.minutes, done: false, comment: "" }));
+      const built = plan.drills.map((d) => ({ name: d.name, club: d.club ?? null, detail: d.detail, minutes: d.minutes, done: false, comment: "" }));
       await api.updatePlannedSession(active.id, {
         drills: built,
         ...(active.notes ? {} : { notes: `Focus: ${plan.focusSummary}\nWhy: ${plan.reasoning}` }),
@@ -190,12 +190,12 @@ export default function GolfPracticeLog({ onChanged }: { onChanged?: () => void 
 
       {drills.length === 0 && (
         <div className="card" style={{ marginBottom: 12 }}>
-          <strong>No drills yet</strong>
+          <strong>Build this practice</strong>
           <p className="text-dim" style={{ fontSize: 13, margin: "4px 0 8px" }}>
-            This session was added without a plan. Have one built from your round notes and recent practice, or add your own drills below.
+            Drills are built for a {fullLabelFor(active.type).toLowerCase()} session from your round notes, handicap, bag and recent practice. Or add your own drills below.
           </p>
-          <button className="button-secondary" onClick={buildWithAi} disabled={building} style={{ width: "100%" }}>
-            {building ? "Building drills…" : "Build drills (AI)"}
+          <button className="button-primary" onClick={buildWithAi} disabled={building} style={{ width: "100%" }}>
+            {building ? "Building drills…" : `Build ${fullLabelFor(active.type).toLowerCase()} session`}
           </button>
           {buildError && <p style={{ color: "var(--danger)", fontSize: 12, margin: "6px 0 0" }}>{buildError}</p>}
         </div>

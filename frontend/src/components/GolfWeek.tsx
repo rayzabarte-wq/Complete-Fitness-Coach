@@ -79,7 +79,6 @@ export default function GolfWeek({
       for (const s of chosen) {
         await api.createPlannedSession({ date: new Date(s.date).toISOString(), type: s.type, notes: notesFor(s),
           estimatedMinutes: s.minutes,
-          drills: s.drills.map((d) => ({ name: d.name, club: d.club ?? null, detail: d.detail, minutes: d.minutes, done: false, comment: "" })),
         });
         added++;
       }
@@ -163,13 +162,6 @@ export default function GolfWeek({
                   <div style={{ fontSize: 13, marginTop: 2 }}>{s.focus}</div>
                 </span>
               </label>
-              <ol style={{ margin: "6px 0 0 26px", paddingLeft: 16, fontSize: 13 }}>
-                {s.drills.map((d, i) => (
-                  <li key={i}>
-                    <strong>{d.club ? `${d.club}: ` : ""}{d.name}</strong> ({d.minutes} min) — {d.detail}
-                  </li>
-                ))}
-              </ol>
               <div className="text-dim" style={{ fontSize: 12, margin: "4px 0 0 26px" }}>{s.reason}</div>
             </div>
           ))}
