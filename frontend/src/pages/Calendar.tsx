@@ -8,7 +8,7 @@ import GolfWeek from "../components/GolfWeek.js";
 import { InstallBanner } from "../components/InstallApp.js";
 import PlanPanel, { Planner } from "../components/PlanPanel.js";
 import GolfDrillChecklist from "../components/GolfDrillChecklist.js";
-import { requestLocation, parseLocalDate, formatLocalDateKey } from "../lib/location.js";
+import { getLocation, parseLocalDate, formatLocalDateKey } from "../lib/location.js";
 import {
   fullLabelFor,
   findCategoryByLabel,
@@ -91,6 +91,8 @@ export default function Calendar() {
   const [forecast, setForecast] = useState<DayForecast[] | null>(null);
   const [weatherError, setWeatherError] = useState<string | null>(null);
   const [locationDenied, setLocationDenied] = useState(false);
+  const [usingSavedLocation, setUsingSavedLocation] = useState(false);
+  const [updatingLocation, setUpdatingLocation] = useState(false);
   const [sessions, setSessions] = useState<PlannedSession[]>([]);
   const [summaries, setSummaries] = useState<Map<string, DaySummary>>(new Map());
   const [weekOffset, setWeekOffset] = useState(0);
@@ -148,14 +150,19 @@ export default function Calendar() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weekOffset]);
 
-  async function loadForecast() {
+  // Uses the position remembered on this device, so Safari isn't asked every
+  // visit. refresh = true asks the browser again (the Update link, Try again).
+  async function loadForecast(refresh = false) {
     setWeatherError(null);
-    const coords = await requestLocation();
+    setUpdatingLocation(refresh);
+    const { coords, fromSaved } = await getLocation(refresh);
     setLocationDenied(coords === null);
-    api
+    setUsingSavedLocation(fromSaved);
+    await api
       .getForecast(coords ?? undefined)
       .then(setForecast)
-      .catch((err) => setWeatherError(err.message ?? "Failed to load forecast"));
+      .catch((err) => setWeatherError(err.message ?? "Failed to load forecast"))
+      .finally(() => setUpdatingLocation(false));
   }
 
   function loadWeek() {
@@ -296,7 +303,15 @@ export default function Calendar() {
         </figcaption>
       </figure>
 
-      {showWeather && <WeatherStrip forecast={forecast} error={weatherError} locationDenied={locationDenied} onRetryLocation={loadForecast} />}
+      {showWeather && <WeatherStrip forecast={forecast} error={weatherError} locationDenied={locationDenied} onRetryLocation={() => loadForecast(true)} />}
+      {showWeather && forecast && !weatherError && (
+        <p className="text-dim" style={{ fontSize: 12, margin: "-8px 0 12px" }}>
+          {usingSavedLocation ? "Using the location saved on this device. " : ""}
+          <button type="button" className="button-quiet" style={{ fontSize: 12 }} disabled={updatingLocation} onClick={() => loadForecast(true)}>
+            {updatingLocation ? "Updating…" : "Update location"}
+          </button>
+        </p>
+      )}
 
       <PlanPanel planners={planners} />
 

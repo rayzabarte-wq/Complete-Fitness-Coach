@@ -1162,3 +1162,11 @@ opening beneath it: **Plan strength** lays out this week's strength sessions;
 **Plan golf practice** builds the next 7 days of range, short game and putting.
 Rows only appear for workout types switched on in Settings. To add another
 workout type, push a `Planner` onto the `planners` list in `pages/Calendar.tsx`.
+
+## Weather location is remembered
+
+Safari asks for location permission on every visit, so the Calendar keeps the
+last position on the device (`localStorage`, rounded to about 1 km, valid for 30
+days; `lib/location.ts`) and uses it without asking. The browser is only asked
+the first time, or when "Update location" (under the forecast) or "Try again" is
+tapped. If a refresh is refused, the remembered position keeps being used.
