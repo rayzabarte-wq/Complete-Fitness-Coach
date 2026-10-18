@@ -95,6 +95,15 @@ function StrengthLog() {
   // Which gym (Home / Regular / Visiting) new workouts are built for. It's
   // chosen with the gym button in the header and remembered on the account.
   const { activeGymId: gymId } = useGyms();
+  // Injuries or niggles for the AI to work around. Kept on this device so the
+  // note is still there tomorrow; clear it when the niggle has gone.
+  const [injuries, setInjuriesState] = useState(() => {
+    try { return localStorage.getItem("strengthInjuries") ?? ""; } catch { return ""; }
+  });
+  const setInjuries = (v: string) => {
+    setInjuriesState(v);
+    try { v.trim() ? localStorage.setItem("strengthInjuries", v) : localStorage.removeItem("strengthInjuries"); } catch { /* storage unavailable */ }
+  };
 
   const loadSaved = useCallback(() => {
     api.getSavedWorkouts(date).then(setSaved).catch(() => {});
@@ -156,7 +165,7 @@ function StrengthLog() {
       // Only replaces the workout this device knows about and the person
       // agreed to replace. If the server has a different one (this device
       // didn't know), it answers 409 and we show that one instead.
-      setBuilt(await api.generatePlan(focus, date, plannedId, todaysWorkout?.workoutId ?? null, gymId ?? undefined));
+      setBuilt(await api.generatePlan(focus, date, plannedId, todaysWorkout?.workoutId ?? null, gymId ?? undefined, injuries));
     } catch (err: any) {
       if (err.status === 409 && err.body?.existing) {
         adopt(err.body.existing);
@@ -339,6 +348,23 @@ function StrengthLog() {
           )}
         </div>
       )}
+
+      <div className="card">
+        <label htmlFor="injuries" style={{ fontSize: 13, fontWeight: 600, color: "var(--navy)" }}>
+          Injuries or niggles (optional)
+        </label>
+        <input
+          id="injuries"
+          value={injuries}
+          maxLength={400}
+          onChange={(e) => setInjuries(e.target.value)}
+          placeholder="e.g. right shoulder sore, avoid overhead"
+          style={{ width: "100%", padding: 8, marginTop: 6, boxSizing: "border-box" }}
+        />
+        <p className="text-dim" style={{ fontSize: 12, margin: "6px 0 0" }}>
+          The session still goes ahead. Exercises that stress the area come with a gentler variation, and the rest are unchanged. Clear this box when it has settled.
+        </p>
+      </div>
 
       <div className="section-title">{todaysWorkout ? "Or build a different session instead" : "Or choose a session"}</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>

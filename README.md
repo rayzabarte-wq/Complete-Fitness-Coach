@@ -1201,3 +1201,7 @@ always listed longest to shortest by loft (`estimatedLoft` in
 putter goes last. Renaming a club re-sorts it, and carries over to the
 simulator's longest-club limit and to the club recorded on past drills
 (`PATCH /golf-bag/clubs/:id`). Typing a name picks the type ("7 iron" → Iron).
+
+## Injuries and niggles on the strength build screen
+
+Log → Strength has an "Injuries or niggles" box above the session buttons (kept on the device until cleared). It is sent with the build request and only shapes how exercises are done: the session is never cancelled and sets, reps and weights follow the usual progression. Each exercise that stresses the named area comes back with a one-sentence "Adjusted for your niggle" variation (for example a neutral grip, a lower incline or stopping short of overhead); unaffected exercises are unchanged.

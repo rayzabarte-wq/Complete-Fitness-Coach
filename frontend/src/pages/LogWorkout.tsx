@@ -435,6 +435,11 @@ function ExerciseCard({
           {exercise.selectionNote}
         </div>
       )}
+      {exercise.modification && (
+        <div style={{ fontSize: 12, marginTop: 4, padding: "6px 8px", borderRadius: 6, background: "var(--sun-soft)", color: "var(--navy)" }}>
+          <strong>Adjusted for your niggle:</strong> {exercise.modification}
+        </div>
+      )}
       {exercise.reasoning && (
         <div className="text-dim" style={{ fontSize: 12, marginTop: 2 }}>
           {exercise.reasoning}

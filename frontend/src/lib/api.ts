@@ -90,6 +90,7 @@ export interface PlannedExercise {
   restSeconds: number;
   reasoning: string;
   selectionNote: string;
+  modification?: string | null;
   isCoreFinisher: boolean;
 }
 
@@ -924,7 +925,8 @@ export const api = {
     date: string,
     plannedSessionId?: string | null,
     replaceWorkoutId?: string | null,
-    gymId?: string
+    gymId?: string,
+    injuries?: string
   ) =>
     tracked(
       "workout_generated",
@@ -932,7 +934,7 @@ export const api = {
         method: "POST",
         // replaceWorkoutId is the workout the person agreed to replace; without
         // it the server refuses (409) to build over an existing workout.
-        body: JSON.stringify({ date, plannedSessionId: plannedSessionId ?? null, replaceWorkoutId: replaceWorkoutId ?? null, gymId }),
+        body: JSON.stringify({ date, plannedSessionId: plannedSessionId ?? null, replaceWorkoutId: replaceWorkoutId ?? null, gymId, injuries: injuries?.trim() || undefined }),
       })
     ),
   /** Workouts built in the last 30 days (and any scheduled ahead). No AI call. */
