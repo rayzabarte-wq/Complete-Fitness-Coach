@@ -110,6 +110,35 @@ export default function GolfSettings() {
         </p>
       )}
 
+      <div style={{ marginTop: 14, fontSize: 14, fontWeight: 600 }}>Golf practice sessions per week</div>
+      <div style={{ display: "flex", gap: 6, marginTop: 6 }} role="radiogroup" aria-label="Golf practice sessions per week">
+        {[1, 2, 3, 4, 5].map((n) => (
+          <button
+            key={n}
+            type="button"
+            role="radio"
+            aria-checked={bag.practiceSessionsPerWeek === n}
+            disabled={busy}
+            onClick={() => run(() => api.saveGolfProfile({ practiceSessionsPerWeek: n }))}
+            style={{
+              flex: 1,
+              padding: "8px 0",
+              borderRadius: 8,
+              border: bag.practiceSessionsPerWeek === n ? "none" : "1px solid var(--border)",
+              background: bag.practiceSessionsPerWeek === n ? "var(--accent)" : "var(--surface)",
+              color: bag.practiceSessionsPerWeek === n ? "var(--on-accent)" : "var(--text)",
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            {n}
+          </button>
+        ))}
+      </div>
+      <p className="text-dim" style={{ fontSize: 12, margin: "4px 0 0" }}>
+        "Plan golf practice" on the Calendar aims for this many sessions in the next 7 days, counting any already planned, and fits them into the time you have free.
+      </p>
+
       <div style={{ marginTop: 14, fontSize: 14 }}>Can you shape the ball on purpose (draw and fade)?</div>
       <div style={{ display: "flex", gap: 8, marginTop: 6 }} role="radiogroup" aria-label="Can you shape shots">
         {([

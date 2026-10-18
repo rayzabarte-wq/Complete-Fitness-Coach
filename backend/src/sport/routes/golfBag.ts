@@ -25,6 +25,7 @@ async function overview(userId: string) {
     canShapeShots: bag.canShapeShots,
     // null = no restrictions. simulatorClubs are the clubs that fit the indoor space.
     simulatorLongestClub: bag.simulatorLongestClub,
+    practiceSessionsPerWeek: bag.practiceSessionsPerWeek,
     simulatorClubs: simulatorClubs(bag).map((c) => c.name),
     // Club names from longest to shortest, for choosing the longest one.
     clubsByLength: sortByLength(bag.clubs).map((c) => c.name),
@@ -52,6 +53,8 @@ const profileSchema = z.object({
   canShapeShots: z.boolean().nullish(),
   // Name of a club in the bag, or null for no restrictions.
   simulatorLongestClub: z.string().trim().max(40).nullish(),
+  // Golf practice sessions a week (1 to 5).
+  practiceSessionsPerWeek: z.number().int().min(1).max(5).optional(),
 });
 
 // PUT /golf-bag/profile { handicap?, canShapeShots? }
@@ -59,7 +62,8 @@ golfBagRouter.put("/profile", async (req: AuthedRequest, res) => {
   const parsed = profileSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Handicap must be between -10 and 54" });
   const userId = req.userId!;
-  const data: { handicap?: number | null; canShapeShots?: boolean | null; simulatorLongestClub?: string | null } = {};
+  const data: { handicap?: number | null; canShapeShots?: boolean | null; simulatorLongestClub?: string | null; practiceSessionsPerWeek?: number } = {};
+  if (parsed.data.practiceSessionsPerWeek !== undefined) data.practiceSessionsPerWeek = parsed.data.practiceSessionsPerWeek;
   if (parsed.data.handicap !== undefined) data.handicap = parsed.data.handicap === null ? null : Math.round(parsed.data.handicap * 10) / 10;
   if (parsed.data.canShapeShots !== undefined) data.canShapeShots = parsed.data.canShapeShots;
 

@@ -91,6 +91,8 @@ export interface GolfBag {
   canShapeShots: boolean | null;
   /** Longest club usable in the indoor simulator, null = no restriction. */
   simulatorLongestClub: string | null;
+  /** Practice sessions a week the weekly proposal aims for. */
+  practiceSessionsPerWeek: number;
   clubs: BagClub[];
   coverage: ClubCoverage[];
 }
@@ -122,7 +124,7 @@ export async function loadGolfBag(userId: string): Promise<GolfBag> {
     const e = byClub.get(c.name);
     return { name: c.name, sessions: e?.sessions.size ?? 0, lastPracticed: e?.last ? dateToDayKey(e.last) : null };
   });
-  return { handicap: profile?.handicap ?? null, canShapeShots: profile?.canShapeShots ?? null, simulatorLongestClub: profile?.simulatorLongestClub ?? null, clubs: sortByLength(clubs), coverage };
+  return { handicap: profile?.handicap ?? null, canShapeShots: profile?.canShapeShots ?? null, simulatorLongestClub: profile?.simulatorLongestClub ?? null, practiceSessionsPerWeek: profile?.practiceSessionsPerWeek ?? 2, clubs: sortByLength(clubs), coverage };
 }
 
 /** The clubs that fit the indoor space: nothing longer than the chosen longest club. */

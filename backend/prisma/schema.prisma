@@ -1125,6 +1125,8 @@ model GolfProfile {
   // Indoor simulator: the longest club that can be swung in the space, by name
   // (a club in their bag). null = no restrictions.
   simulatorLongestClub String?
+  // Golf practice sessions a week the weekly proposal aims for (like strength days a week).
+  practiceSessionsPerWeek Int @default(2)
   updatedAt     DateTime @updatedAt
 }
 

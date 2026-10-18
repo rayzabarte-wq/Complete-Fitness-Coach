@@ -262,6 +262,8 @@ export interface GolfBagOverview {
   canShapeShots: boolean | null;
   /** Longest club usable in the indoor simulator; null = no restrictions. */
   simulatorLongestClub: string | null;
+  /** Golf practice sessions a week the weekly plan aims for (1 to 5). */
+  practiceSessionsPerWeek: number;
   /** The clubs that fit the indoor space. */
   simulatorClubs: string[];
   /** Club names from longest to shortest. */
@@ -1040,7 +1042,7 @@ export const api = {
     }),
 
   getGolfBag: () => request<GolfBagOverview>("/golf-bag"),
-  saveGolfProfile: (data: { handicap?: number | null; canShapeShots?: boolean | null; simulatorLongestClub?: string | null }) =>
+  saveGolfProfile: (data: { handicap?: number | null; canShapeShots?: boolean | null; simulatorLongestClub?: string | null; practiceSessionsPerWeek?: number }) =>
     tracked("golf_profile_saved", request<GolfBagOverview>("/golf-bag/profile", { method: "PUT", body: JSON.stringify(data) })),
   addGolfClub: (data: { name: string; type: GolfClubType }) =>
     tracked("golf_clubs_edited", request<GolfBagOverview>("/golf-bag/clubs", { method: "POST", body: JSON.stringify(data) })),

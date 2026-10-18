@@ -84,6 +84,11 @@ export async function proposeGolfWeek(userId: string, fromKey: string, mode: "ou
   }
   const usableDays = dayKeys.filter((k) => (free.get(k) ?? 0) >= MIN_SESSION);
 
+  // Like strength days a week: aim for the Settings number, counting golf
+  // practice already on the calendar (range, short game, putting, simulator).
+  const alreadyPractice = plannedInWindow.filter((p) => ([...OUTDOOR_TYPES, ...SIMULATOR_TYPES] as string[]).includes(p.type)).length;
+  const target = Math.max(0, bag.practiceSessionsPerWeek - alreadyPractice);
+
   const caveats: string[] = [];
   if (!availability.isSet) caveats.push("You haven't set your weekly time yet (Settings → Weekly time), so no days have time free. Set it and try again.");
   else if (usableDays.length === 0) caveats.push("No day in the next 7 has at least 15 free minutes once your planned sessions are counted.");
@@ -92,6 +97,12 @@ export async function proposeGolfWeek(userId: string, fromKey: string, mode: "ou
   if (bag.handicap === null) caveats.push("Add your handicap in Settings → Golf so practice is pitched at your level.");
   if (bag.canShapeShots === null) caveats.push("Say whether you can shape shots in Settings → Golf. Until then no shot-shaping drills are offered.");
   if (bag.clubs.length === 0) caveats.push("Add your clubs in Settings → Golf so each drill can name the exact club and practice can cover the whole bag.");
+
+  if (alreadyPractice > 0) caveats.push(`Kept the ${alreadyPractice} golf practice session${alreadyPractice === 1 ? "" : "s"} already on your calendar, which count towards your ${bag.practiceSessionsPerWeek} a week (Settings → Golf).`);
+  if (target === 0) {
+    caveats.push("You already have as many practice sessions this week as your target, so nothing more is proposed.");
+    return { from: fromKey, to: dayKeys[6], basedOnRoundNotes: rounds.length, summary: "", findings: [], sessions: [], caveats };
+  }
 
   const base = { from: fromKey, to: dayKeys[6], basedOnRoundNotes: rounds.length };
   if (usableDays.length === 0) return { ...base, summary: "", findings: [], sessions: [], caveats };
@@ -136,7 +147,7 @@ ${dayLines.join("\n")}
 ${availability.notes ? `Their note on their time: ${clip(availability.notes, 300)}` : ""}
 
 RULES
-- Propose 2 to 4 sessions in total, at most one per day, only on days with at least ${MIN_SESSION} minutes free, and never longer than that day's free minutes. Fewer, better-aimed sessions beat filling every day. Spread them out; do not stack hard sessions on consecutive days unless time forces it.
+- Propose exactly ${target} session${target === 1 ? "" : "s" } (their target is ${bag.practiceSessionsPerWeek} a week, some may already be planned), fewer only if too few days have the time free, at most one per day, only on days with at least ${MIN_SESSION} minutes free, and never longer than that day's free minutes. Fewer, better-aimed sessions beat filling every day. Spread them out; do not stack hard sessions on consecutive days unless time forces it.
 ${
     mode === "simulator"
       ? `- Every session is an INDOOR GOLF SIMULATOR session: type is GOLF_SIMULATOR and venue is SIMULATOR. Aim each one at a different weakness from the notes where there is more than one.\n\n${SIMULATOR_GUIDE}`
@@ -160,11 +171,11 @@ Respond with ONLY a JSON object, no other text, in this exact shape:
   } catch (err) {
     throw new Error(`Failed to parse Claude's response as JSON: ${(err as Error).message}`);
   }
-  return { ...base, ...cleanProposal(parsed, free, bag, TYPES), caveats };
+  return { ...base, ...cleanProposal(parsed, free, bag, TYPES, target), caveats };
 }
 
 /** Keeps only what fits the person's real constraints, whatever the model returned. Exported for tests. */
-export function cleanProposal(parsed: any, free: Map<string, number>, bag: GolfBag, types: GolfSessionType[] = OUTDOOR_TYPES) {
+export function cleanProposal(parsed: any, free: Map<string, number>, bag: GolfBag, types: GolfSessionType[] = OUTDOOR_TYPES, max = 4) {
   const findings: WeekFinding[] = (Array.isArray(parsed?.findings) ? parsed.findings : [])
     .filter((f: any) => f && typeof f.finding === "string")
     .slice(0, 5)
@@ -206,7 +217,7 @@ export function cleanProposal(parsed: any, free: Map<string, number>, bag: GolfB
       reason: clip(s.reason, 300),
       drills,
     });
-    if (sessions.length === 4) break;
+    if (sessions.length >= max) break;
   }
   return { summary: clip(parsed?.summary, 400), findings, sessions };
 }

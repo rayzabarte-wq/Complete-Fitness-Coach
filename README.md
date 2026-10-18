@@ -1205,3 +1205,7 @@ simulator's longest-club limit and to the club recorded on past drills
 ## Injuries and niggles on the strength build screen
 
 Log → Strength has an "Injuries or niggles" box above the session buttons (kept on the device until cleared). It is sent with the build request and only shapes how exercises are done: the session is never cancelled and sets, reps and weights follow the usual progression. Each exercise that stresses the named area comes back with a one-sentence "Adjusted for your niggle" variation (for example a neutral grip, a lower incline or stopping short of overhead); unaffected exercises are unchanged.
+
+## Golf practice sessions per week
+
+Settings → Golf has a "Golf practice sessions per week" selector (1 to 5, default 2), set out like strength days per week. Calendar → Plan → Golf practice (and Golf simulator) aims for that many sessions in the next 7 days. Practice sessions already on the calendar in that window (range, short game, putting or simulator) count towards the target and are kept, so the proposal only fills the gap, and it still fits each session into the free time from Settings → Weekly time. Stored as `GolfProfile.practiceSessionsPerWeek` (migration `20261018190000_golf_practice_sessions_per_week`, a plain column add with a default).
