@@ -539,6 +539,11 @@ model PlannedSession {
   // auto-planned entries — anything added or edited by hand is left alone.
   autoPlanned Boolean @default(false)
 
+  // Golf practice only: the drills of the session as a checklist the person
+  // ticks off and comments on, [{ name, detail, minutes, done, comment }].
+  // `notes` stays free text for how the session went overall.
+  drills Json?
+
   @@index([userId, date])
 }
 

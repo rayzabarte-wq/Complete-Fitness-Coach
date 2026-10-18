@@ -24,14 +24,7 @@ function dayName(key: string): string {
 }
 
 function notesFor(s: GolfWeekSession): string {
-  return [
-    `Focus: ${s.focus}`,
-    `Where: ${VENUE_LABEL[s.venue]}`,
-    "",
-    ...s.drills.map((d, i) => `${i + 1}. ${d.name} (${d.minutes} min) — ${d.detail}`),
-    "",
-    `Why: ${s.reason}`,
-  ].join("\n");
+  return [`Focus: ${s.focus}`, `Where: ${VENUE_LABEL[s.venue]}`, `Why: ${s.reason}`].join("\n");
 }
 
 export default function GolfWeek({ onAdded }: { onAdded: () => void }) {
@@ -65,7 +58,10 @@ export default function GolfWeek({ onAdded }: { onAdded: () => void }) {
     let added = 0;
     try {
       for (const s of chosen) {
-        await api.createPlannedSession({ date: new Date(s.date).toISOString(), type: s.type, notes: notesFor(s), estimatedMinutes: s.minutes });
+        await api.createPlannedSession({ date: new Date(s.date).toISOString(), type: s.type, notes: notesFor(s),
+          estimatedMinutes: s.minutes,
+          drills: s.drills.map((d) => ({ name: d.name, detail: d.detail, minutes: d.minutes, done: false, comment: "" })),
+        });
         added++;
       }
       track("golf_week_added");

@@ -17,6 +17,15 @@ const DEFAULT_MINUTES: Record<GolfSessionType, number> = {
   GOLF_PUTTING: 20,
 };
 
+/** One line per drill on a session's checklist: done or not, and the person's comment. */
+export function describeDrills(drills: unknown): string {
+  if (!Array.isArray(drills)) return "";
+  return drills
+    .filter((d) => d && typeof d.name === "string")
+    .map((d) => `${d.name} (${d.done ? "done" : "not done"}${d.comment ? `: "${String(d.comment).replace(/\s+/g, " ").slice(0, 300)}"` : ""})`)
+    .join("; ");
+}
+
 export interface GolfDrill {
   name: string;
   detail: string;
@@ -65,6 +74,8 @@ export async function generateGolfSessionPlan(
     const parts = [s.date.toISOString().slice(0, 10)];
     if (s.actualMinutes) parts.push(`${s.actualMinutes} min actual`);
     if (s.notes) parts.push(`notes: ${s.notes}`);
+    const drills = describeDrills(s.drills);
+    if (drills) parts.push(`drills: ${drills}`);
     return parts.join(", ");
   };
 

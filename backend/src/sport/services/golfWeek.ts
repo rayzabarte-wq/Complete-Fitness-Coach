@@ -3,7 +3,7 @@ import { askClaude } from "../../lib/claude.js";
 import { addDays, dateToDayKey, dayKeyToDate } from "../../lib/dates.js";
 import { getAvailability } from "../../services/availability.js";
 import { progressFor } from "../../services/ambitions.js";
-import type { GolfSessionType } from "./golfPlanner.js";
+import { describeDrills, type GolfSessionType } from "./golfPlanner.js";
 
 // Proposes golf practice for the next 7 days. It reads what the person wrote
 // about their recent rounds (a round itself is never counted as practice
@@ -64,7 +64,7 @@ export async function proposeGolfWeek(userId: string, fromKey: string): Promise<
       where: { userId, completed: true, type: { in: TYPES }, date: { lt: end } },
       orderBy: { date: "desc" },
       take: 6,
-      select: { date: true, type: true, notes: true, actualMinutes: true, estimatedMinutes: true },
+      select: { date: true, type: true, notes: true, drills: true, actualMinutes: true, estimatedMinutes: true },
     }),
     prisma.sportAmbition.findUnique({ where: { userId_sport: { userId, sport: "GOLF" } }, select: { statement: true } }),
     progressFor(userId, "GOLF"),
@@ -98,7 +98,7 @@ export async function proposeGolfWeek(userId: string, fromKey: string): Promise<
     ? rounds.map((r) => `${dateToDayKey(r.date)} — ${clip(r.course, 60)} (${r.holes} holes): ${clip(r.notes, 700)}`).join("\n")
     : "None.";
   const practiceLines = practice.length
-    ? practice.map((s) => `${dateToDayKey(s.date)} ${TYPE_LABEL[s.type as GolfSessionType]}${s.actualMinutes ?? s.estimatedMinutes ? ` ${s.actualMinutes ?? s.estimatedMinutes}m` : ""}: ${clip(s.notes, 600) || "(no notes)"}`).join("\n")
+    ? practice.map((s) => `${dateToDayKey(s.date)} ${TYPE_LABEL[s.type as GolfSessionType]}${s.actualMinutes ?? s.estimatedMinutes ? ` ${s.actualMinutes ?? s.estimatedMinutes}m` : ""}: ${clip(s.notes, 400) || "(no notes)"}${describeDrills(s.drills) ? ` | Drills: ${clip(describeDrills(s.drills), 700)}` : ""}`).join("\n")
     : "None.";
 
   const prompt = `You are a golf coach planning the next 7 days of golf practice for one amateur golfer.
@@ -118,7 +118,7 @@ Last 90 days: ${progress.rounds ?? 0} rounds, ${progress.sessions} practice sess
 RECENT ROUND NOTES (newest first)
 ${roundLines}
 
-RECENT PRACTICE SESSIONS (newest first; notes may include what was planned and how it went; do not repeat the same drills unless the notes say they are unfinished or still weak)
+RECENT PRACTICE SESSIONS (newest first; notes and drill comments say what was planned, what was done and how it went; drills marked not done are unfinished; do not repeat the same drills unless the notes say they are unfinished or still weak)
 ${practiceLines}
 
 THE NEXT 7 DAYS (these are the only days available; "free" is the most golf practice that day can hold)

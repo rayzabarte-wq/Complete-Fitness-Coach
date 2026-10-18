@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { getTenDayForecast, isWeatherConfigured } from "../services/weather.js";
 import { getActivitiesForDate } from "../services/stravaSync.js";
@@ -35,6 +36,19 @@ const sessionTypeSchema = z.enum([
 
 const movementPatternSchema = z.enum(["PUSH", "PULL", "LEGS", "CORE", "UPPER", "LOWER", "FULL_BODY"]);
 
+// Golf practice drills: a checklist, each with a tick and a comment.
+const drillsSchema = z
+  .array(
+    z.object({
+      name: z.string().trim().min(1).max(80),
+      detail: z.string().trim().max(400).default(""),
+      minutes: z.number().int().min(0).max(240).default(0),
+      done: z.boolean().default(false),
+      comment: z.string().trim().max(500).default(""),
+    })
+  )
+  .max(10);
+
 const createPlannedSessionSchema = z
   .object({
     date: z.string().datetime(),
@@ -45,6 +59,7 @@ const createPlannedSessionSchema = z
     // editable. Left out (or ignored) for REST, which never counts toward
     // scheduled time totals.
     estimatedMinutes: z.number().int().positive().optional(),
+    drills: drillsSchema.optional(),
   })
   .refine((data) => data.type !== "STRENGTH" || data.movementPattern, {
     message: "movementPattern is required when type is STRENGTH",
@@ -159,7 +174,7 @@ calendarRouter.post("/", async (req: AuthedRequest, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.flatten() });
   }
-  const { date, type, movementPattern, notes, estimatedMinutes } = parsed.data;
+  const { date, type, movementPattern, notes, estimatedMinutes, drills } = parsed.data;
 
   const session = await prisma.plannedSession.create({
     data: {
@@ -169,6 +184,7 @@ calendarRouter.post("/", async (req: AuthedRequest, res) => {
       movementPattern,
       notes,
       estimatedMinutes: type === "REST" ? undefined : estimatedMinutes,
+      drills: drills?.length ? drills : undefined,
     },
   });
   res.status(201).json(session);
@@ -186,6 +202,7 @@ const updatePlannedSessionSchema = z
     // actualMinutes by hand (as opposed to linking a Strava activity, which
     // goes through POST /:id/strava-activity instead).
     actualMinutes: z.number().int().positive().optional(),
+    drills: drillsSchema.optional(),
   })
   .refine((data) => data.type !== "STRENGTH" || data.movementPattern, {
     message: "movementPattern is required when changing type to STRENGTH",
@@ -201,7 +218,7 @@ calendarRouter.patch("/:id", async (req: AuthedRequest, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.flatten() });
   }
-  const { date, type, movementPattern, estimatedMinutes, notes, completed, actualMinutes } = parsed.data;
+  const { date, type, movementPattern, estimatedMinutes, notes, completed, actualMinutes, drills } = parsed.data;
 
   const existing = await prisma.plannedSession.findFirst({ where: { id: req.params.id, userId: req.userId } });
   if (!existing) {
@@ -222,9 +239,11 @@ calendarRouter.patch("/:id", async (req: AuthedRequest, res) => {
       estimatedMinutes: resolvedType === "REST" ? null : estimatedMinutes,
       notes,
       completed,
+      // An empty list clears the checklist.
+      drills: drills === undefined ? undefined : drills.length ? drills : Prisma.DbNull,
       // A hand edit makes it the person's own entry: re-running auto-fill
       // will no longer replace it.
-      ...(date || type || movementPattern || estimatedMinutes || notes !== undefined ? { autoPlanned: false } : {}),
+      ...(date || type || movementPattern || estimatedMinutes || notes !== undefined || drills !== undefined ? { autoPlanned: false } : {}),
       ...(actualMinutes !== undefined
         ? { actualMinutes, actualSource: "MANUAL" as const, stravaActivityId: null }
         : {}),

@@ -197,6 +197,15 @@ export type SessionType =
 
 export type ActualTimeSource = "MANUAL" | "STRAVA";
 
+/** One drill on a golf practice session: ticked off and commented on like a strength set. */
+export interface PlannedDrill {
+  name: string;
+  detail: string;
+  minutes: number;
+  done: boolean;
+  comment: string;
+}
+
 export interface PlannedSession {
   id: string;
   date: string;
@@ -209,6 +218,8 @@ export interface PlannedSession {
   actualSource: ActualTimeSource | null;
   stravaActivityId: string | null;
   autoPlanned: boolean;
+  /** Golf practice only. */
+  drills?: PlannedDrill[] | null;
 }
 
 export interface StravaActivity {
@@ -940,6 +951,7 @@ export const api = {
     movementPattern?: MovementPattern;
     notes?: string;
     estimatedMinutes?: number;
+    drills?: PlannedDrill[];
   }) => request<PlannedSession>("/calendar", { method: "POST", body: JSON.stringify(data) }),
 
   updatePlannedSession: (
@@ -952,6 +964,7 @@ export const api = {
       notes?: string;
       completed?: boolean;
       actualMinutes?: number;
+      drills?: PlannedDrill[];
     }
   ) => request<PlannedSession>(`/calendar/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
 

@@ -1,10 +1,11 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api, DayForecast, DaySummary, PlannedSession, SessionType, MovementPattern, StravaActivity, GolfSessionType, GolfSessionPlan } from "../lib/api.js";
+import { api, PlannedDrill, DayForecast, DaySummary, PlannedSession, SessionType, MovementPattern, StravaActivity, GolfSessionType, GolfSessionPlan } from "../lib/api.js";
 import { ACTIVITY_COLORS, FOCUS_LABELS, activityForSessionType } from "../lib/activity.js";
 import { quoteForDate } from "../lib/quotes.js";
 import MessageCards from "../components/MessageCards.js";
 import GolfWeek from "../components/GolfWeek.js";
+import GolfDrillChecklist from "../components/GolfDrillChecklist.js";
 import { requestLocation, parseLocalDate, formatLocalDateKey } from "../lib/location.js";
 import {
   fullLabelFor,
@@ -749,7 +750,7 @@ function GolfSuggestion({
   onApply,
 }: {
   type: GolfSessionType;
-  onApply: (notes: string, minutes: number) => void;
+  onApply: (notes: string, minutes: number, drills: PlannedDrill[]) => void;
 }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -759,14 +760,12 @@ function GolfSuggestion({
     setError(null);
     try {
       const plan: GolfSessionPlan = await api.generateGolfPlan(type);
-      const notes = [
-        `Focus: ${plan.focusSummary}`,
-        "",
-        ...plan.drills.map((d, i) => `${i + 1}. ${d.name} (${d.minutes} min) — ${d.detail}`),
-        "",
-        `Why: ${plan.reasoning}`,
-      ].join("\n");
-      onApply(notes, plan.totalMinutes);
+      const notes = [`Focus: ${plan.focusSummary}`, `Why: ${plan.reasoning}`].join("\n");
+      onApply(
+        notes,
+        plan.totalMinutes,
+        plan.drills.map((d) => ({ name: d.name, detail: d.detail, minutes: d.minutes, done: false, comment: "" }))
+      );
     } catch (err: any) {
       setError(err.message ?? "Failed to generate a session");
     } finally {
@@ -817,6 +816,7 @@ function AddSessionForm({
   const type = resolveType(category, subType);
   const [estimatedMinutes, setEstimatedMinutes] = useState(() => String(DEFAULT_MINUTES[type] || 45));
   const [notes, setNotes] = useState("");
+  const [drills, setDrills] = useState<PlannedDrill[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -844,6 +844,7 @@ function AddSessionForm({
         movementPattern: type === "STRENGTH" ? movementPattern : undefined,
         notes: notes || undefined,
         estimatedMinutes: type !== "REST" && estimatedMinutes ? Number(estimatedMinutes) : undefined,
+        drills: isGolfTrainingType(type) && drills.length ? drills : undefined,
       });
       onCreated();
     } catch (err: any) {
@@ -893,9 +894,10 @@ function AddSessionForm({
       {isGolfTrainingType(type) && (
         <GolfSuggestion
           type={type}
-          onApply={(generatedNotes, minutes) => {
+          onApply={(generatedNotes, minutes, generatedDrills) => {
             setNotes(generatedNotes);
             setEstimatedMinutes(String(minutes));
+            setDrills(generatedDrills);
           }}
         />
       )}
@@ -987,6 +989,8 @@ function SessionRow({
         </p>
       )}
 
+      {session.drills && session.drills.length > 0 && <GolfDrillChecklist session={session} onUpdated={onUpdated} />}
+
       {showWeatherWarning && (
         <p style={{ fontSize: 12, marginTop: 4, color: "var(--danger)" }}>
           ⚠ {dayForecast!.condition.toLowerCase()}, {dayForecast!.precipProbability}% rain — consider an indoor swap
@@ -1074,6 +1078,8 @@ function EditSessionForm({
     session.estimatedMinutes ? String(session.estimatedMinutes) : ""
   );
   const [notes, setNotes] = useState(session.notes ?? "");
+  // Set only when a new AI suggestion replaces the session's drills.
+  const [newDrills, setNewDrills] = useState<PlannedDrill[] | undefined>(undefined);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -1109,6 +1115,7 @@ function EditSessionForm({
         movementPattern: type === "STRENGTH" ? movementPattern : undefined,
         estimatedMinutes: type !== "REST" && estimatedMinutes ? Number(estimatedMinutes) : undefined,
         notes: notes || undefined,
+        drills: newDrills,
       });
       onSaved();
     } catch (err: any) {
@@ -1167,9 +1174,10 @@ function EditSessionForm({
       {isGolfTrainingType(type) && (
         <GolfSuggestion
           type={type}
-          onApply={(generatedNotes, minutes) => {
+          onApply={(generatedNotes, minutes, generatedDrills) => {
             setNotes(generatedNotes);
             setEstimatedMinutes(String(minutes));
+            setNewDrills(generatedDrills);
           }}
         />
       )}

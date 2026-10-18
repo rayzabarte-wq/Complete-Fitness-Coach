@@ -1108,3 +1108,15 @@ Cycling - Turbo; Swim → Swim. Golf is handled by the golf rounds importer;
 weights and other types are ignored. Every activity handled is remembered in
 `StravaImport`, so deleting a session doesn't bring it back, and activities
 already linked by hand are left alone. The session type can be edited after.
+
+## Golf practice as a checklist
+
+A golf practice session (range, short game, putting) now carries its drills as
+`PlannedSession.drills` (`[{ name, detail, minutes, done, comment }]`). On the
+Calendar card, and under Log → Golf, each drill has a tick like a strength set
+and a comment box; changes save immediately, and ticking the last drill marks
+the session done. `notes` stays free text for the overall session. Sessions
+made from "Suggest a session (AI)" or the golf week proposal get their drills
+this way; older sessions keep the plan as text in the notes. Drill ticks and
+comments are fed back into the next suggestion and the next week's proposal, so
+unfinished drills and "pulled the 7-iron left" shape what comes next.
