@@ -22,6 +22,9 @@ function ageFrom(birthYear: number | null): number | null {
 // possible days-per-week choice would give (so Settings can preview it).
 profileRouter.get("/", async (req: AuthedRequest, res) => {
   const user = await prisma.user.findUniqueOrThrow({ where: { id: req.userId } });
+  // The latest day an upload brought in, so Settings can show whether the
+  // automatic steps import is arriving.
+  const lastImport = await prisma.stepDay.findFirst({ where: { userId: req.userId, source: "APPLE_HEALTH" }, orderBy: { updatedAt: "desc" } });
   res.json({
     email: user.email,
     birthYear: user.birthYear,
@@ -38,6 +41,7 @@ profileRouter.get("/", async (req: AuthedRequest, res) => {
     dailyStepGoal: user.dailyStepGoal,
     consentReviewed: user.consentReviewedAt !== null,
     hasIngestToken: user.ingestTokenHash !== null,
+    lastStepsImport: lastImport ? { date: lastImport.date.toISOString().slice(0, 10), steps: lastImport.steps, receivedAt: lastImport.updatedAt.toISOString() } : null,
   });
 });
 

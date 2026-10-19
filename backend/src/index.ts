@@ -38,6 +38,9 @@ import { requireAuth } from "./lib/requireAuth.js";
 
 const app = express();
 
+// Behind Railway's proxy: without this every visitor looks like one address,
+// so the rate limits are shared by everyone and log warnings.
+app.set("trust proxy", 1);
 app.use(cors());
 app.use(express.json());
 

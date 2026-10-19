@@ -13,20 +13,44 @@ import { CONSENT_REQUIRED_MESSAGE, hasConsent } from "../services/consent.js";
 
 export const stepsRouter = Router();
 
-export async function saveStepDays(userId: string, source: StepSource, days: { date: string; steps: number }[]) {
+/**
+ * Saves days of steps. `keepHigher` is for imports: a day's steps only ever go
+ * up, so a later run that read less (a locked iPhone returns nothing from
+ * Health, a run early in the day) must not wipe out what was already received.
+ */
+export async function saveStepDays(userId: string, source: StepSource, days: { date: string; steps: number }[], keepHigher = false) {
+  let kept = 0;
   for (const d of days) {
     const date = dayKeyToDate(d.date);
+    let steps = d.steps;
+    if (keepHigher) {
+      const existing = await prisma.stepDay.findUnique({ where: { userId_date: { userId, date } }, select: { steps: true } });
+      if (existing && existing.steps > steps) {
+        steps = existing.steps;
+        kept++;
+      }
+    }
     await prisma.stepDay.upsert({
       where: { userId_date: { userId, date } },
-      update: { steps: d.steps, source },
-      create: { userId, date, steps: d.steps, source },
+      update: { steps, source },
+      create: { userId, date, steps, source },
     });
   }
-  return { saved: days.length };
+  return { saved: days.length, keptHigherExisting: kept };
+}
+
+/** Shortcuts often send a date with a time or in the phone's own format; make it YYYY-MM-DD. */
+function normaliseDay(v: unknown): unknown {
+  if (typeof v !== "string") return v;
+  const s = v.trim();
+  const iso = s.match(/^(\d{4}-\d{2}-\d{2})(?:$|[T\s])/);
+  if (iso) return iso[1];
+  const t = Date.parse(s);
+  return Number.isNaN(t) ? s : new Date(t).toISOString().slice(0, 10);
 }
 
 export const stepDaySchema = z.object({
-  date: z.string().refine(isDayKey, "date must be YYYY-MM-DD"),
+  date: z.preprocess(normaliseDay, z.string().refine(isDayKey, "date must be YYYY-MM-DD, for example 2026-10-19")),
   // Lenient on purpose: the iPhone Shortcut often sends the total as text
   // ("8,234") or with decimals (8234.0), so both are accepted and rounded.
   steps: z.preprocess((v) => {

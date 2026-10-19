@@ -1229,3 +1229,7 @@ Principles it applies: mostly easy running with one or two quality sessions besi
 ## Golf practice is one planner, with the simulator as one of its types
 
 The separate "Golf simulator" row in Calendar → Plan is gone. There is one **Golf practice** planner (`POST /golf/week { from }`, no mode), and the AI proposes a mix of the practice session types: range, short game, putting and, when Simulator is switched on under session types, indoor simulator. It chooses the simulator where its data helps (distance control, dispersion, approach and driving numbers) or where outdoor practice is unlikely to suit, and the other types where turf, bunkers, putting or outdoor ball flight matter. The sessions-per-week target still counts all of them, simulator sessions still respect the longest-club limit in Settings → Golf, and sessions already on the calendar still count. No database change.
+
+## Steps import hardening
+
+The iPhone Shortcut import (`POST /ingest/steps`) is more forgiving: the date can carry a time or be in the phone's own format, the token header is accepted in any case with stray quotes or a repeated "Bearer", and `GET /ingest/ping` checks the token and consent without sending data. A day's imported steps only ever go up, so a late or empty run (iPhone Health can't be read while the phone is locked) never overwrites steps already received. Rejections are logged on the server (never the token). Settings → Data import shows the last steps received and when. The server also trusts Railway's proxy, so rate limits are per visitor rather than shared.

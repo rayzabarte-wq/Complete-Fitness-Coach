@@ -330,6 +330,13 @@ function DataImportSection({ profile, onChanged }: { profile: Profile; onChanged
       ) : (
         <div className="text-dim" style={{ fontSize: 13 }}>{profile.hasIngestToken ? "A token is active." : "No token yet."}</div>
       )}
+      {profile.hasIngestToken && (
+        <p style={{ fontSize: 13, margin: "8px 0 0", color: profile.lastStepsImport ? "var(--text)" : "var(--danger)" }}>
+          {profile.lastStepsImport
+            ? `Last steps received: ${profile.lastStepsImport.steps.toLocaleString()} for ${new Date(profile.lastStepsImport.date).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" })}, sent ${new Date(profile.lastStepsImport.receivedAt).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}.`
+            : "No steps have been received from your iPhone yet."}
+        </p>
+      )}
       {error && <p style={{ color: "var(--danger)", fontSize: 13 }}>{error}</p>}
       <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
         <button className="button-primary" onClick={create} style={{ flex: 1 }}>
@@ -358,6 +365,9 @@ function DataImportSection({ profile, onChanged }: { profile: Profile; onChanged
           </li>
           <li>In Automation, run it daily (for example at 23:30) with "Run immediately" switched on.</li>
         </ol>
+        <p style={{ fontSize: 12 }}>
+          If it stops arriving: iPhone Health data can't be read while the phone is locked, so an automation at a time you're asleep can come back empty. Set it for a time the phone is likely unlocked (or run it from the home screen), keep "Run immediately" on, and make sure the header is exactly <span style={code}>Authorization</span> with the value <span style={code}>Bearer cfc_…</span> (the token from above; a replaced token stops the old one working). A day's steps only ever go up, so a late or empty run never overwrites what has already arrived.
+        </p>
         <p className="text-dim" style={{ fontSize: 12 }}>Your Garmin's steps reach Apple Health through Garmin Connect's Apple Health sharing, so this picks those up too.</p>
       </details>
 

@@ -483,6 +483,7 @@ export interface Profile {
   dailyStepGoal: number | null;
   consentReviewed: boolean;
   hasIngestToken: boolean;
+  lastStepsImport: { date: string; steps: number; receivedAt: string } | null;
 }
 
 export type ConsentPurpose = "PROFILE" | "BODY_DATA" | "BENCHMARKING" | "PRODUCT_ANALYTICS";
