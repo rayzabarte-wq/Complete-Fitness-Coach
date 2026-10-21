@@ -42,13 +42,12 @@ export default function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
       if (err.requires2fa) {
         setNeedsCode(true);
       } else {
-        setError(err.message);
+        setError(err.status === 401 && /invalid email or password/i.test(err.message) ? `${err.message}. If you're new here, tap "Create an account" below.` : err.message);
       }
     }
   }
 
-  // Only succeeds once — see backend /auth/register, which refuses after
-  // the first account exists.
+  // Creates the account, then goes on to 2FA setup.
   const [creating, setCreating] = useState(false);
   async function handleRegister(e: React.FormEvent) {
     e.preventDefault();
@@ -285,19 +284,20 @@ export default function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
         )}
 
         {!needsCode && (
-          <p className="text-dim" style={{ fontSize: 13, marginTop: 12 }}>
-            First time here?{" "}
+          <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid var(--border)" }}>
+            <div className="text-dim" style={{ fontSize: 13, marginBottom: 8 }}>First time here?</div>
             <button
               type="button"
+              className="button-secondary"
+              style={{ width: "100%" }}
               onClick={() => {
                 setError(null);
                 setMode("register");
               }}
-              style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", padding: 0 }}
             >
               Create an account
             </button>
-          </p>
+          </div>
         )}
       </div>
     </div>

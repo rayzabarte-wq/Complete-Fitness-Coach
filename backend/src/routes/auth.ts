@@ -49,6 +49,8 @@ const credentialsSchema = z.object({
 authRouter.post("/register", async (req, res) => {
   const parsed = credentialsSchema.safeParse(req.body);
   if (!parsed.success) {
+    // Which fields failed, never their values.
+    console.warn("[auth] registration rejected:", JSON.stringify(parsed.error.flatten().fieldErrors));
     return res.status(400).json({ error: parsed.error.flatten() });
   }
 
