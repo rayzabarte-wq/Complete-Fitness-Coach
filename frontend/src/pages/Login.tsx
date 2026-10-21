@@ -20,7 +20,7 @@ export default function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
   const [code, setCode] = useState("");
   const [needsCode, setNeedsCode] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [mode, setMode] = useState<"login" | "forgot" | "reset">(() => (resetTokenFromUrl() ? "reset" : "login"));
+  const [mode, setMode] = useState<"login" | "register" | "forgot" | "reset">(() => (resetTokenFromUrl() ? "reset" : "login"));
   const [resetToken] = useState(resetTokenFromUrl);
 
   // Shown once, right after a fresh /auth/register, so the account isn't
@@ -49,18 +49,36 @@ export default function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
 
   // Only succeeds once — see backend /auth/register, which refuses after
   // the first account exists.
-  async function handleRegister() {
+  const [creating, setCreating] = useState(false);
+  async function handleRegister(e: React.FormEvent) {
+    e.preventDefault();
     setError(null);
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail.includes("@")) return setError("Enter your email address.");
+    if (password.length < 10) return setError("Use at least 10 characters for the password.");
+    if (password !== password2) return setError("The two passwords don't match.");
+    setCreating(true);
     try {
-      const result = await api.register(email, password);
+      const result = await api.register(cleanEmail, password);
       auth.setToken(result.token);
-      const setup = await api.setup2fa();
-      setSetupQr(setup.qrDataUrl);
-      setSetupSecret(setup.secret);
+      setEmail(cleanEmail);
+      try {
+        const setup = await api.setup2fa();
+        setSetupQr(setup.qrDataUrl);
+        setSetupSecret(setup.secret);
+      } catch {
+        // The account exists; only the 2FA step failed. Log in and set 2FA up in Settings.
+        auth.clearToken();
+        setMode("login");
+        setError("Your account was created, but the 2FA step didn't load. Log in below, then turn on 2FA in Settings.");
+      }
     } catch (err: any) {
       setError(err.message);
+    } finally {
+      setCreating(false);
     }
   }
+  const [password2, setPassword2] = useState("");
 
   async function handleConfirm2fa(e: React.FormEvent) {
     e.preventDefault();
@@ -102,6 +120,64 @@ export default function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
     );
   }
 
+  if (mode === "register") {
+    return (
+      <div>
+        {title}
+        <div className="card">
+          <h2>Create your account</h2>
+          <form onSubmit={handleRegister}>
+            <input
+              placeholder="Email"
+              type="email"
+              inputMode="email"
+              autoComplete="email"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              style={{ width: "100%", padding: 10, marginBottom: 8, boxSizing: "border-box" }}
+            />
+            <input
+              placeholder="Password (at least 10 characters)"
+              type="password"
+              autoComplete="new-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              style={{ width: "100%", padding: 10, marginBottom: 8, boxSizing: "border-box" }}
+            />
+            <input
+              placeholder="Repeat the password"
+              type="password"
+              autoComplete="new-password"
+              value={password2}
+              onChange={(e) => setPassword2(e.target.value)}
+              style={{ width: "100%", padding: 10, marginBottom: 8, boxSizing: "border-box" }}
+            />
+            <button className="button-primary" disabled={creating} style={{ width: "100%" }}>
+              {creating ? "Creating…" : "Create account"}
+            </button>
+          </form>
+          {error && <p style={{ color: "var(--danger)" }}>{error}</p>}
+          <p className="text-dim" style={{ fontSize: 13, marginTop: 12, marginBottom: 0 }}>
+            Next you'll set up 2FA with an authenticator app (Google Authenticator, Authy or 1Password), so keep your phone handy.{" "}
+            <button
+              type="button"
+              onClick={() => {
+                setError(null);
+                setMode("login");
+              }}
+              style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", padding: 0 }}
+            >
+              I already have an account
+            </button>
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (mode === "forgot") {
     return (
       <div>
@@ -125,6 +201,9 @@ export default function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
           <form onSubmit={handleConfirm2fa}>
             <input
               placeholder="6-digit code"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={7}
               value={code}
               onChange={(e) => setCode(e.target.value)}
               style={{ width: "100%", padding: 10, marginTop: 8 }}
@@ -149,6 +228,12 @@ export default function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
             <>
               <input
                 placeholder="Email"
+                type="email"
+                inputMode="email"
+                autoComplete="email"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 style={{ width: "100%", padding: 10, marginBottom: 8 }}
@@ -166,6 +251,9 @@ export default function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
             <>
               <input
                 placeholder="6-digit code"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={7}
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
                 style={{ width: "100%", padding: 10, marginBottom: 4 }}
@@ -200,7 +288,11 @@ export default function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
           <p className="text-dim" style={{ fontSize: 13, marginTop: 12 }}>
             First time here?{" "}
             <button
-              onClick={handleRegister}
+              type="button"
+              onClick={() => {
+                setError(null);
+                setMode("register");
+              }}
               style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", padding: 0 }}
             >
               Create an account

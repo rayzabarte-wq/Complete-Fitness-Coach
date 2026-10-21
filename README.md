@@ -1233,3 +1233,7 @@ The separate "Golf simulator" row in Calendar → Plan is gone. There is one **G
 ## Steps import hardening
 
 The iPhone Shortcut import (`POST /ingest/steps`) is more forgiving: the date can carry a time or be in the phone's own format, the token header is accepted in any case with stray quotes or a repeated "Bearer", and `GET /ingest/ping` checks the token and consent without sending data. A day's imported steps only ever go up, so a late or empty run (iPhone Health can't be read while the phone is locked) never overwrites steps already received. Rejections are logged on the server (never the token). Settings → Data import shows the last steps received and when. The server also trusts Railway's proxy, so rate limits are per visitor rather than shared.
+
+## Sign-up fixes
+
+After a report that someone couldn't create an account: a wrong 2FA code at the end of sign-up no longer clears the new session (that left the account created but impossible to finish, and a second try then said "already exists"); 2FA codes can be pasted as "123 456"; emails are trimmed and compared without regard to case (phones capitalise the first letter and add a trailing space), including at login and password reset; the sign-up form is its own screen with a repeat-password box and clear messages; if the 2FA step fails to load the account is kept and the person is told to log in and turn 2FA on in Settings; and a database error during registration now answers with a message instead of hanging.

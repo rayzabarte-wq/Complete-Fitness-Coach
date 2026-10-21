@@ -165,7 +165,7 @@ accountRouter.patch("/preferences", requireAuth, async (req: AuthedRequest, res)
 
 const deleteAccountSchema = z.object({
   password: z.string(),
-  code: z.string().length(6).optional(),
+  code: z.preprocess((v) => (typeof v === "string" ? v.replace(/\D/g, "") : v), z.string().length(6)).optional(),
 });
 
 // DELETE /account - permanently deletes this account and everything it

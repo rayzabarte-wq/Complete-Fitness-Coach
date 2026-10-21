@@ -1,6 +1,7 @@
 import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, AuthedRequest, SUSPENDED_MESSAGE } from "../lib/requireAuth.js";
 import {
@@ -29,8 +30,15 @@ const loginLimiter = rateLimit({
   message: { error: "Too many attempts. Try again in a few minutes." },
 });
 
+// Emails are compared without regard to case or stray spaces: phones capitalise
+// the first letter and keyboards add a trailing space.
+const emailSchema = z.string().trim().toLowerCase().email("Enter a valid email address");
+// 2FA codes are often shown as "123 456"; keep the digits only.
+const codeSchema = z.preprocess((v) => (typeof v === "string" ? v.replace(/\D/g, "") : v), z.string().length(6, "Enter the 6-digit code"));
+const findUserByEmail = (email: string) => prisma.user.findFirst({ where: { email: { equals: email, mode: "insensitive" } } });
+
 const credentialsSchema = z.object({
-  email: z.string().email(),
+  email: emailSchema,
   password: z.string().min(10, "Use at least 10 characters"),
 });
 
@@ -44,24 +52,33 @@ authRouter.post("/register", async (req, res) => {
     return res.status(400).json({ error: parsed.error.flatten() });
   }
 
-  const existing = await prisma.user.findUnique({ where: { email: parsed.data.email } });
+  const existing = await findUserByEmail(parsed.data.email);
   if (existing) {
-    return res.status(409).json({ error: "An account with that email already exists" });
+    return res.status(409).json({ error: "An account with that email already exists. Log in instead, or use Forgot password." });
   }
 
   const passwordHash = await hashPassword(parsed.data.password);
-  const user = await prisma.user.create({
-    data: { email: parsed.data.email, passwordHash },
-  });
+  let user;
+  try {
+    user = await prisma.user.create({
+      data: { email: parsed.data.email, passwordHash },
+    });
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      return res.status(409).json({ error: "An account with that email already exists. Log in instead, or use Forgot password." });
+    }
+    console.error("[auth] Registration failed:", err);
+    return res.status(500).json({ error: "We couldn't create the account just now. Please try again in a minute." });
+  }
 
   const token = issueSessionToken(user.id);
   res.status(201).json({ token, totpEnabled: false });
 });
 
 const loginSchema = z.object({
-  email: z.string().email(),
+  email: emailSchema,
   password: z.string(),
-  code: z.string().length(6).optional(), // required once 2FA is enabled
+  code: codeSchema.optional(), // required once 2FA is enabled
   // From an earlier successful 2FA on this device within the last 24 hours
   // (see issueTwoFactorTrustToken) — lets the code be skipped.
   trustToken: z.string().max(2000).optional(),
@@ -86,7 +103,7 @@ authRouter.post("/login", loginLimiter, async (req, res) => {
   }
   const { email, password, code, trustToken } = parsed.data;
 
-  const user = await prisma.user.findUnique({ where: { email } });
+  const user = await findUserByEmail(email);
   // Same error for "no such user" and "wrong password" so login can't be
   // used to enumerate whether an email is registered.
   if (!user || !(await verifyPassword(password, user.passwordHash))) {
@@ -128,7 +145,7 @@ authRouter.post("/2fa/setup", requireAuth, async (req: AuthedRequest, res) => {
   res.json({ secret, qrDataUrl });
 });
 
-const verify2faSchema = z.object({ code: z.string().length(6) });
+const verify2faSchema = z.object({ code: codeSchema });
 
 // POST /auth/2fa/verify - confirms the authenticator app is working, then
 // turns 2FA enforcement on for this account.
@@ -192,7 +209,7 @@ function frontendUrl(): string {
 }
 
 async function sendPasswordResetEmail(email: string): Promise<void> {
-  const user = await prisma.user.findUnique({ where: { email } });
+  const user = await findUserByEmail(email);
   if (!user) return;
 
   const token = randomBytes(32).toString("base64url");
@@ -221,7 +238,7 @@ async function sendPasswordResetEmail(email: string): Promise<void> {
   });
 }
 
-const forgotPasswordSchema = z.object({ email: z.string().email() });
+const forgotPasswordSchema = z.object({ email: emailSchema });
 
 // POST /auth/forgot-password - always gives the same answer, whether or not
 // the email has an account, so it can't be used to discover who's

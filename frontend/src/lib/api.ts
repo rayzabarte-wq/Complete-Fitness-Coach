@@ -853,7 +853,9 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     // A 401 on /auth/login with requires2fa is an expected step in the
     // login flow, not an expired session — only clear the stored token for
     // other 401s (an actual expired/invalid session).
-    if (res.status === 401 && !body.requires2fa) {
+    // A wrong 2FA code while signing up or logging in is not an expired session
+    // either; clearing the token there left new accounts stuck half set up.
+    if (res.status === 401 && !body.requires2fa && path !== "/auth/2fa/verify") {
       auth.clearToken();
     }
     const err = new Error(errorMessage(body.error, res.status)) as Error & {
