@@ -122,6 +122,20 @@ function UsersList({ users, onChanged }: { users: AdminUser[]; onChanged: () => 
 
   const shown = users.filter((u) => u.email.toLowerCase().includes(filter.trim().toLowerCase()));
 
+  async function resetTwoFactor(u: AdminUser) {
+    if (!window.confirm(`Turn off 2FA for ${u.email}? They can then use "Forgot password" on the login screen and log in without a code, and turn 2FA back on in Settings. Their trusted devices are signed out.`)) return;
+    setBusy(u.id);
+    setError(null);
+    try {
+      await api.adminReset2fa(u.id);
+      onChanged();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function toggleSuspend(u: AdminUser) {
     if (!u.suspendedAt && !window.confirm(`Suspend ${u.email}? They'll be logged out and can't log back in until reinstated. Their data is kept.`)) return;
     setBusy(u.id);
@@ -168,6 +182,11 @@ function UsersList({ users, onChanged }: { users: AdminUser[]; onChanged: () => 
               <button className="button-secondary" style={{ padding: "6px 12px", fontSize: 13 }} disabled={busy === u.id} onClick={() => toggleSuspend(u)}>
                 {u.suspendedAt ? "Reinstate" : "Suspend"}
               </button>
+              {u.totpEnabled && (
+                <button className="button-secondary" style={{ padding: "6px 12px", fontSize: 13 }} disabled={busy === u.id} onClick={() => resetTwoFactor(u)}>
+                  Turn off 2FA
+                </button>
+              )}
               <button
                 className="button-secondary"
                 style={{ padding: "6px 12px", fontSize: 13, color: "var(--danger)", borderColor: "var(--danger)" }}

@@ -33,6 +33,7 @@ profileRouter.get("/", async (req: AuthedRequest, res) => {
     heightCm: user.heightCm,
     trainingDaysPerWeek: user.trainingDaysPerWeek,
     runDaysPerWeek: user.runDaysPerWeek,
+    totpEnabled: user.totpEnabled,
     split: splitForDays(user.trainingDaysPerWeek),
     splitOptions: Array.from({ length: MAX_TRAINING_DAYS - MIN_TRAINING_DAYS + 1 }, (_, i) => {
       const days = MIN_TRAINING_DAYS + i;

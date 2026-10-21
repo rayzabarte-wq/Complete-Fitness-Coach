@@ -10,6 +10,7 @@ import WeeklyAvailability from "../components/WeeklyAvailability.js";
 import GolfSettings from "../components/GolfSettings.js";
 import { InstallSteps } from "../components/InstallApp.js";
 import { isInstalled } from "../lib/install.js";
+import { setTwoFactorTrust } from "../lib/twoFactorTrust.js";
 
 // Settings lives behind the gear icon rather than a tab: it's a
 // set-and-forget place, not somewhere you go daily.
@@ -63,6 +64,8 @@ export default function Settings({ onLoggedOut }: { onLoggedOut: () => void }) {
       </Collapsible>
 
       <Collapsible title="Profile">{profile && <ProfileSection profile={profile} onSaved={reload} />}</Collapsible>
+
+      <Collapsible title="Security">{profile && <SecuritySection profile={profile} onChanged={reload} />}</Collapsible>
 
       <Collapsible title="Privacy & consent" id="privacy">
         <div className="card">
@@ -185,6 +188,132 @@ function TrainingSection({ profile, onSaved }: { profile: Profile; onSaved: () =
           </p>
         </>
       )}
+    </div>
+  );
+}
+
+function SecuritySection({ profile, onChanged }: { profile: Profile; onChanged: () => void }) {
+  const [setup, setSetup] = useState<{ secret: string; qrDataUrl: string } | null>(null);
+  const [code, setCode] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  async function run(fn: () => Promise<void>) {
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      await fn();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const codeInput = (
+    <input
+      placeholder="6-digit code"
+      inputMode="numeric"
+      autoComplete="one-time-code"
+      maxLength={7}
+      value={code}
+      onChange={(e) => setCode(e.target.value)}
+      style={{ width: "100%", padding: 10, marginTop: 8, boxSizing: "border-box" }}
+    />
+  );
+
+  return (
+    <div className="card">
+      <strong>Two-factor authentication (2FA)</strong>
+      <p style={{ fontSize: 13, margin: "6px 0", color: profile.totpEnabled ? "var(--good)" : "var(--text)" }}>
+        {profile.totpEnabled ? "✓ On. You enter a code from your authenticator app when you log in." : "Off. Turning it on adds a 6-digit code from an authenticator app to your login."}
+      </p>
+
+      {!profile.totpEnabled && !setup && (
+        <button
+          className="button-primary"
+          disabled={busy}
+          onClick={() =>
+            run(async () => {
+              setCode("");
+              setSetup(await api.setup2fa());
+            })
+          }
+        >
+          Turn on 2FA
+        </button>
+      )}
+
+      {!profile.totpEnabled && setup && (
+        <div>
+          <p className="text-dim" style={{ fontSize: 13 }}>Scan this in Google Authenticator, Authy or 1Password, then enter the 6-digit code it shows.</p>
+          <img src={setup.qrDataUrl} alt="2FA QR code" style={{ width: "100%", maxWidth: 220 }} />
+          <p className="text-dim" style={{ fontSize: 12 }}>
+            Can't scan? Enter this manually: <code>{setup.secret}</code>
+          </p>
+          {codeInput}
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <button
+              className="button-primary"
+              style={{ flex: 1 }}
+              disabled={busy}
+              onClick={() =>
+                run(async () => {
+                  const r = await api.verify2fa(code);
+                  if (r.trustToken) setTwoFactorTrust(r.trustToken, r.trustHours ?? 24);
+                  setSetup(null);
+                  setCode("");
+                  setMessage("2FA is on.");
+                  onChanged();
+                })
+              }
+            >
+              Confirm
+            </button>
+            <button className="button-secondary" style={{ flex: 1 }} onClick={() => setSetup(null)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {profile.totpEnabled && (
+        <div>
+          <p className="text-dim" style={{ fontSize: 13 }}>
+            To turn 2FA off, enter your password and a current code. If you've lost your authenticator, ask the app's owner to turn 2FA off for your account, then use "Forgot password" on the login screen.
+          </p>
+          <input
+            type="password"
+            placeholder="Password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            style={{ width: "100%", padding: 10, boxSizing: "border-box" }}
+          />
+          {codeInput}
+          <button
+            className="button-secondary"
+            style={{ marginTop: 8 }}
+            disabled={busy || !password || !code}
+            onClick={() =>
+              run(async () => {
+                await api.disable2fa(password, code);
+                setPassword("");
+                setCode("");
+                setMessage("2FA is off.");
+                onChanged();
+              })
+            }
+          >
+            Turn off 2FA
+          </button>
+        </div>
+      )}
+      {error && <p style={{ color: "var(--danger)", fontSize: 13 }}>{error}</p>}
+      {message && <p style={{ color: "var(--good)", fontSize: 13 }}>{message}</p>}
     </div>
   );
 }

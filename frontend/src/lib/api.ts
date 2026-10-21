@@ -478,6 +478,7 @@ export interface Profile {
   heightCm: number | null;
   trainingDaysPerWeek: number;
   runDaysPerWeek: number;
+  totpEnabled: boolean;
   split: Split;
   splitOptions: { days: number; split: Split }[];
   dailyStepGoal: number | null;
@@ -901,6 +902,9 @@ export const api = {
     request<{ message: string }>("/auth/reset-password", { method: "POST", body: JSON.stringify({ token, password }) }),
   setup2fa: () => request<{ secret: string; qrDataUrl: string }>("/auth/2fa/setup", { method: "POST" }),
 
+  disable2fa: (password: string, code: string) =>
+    request<{ totpEnabled: boolean }>("/auth/2fa/disable", { method: "POST", body: JSON.stringify({ password, code }) }),
+
   verify2fa: (code: string) =>
     request<{ totpEnabled: boolean; trustToken?: string; trustHours?: number }>("/auth/2fa/verify", {
       method: "POST",
@@ -1190,6 +1194,7 @@ export const api = {
   adminMe: () => request<{ isAdmin: boolean; totpEnabled: boolean }>("/admin/me"),
   adminUsers: () => request<AdminUsersResponse>("/admin/users"),
   adminSuspend: (id: string) => request<{ ok: true }>(`/admin/users/${id}/suspend`, { method: "POST" }),
+  adminReset2fa: (id: string) => request<{ ok: true }>(`/admin/users/${id}/reset-2fa`, { method: "POST" }),
   adminReinstate: (id: string) => request<{ ok: true }>(`/admin/users/${id}/reinstate`, { method: "POST" }),
   adminDeleteUser: (id: string, confirmEmail: string) =>
     request<void>(`/admin/users/${id}`, { method: "DELETE", body: JSON.stringify({ confirmEmail }) }),

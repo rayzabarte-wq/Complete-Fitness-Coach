@@ -94,6 +94,18 @@ adminRouter.post("/users/:id/reinstate", async (req: AdminRequest, res) => {
   res.json({ ok: true });
 });
 
+// POST /admin/users/:id/reset-2fa - switches 2FA off for someone who has lost
+// their authenticator, so they can use Forgot password and log in again (a
+// reset link doesn't remove the code step). Also signs out their trusted
+// devices. The person can turn 2FA back on in Settings → Security.
+adminRouter.post("/users/:id/reset-2fa", async (req: AdminRequest, res) => {
+  const r = await actionableUser(req.params.id);
+  if (r.error) return res.status(r.error.status).json({ error: r.error.message });
+  await prisma.user.update({ where: { id: r.user.id }, data: { totpEnabled: false, totpSecret: null, sessionsValidAfter: new Date() } });
+  await audit(req.adminEmail!, "reset-2fa", r.user.email);
+  res.json({ ok: true });
+});
+
 const deleteSchema = z.object({ confirmEmail: z.string() });
 
 // DELETE /admin/users/:id - permanent. The admin must type the person's

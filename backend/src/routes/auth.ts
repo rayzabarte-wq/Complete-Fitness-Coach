@@ -18,6 +18,7 @@ import {
 import QRCode from "qrcode";
 import { createHash, randomBytes } from "node:crypto";
 import { sendEmail } from "../services/email.js";
+import { isAdminEmail } from "../lib/requireAdmin.js";
 
 export const authRouter = Router();
 
@@ -139,12 +140,33 @@ authRouter.post("/login", loginLimiter, async (req, res) => {
 // enforced until /2fa/verify confirms the user can generate a valid code.
 authRouter.post("/2fa/setup", requireAuth, async (req: AuthedRequest, res) => {
   const user = await prisma.user.findUniqueOrThrow({ where: { id: req.userId } });
+  // Replacing the secret of an account that already uses 2FA would lock the
+  // person out if they never finished, and would let anyone holding a session
+  // swap the authenticator. Turn it off first (that needs a current code).
+  if (user.totpEnabled) return res.status(400).json({ error: "2FA is already on. Turn it off first if you want to set it up again." });
 
   const secret = generateTotpSecret();
   await prisma.user.update({ where: { id: user.id }, data: { totpSecret: secret } });
 
   const qrDataUrl = await QRCode.toDataURL(totpKeyUri(user.email, secret));
   res.json({ secret, qrDataUrl });
+});
+
+const disable2faSchema = z.object({ password: z.string().min(1, "Enter your password"), code: codeSchema });
+
+// POST /auth/2fa/disable - turns 2FA off for the signed-in account. Needs the
+// password and a current code, so a borrowed session can't switch it off.
+// Admin accounts must keep 2FA (the admin area requires it).
+authRouter.post("/2fa/disable", requireAuth, loginLimiter, async (req: AuthedRequest, res) => {
+  const parsed = disable2faSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: req.userId } });
+  if (!user.totpEnabled) return res.json({ totpEnabled: false });
+  if (isAdminEmail(user.email)) return res.status(403).json({ error: "Admin accounts need 2FA, so it can't be turned off here." });
+  if (!(await verifyPassword(parsed.data.password, user.passwordHash))) return res.status(401).json({ error: "That password isn't right." });
+  if (!user.totpSecret || !verifyTotpCode(user.totpSecret, parsed.data.code)) return res.status(401).json({ error: "Invalid 2FA code" });
+  await prisma.user.update({ where: { id: user.id }, data: { totpEnabled: false, totpSecret: null } });
+  res.json({ totpEnabled: false });
 });
 
 const verify2faSchema = z.object({ code: codeSchema });

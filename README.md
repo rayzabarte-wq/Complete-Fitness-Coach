@@ -1237,3 +1237,9 @@ The iPhone Shortcut import (`POST /ingest/steps`) is more forgiving: the date ca
 ## Sign-up fixes
 
 After a report that someone couldn't create an account: a wrong 2FA code at the end of sign-up no longer clears the new session (that left the account created but impossible to finish, and a second try then said "already exists"); 2FA codes can be pasted as "123 456"; emails are trimmed and compared without regard to case (phones capitalise the first letter and add a trailing space), including at login and password reset; the sign-up form is its own screen with a repeat-password box and clear messages; if the 2FA step fails to load the account is kept and the person is told to log in and turn 2FA on in Settings; and a database error during registration now answers with a message instead of hanging.
+
+## Optional 2FA
+
+2FA is the person's choice. After sign-up they pick "Set up 2FA" or "Skip for now" (and can skip from the QR screen too). Settings → Security shows whether it is on: off, it offers "Turn on 2FA" (QR code, then a code to confirm); on, it offers "Turn off 2FA", which needs the password and a current code (`POST /auth/2fa/disable`). Setting up again while 2FA is on is refused, so nobody can swap the authenticator from a borrowed session or be locked out by an abandoned replacement; turn it off first. Admin accounts can't turn 2FA off, because the admin area needs it.
+
+**Lost authenticator.** Admin → Users shows "Turn off 2FA" on any account that has it (`POST /admin/users/:id/reset-2fa`, recorded in the audit log). It clears the secret and signs out the person's trusted devices. They then use "Forgot password" on the login screen (a reset link doesn't remove the code step by itself), log in without a code and turn 2FA back on in Settings → Security. There are no recovery codes. No database change.

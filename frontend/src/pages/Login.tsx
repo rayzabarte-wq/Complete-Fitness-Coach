@@ -61,16 +61,7 @@ export default function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
       const result = await api.register(cleanEmail, password);
       auth.setToken(result.token);
       setEmail(cleanEmail);
-      try {
-        const setup = await api.setup2fa();
-        setSetupQr(setup.qrDataUrl);
-        setSetupSecret(setup.secret);
-      } catch {
-        // The account exists; only the 2FA step failed. Log in and set 2FA up in Settings.
-        auth.clearToken();
-        setMode("login");
-        setError("Your account was created, but the 2FA step didn't load. Log in below, then turn on 2FA in Settings.");
-      }
+      setChoose2fa(true);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -78,6 +69,20 @@ export default function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
     }
   }
   const [password2, setPassword2] = useState("");
+  // After sign-up: set up 2FA now, or skip and do it later in Settings → Security.
+  const [choose2fa, setChoose2fa] = useState(false);
+
+  async function startTwoFactorSetup() {
+    setError(null);
+    try {
+      const setup = await api.setup2fa();
+      setSetupQr(setup.qrDataUrl);
+      setSetupSecret(setup.secret);
+      setChoose2fa(false);
+    } catch (err: any) {
+      setError(err.message);
+    }
+  }
 
   async function handleConfirm2fa(e: React.FormEvent) {
     e.preventDefault();
@@ -119,7 +124,7 @@ export default function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
     );
   }
 
-  if (mode === "register") {
+  if (mode === "register" && !choose2fa && !setupQr) {
     return (
       <div>
         {title}
@@ -160,7 +165,7 @@ export default function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
           </form>
           {error && <p style={{ color: "var(--danger)" }}>{error}</p>}
           <p className="text-dim" style={{ fontSize: 13, marginTop: 12, marginBottom: 0 }}>
-            Next you'll set up 2FA with an authenticator app (Google Authenticator, Authy or 1Password), so keep your phone handy.{" "}
+            Next you can choose whether to add 2FA.{" "}
             <button
               type="button"
               onClick={() => {
@@ -182,6 +187,27 @@ export default function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
       <div>
         {title}
         <ForgotPassword initialEmail={email} onBack={backToLogin} />
+      </div>
+    );
+  }
+
+  if (choose2fa && !setupQr) {
+    return (
+      <div>
+        {title}
+        <div className="card">
+          <h2>Your account is ready</h2>
+          <p className="text-dim" style={{ fontSize: 14 }}>
+            Add two-factor authentication (2FA) for extra protection? You'd enter a 6-digit code from an authenticator app (Google Authenticator, Authy or 1Password) as well as your password. The app holds body and health data, so it's worth doing, but it's your choice and you can turn it on or off later in Settings → Security.
+          </p>
+          <button className="button-primary" style={{ width: "100%" }} onClick={startTwoFactorSetup}>
+            Set up 2FA
+          </button>
+          <button className="button-secondary" style={{ width: "100%", marginTop: 8 }} onClick={onLoggedIn}>
+            Skip for now
+          </button>
+          {error && <p style={{ color: "var(--danger)" }}>{error}</p>}
+        </div>
       </div>
     );
   }
@@ -211,6 +237,9 @@ export default function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
               Confirm & finish setup
             </button>
           </form>
+          <button type="button" className="button-quiet" style={{ marginTop: 8 }} onClick={onLoggedIn}>
+            Skip for now
+          </button>
           {error && <p style={{ color: "var(--danger)" }}>{error}</p>}
         </div>
       </div>
