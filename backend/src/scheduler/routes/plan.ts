@@ -259,6 +259,36 @@ planRouter.post("/:id/approaches/generate", async (req: AuthedRequest, res) => {
   }
 });
 
+// PATCH /plan/:id/goals - change the overall aim and/or any sport's goal at any
+// point (draft or active), without regenerating approaches. A sport's goal is
+// also its "ambition" shown with progress, so the two are kept the same.
+const updateGoalsSchema = z.object({
+  overallGoal: z.string().trim().max(600).optional(),
+  sportGoals: z.array(z.object({ sport: sportSchema, goal: z.string().trim().max(300) })).max(7).optional(),
+});
+
+planRouter.patch("/:id/goals", async (req: AuthedRequest, res) => {
+  const plan = await loadOwnedPlan(req.userId, req.params.id);
+  if (!plan) return res.status(404).json({ error: "Plan not found" });
+  const parsed = updateGoalsSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Keep the overall aim to 600 characters and each sport's goal to 300." });
+  const { overallGoal, sportGoals = [] } = parsed.data;
+  const userId = req.userId!;
+
+  await prisma.$transaction(async (tx) => {
+    if (overallGoal !== undefined) await tx.trainingPlan.update({ where: { id: plan.id }, data: { overallGoal: overallGoal || null } });
+    for (const { sport, goal } of sportGoals) {
+      await tx.sportPriority.updateMany({ where: { planId: plan.id, sport }, data: { goalNote: goal || null } });
+      if (goal) {
+        await tx.sportAmbition.upsert({ where: { userId_sport: { userId, sport } }, update: { statement: goal }, create: { userId, sport, statement: goal } });
+      } else {
+        await tx.sportAmbition.deleteMany({ where: { userId, sport } });
+      }
+    }
+  });
+  res.json(await loadFullPlan(plan.id));
+});
+
 // POST /plan/:id/assess - the AI's view of whether each sport's sessions a week
 // will realistically move the person towards their goals. Advice only; changes nothing.
 const assessLimiter = rateLimit({ windowMs: 60 * 1000, limit: 6, standardHeaders: true, legacyHeaders: false, message: { error: "That's a lot of checks in a minute. Wait a moment and try again." } });

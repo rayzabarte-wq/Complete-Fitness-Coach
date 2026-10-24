@@ -74,6 +74,8 @@ export default function Plan() {
   const [assessment, setAssessment] = useState<PlanAssessment | null>(null);
   const [assessing, setAssessing] = useState(false);
   const [assessError, setAssessError] = useState<string | null>(null);
+  // True once a number or goal has changed since the AI last looked.
+  const [assessStale, setAssessStale] = useState(false);
 
   useEffect(() => {
     refresh();
@@ -171,10 +173,28 @@ export default function Plan() {
     setAssessError(null);
     try {
       setAssessment(await api.assessPlan(plan.id));
+      setAssessStale(false);
     } catch (err) {
       setAssessError(err instanceof Error ? err.message : "Couldn't check the plan just now");
     } finally {
       setAssessing(false);
+    }
+  }
+
+  // Goals can be reworded at any point; the verdict can then be checked again.
+  async function handleSaveGoals(overallGoal: string, sportGoals: { sport: Sport; goal: string }[]) {
+    if (!plan) return;
+    setBusy(true);
+    setAssessError(null);
+    try {
+      setPlan(await api.updatePlanGoals(plan.id, { overallGoal, sportGoals }));
+      setAssessStale(true);
+      return true;
+    } catch (err) {
+      setAssessError(err instanceof Error ? err.message : "Couldn't save your goals");
+      return false;
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -185,7 +205,7 @@ export default function Plan() {
     setError(null);
     try {
       setPlan(await api.updateApproach(plan.id, approach.sport, { status: approach.status, weeklySessionTarget }));
-      setAssessment(null); // it was about the old numbers
+      setAssessStale(true); // the verdict was about the old numbers
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to change sessions per week");
     } finally {
@@ -405,6 +425,8 @@ export default function Plan() {
             error={assessError}
             busy={busy}
             onRun={runAssessment}
+            stale={assessStale}
+            onSaveGoals={handleSaveGoals}
             onApply={(sport, n) => {
               const a = plan.approaches.find((x) => x.sport === sport);
               if (a) handleFrequency(a, n);
@@ -438,6 +460,8 @@ export default function Plan() {
             error={assessError}
             busy={busy}
             onRun={runAssessment}
+            stale={assessStale}
+            onSaveGoals={handleSaveGoals}
             onApply={(sport, n) => {
               const a = plan.approaches.find((x) => x.sport === sport);
               if (a) handleFrequency(a, n);
@@ -855,6 +879,8 @@ function AssessmentCard({
   error,
   busy,
   onRun,
+  stale,
+  onSaveGoals,
   onApply,
 }: {
   plan: TrainingPlan;
@@ -863,9 +889,27 @@ function AssessmentCard({
   error: string | null;
   busy: boolean;
   onRun: () => void;
+  stale: boolean;
+  onSaveGoals: (overallGoal: string, sportGoals: { sport: Sport; goal: string }[]) => Promise<boolean | undefined>;
   onApply: (sport: Sport, sessionsPerWeek: number) => void;
 }) {
+  const [editingGoals, setEditingGoals] = useState(false);
+  const [aim, setAim] = useState("");
+  const [goals, setGoals] = useState<Record<string, string>>({});
   if (plan.approaches.length === 0) return null;
+
+  function openGoals() {
+    setAim(plan.overallGoal ?? "");
+    setGoals(Object.fromEntries(plan.priorities.map((p) => [p.sport, p.goalNote ?? ""])));
+    setEditingGoals(true);
+  }
+  async function saveGoals() {
+    const ok = await onSaveGoals(aim, plan.priorities.map((p) => ({ sport: p.sport, goal: goals[p.sport] ?? "" })));
+    if (ok) {
+      setEditingGoals(false);
+      onRun();
+    }
+  }
   return (
     <div className="card">
       <strong>Will these frequencies get you there?</strong>
@@ -873,9 +917,58 @@ function AssessmentCard({
         The AI looks at each sport's sessions a week against your goal for it, what you've actually been doing lately, and the time you have, and says how far
         it expects you to get. It's advice, not a promise. You decide, and you can change any number.
       </p>
-      <button className="button-secondary" disabled={assessing || busy} onClick={onRun}>
-        {assessing ? "Checking…" : assessment ? "Check again" : "Check my frequencies against my goals"}
-      </button>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <button className="button-secondary" disabled={assessing || busy} onClick={onRun}>
+          {assessing ? "Checking…" : assessment ? "Check again" : "Check my frequencies against my goals"}
+        </button>
+        {!editingGoals && (
+          <button className="button-quiet" disabled={assessing || busy} onClick={openGoals}>
+            Adjust my goals
+          </button>
+        )}
+      </div>
+      {stale && assessment && !assessing && (
+        <p style={{ fontSize: 12, margin: "8px 0 0", color: "var(--danger)" }}>
+          You've changed something since this was checked. Check again to see how the verdict moves.
+        </p>
+      )}
+      {editingGoals && (
+        <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+          <p className="text-dim" style={{ fontSize: 12, margin: 0 }}>
+            A clearer, more specific goal gives a fairer verdict, and a realistic one is more likely to be on track. Change them, or the sessions a week below, then check again.
+          </p>
+          <label style={{ fontSize: 12, fontWeight: 600 }}>
+            Overall aim
+            <textarea
+              value={aim}
+              onChange={(e) => setAim(e.target.value)}
+              maxLength={600}
+              rows={2}
+              style={{ width: "100%", marginTop: 4, padding: 8 }}
+            />
+          </label>
+          {plan.priorities.map((p) => (
+            <label key={p.sport} style={{ fontSize: 12, fontWeight: 600 }}>
+              {SPORT_LABELS[p.sport]} goal
+              <input
+                value={goals[p.sport] ?? ""}
+                onChange={(e) => setGoals((g) => ({ ...g, [p.sport]: e.target.value }))}
+                maxLength={300}
+                placeholder="e.g. run 10k in under 55 minutes by March"
+                style={{ width: "100%", marginTop: 4, padding: 8 }}
+              />
+            </label>
+          ))}
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="button-primary" disabled={busy || assessing} onClick={saveGoals}>
+              Save and check again
+            </button>
+            <button className="button-quiet" disabled={busy || assessing} onClick={() => setEditingGoals(false)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
       {error && <p style={{ color: "var(--danger)", fontSize: 13, margin: "8px 0 0" }}>{error}</p>}
       {assessment && (
         <div style={{ marginTop: 10 }}>
@@ -886,10 +979,17 @@ function AssessmentCard({
             return (
               <div key={s.sport} style={{ borderTop: "1px solid var(--border)", padding: "8px 0" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                  <strong style={{ fontSize: 13 }}>
-                    {SPORT_LABELS[s.sport]} · {current} a week
-                  </strong>
+                  <strong style={{ fontSize: 13 }}>{SPORT_LABELS[s.sport]}</strong>
                   <span style={{ background: v.bg, borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700 }}>{v.label}</span>
+                  <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6 }}>
+                    <button className="button-quiet" aria-label={`One fewer ${SPORT_LABELS[s.sport]} session a week`} disabled={busy || assessing || (current ?? 1) <= 1} onClick={() => onApply(s.sport, (current ?? 2) - 1)}>
+                      −
+                    </button>
+                    <strong style={{ fontSize: 13 }}>{current} a week</strong>
+                    <button className="button-quiet" aria-label={`One more ${SPORT_LABELS[s.sport]} session a week`} disabled={busy || assessing || (current ?? 7) >= 7} onClick={() => onApply(s.sport, (current ?? 0) + 1)}>
+                      +
+                    </button>
+                  </span>
                 </div>
                 <p className="text-dim" style={{ fontSize: 13, margin: "4px 0 0" }}>{s.assessment}</p>
                 {s.suggestedSessionsPerWeek !== null && (

@@ -1155,6 +1155,8 @@ export const api = {
     }
   ) => request<TrainingPlan>(`/plan/${planId}/priorities`, { method: "PATCH", body: JSON.stringify(data) }),
 
+  updatePlanGoals: (planId: string, data: { overallGoal?: string; sportGoals?: { sport: Sport; goal: string }[] }) =>
+    request<TrainingPlan>(`/plan/${planId}/goals`, { method: "PATCH", body: JSON.stringify(data) }),
   assessPlan: (planId: string) => tracked("plan_assessed", request<PlanAssessment>(`/plan/${planId}/assess`, { method: "POST" })),
   generateApproaches: (planId: string) => request<TrainingPlan>(`/plan/${planId}/approaches/generate`, { method: "POST" }),
 
