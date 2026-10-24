@@ -1254,3 +1254,13 @@ Admin accounts can't be changed from the Admin page and can't turn 2FA off thems
 4. Turn 2FA back on in **Settings → Security**, then remove `ADMIN_2FA_RESET`.
 
 Each distinct value works once, so leaving the variable in place doesn't switch 2FA off again on every restart. To do it again, change the note. For other users the Admin page already has **Turn off 2FA** (see Optional 2FA). No database change.
+
+## If Railway deployments stop or pause
+
+This happened after Railway's platform outage of 21-23 October 2026 (see status.railway.com). GitHub's commit status shows each service's last deploy (`gh api repos/<owner>/<repo>/commits/<sha>/status`), which tells you whether the problem is Railway or the code.
+
+1. In Railway, open each service (the backend and the frontend) → **Deployments**. Services that were stopped or removed during an incident don't restart on their own. On the newest deployment choose **Redeploy**, or press Ctrl/Cmd+K and choose **Deploy Latest Commit**. Variables, domains and settings are kept.
+2. Under **Settings → Source**, check the repo, that the branch is `claude/strength-app-258-setup-l7wuii`, and that **Automatic deployments** is on. If pushes still don't deploy, disconnect and reconnect the repo, and check in GitHub (repo Settings → Integrations → GitHub Apps) that the Railway app still has access.
+3. Check **Workspace settings → Billing** has an active plan; a cancelled one also stops services.
+4. Anything using a Railway API token needs a new one if the incident invalidated it.
+5. Check the backend at `<backend url>/health`, which should answer `{"ok":true,...}`. The backend runs pending database migrations as it starts.
