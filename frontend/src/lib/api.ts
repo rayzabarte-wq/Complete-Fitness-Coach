@@ -352,7 +352,8 @@ export interface FrameworkSlot {
 export interface DraftFrameworkSlot {
   sport: Sport;
   dayOfWeek: number | null;
-  timeOfDay: TimeOfDay | null;
+  /** Left out, the server picks a free time of day. */
+  timeOfDay?: TimeOfDay | null;
   sessionType?: SessionType;
   movementPattern?: MovementPattern;
   estimatedMinutes: number;
@@ -673,6 +674,19 @@ export interface DaySummary {
   scan: { weightKg: number | null; bodyFatPct: number | null; muscleMassKg: number | null; source: string } | null;
 }
 
+export interface WeekFromPlanResult {
+  planId: string;
+  planStatus: PlanStatus;
+  weekOfPlan: number;
+  totalWeeks: number;
+  endDate: string;
+  added: number;
+  replaced: number;
+  sessions: { date: string; sport: Sport; type: SessionType; label: string; minutes: number }[];
+  progress: { sport: Sport; done: number; expected: number }[];
+  notes: string[];
+}
+
 export interface RunPlanResult {
   added: number;
   restReplaced: number;
@@ -806,7 +820,7 @@ export type UsageEventName =
   | "log_steps_tab" | "log_nutrition_tab" | "log_other_sport_tab"
   | "workout_generated" | "workout_saved" | "gym_switched" | "gym_preset_applied"
   | "custom_equipment_added" | "custom_exercise_created" | "steps_saved" | "nutrition_saved"
-  | "body_scan_added" | "goal_created" | "message_dismissed" | "golf_round_logged" | "golf_goal_set" | "ambitions_saved" | "sport_goal_saved" | "availability_saved" | "golf_week_proposed" | "golf_week_added" | "golf_profile_saved" | "golf_clubs_edited" | "app_install_clicked" | "run_week_planned" | "run_days_saved" | "onboarding_completed" | "onboarding_skipped";
+  | "body_scan_added" | "goal_created" | "message_dismissed" | "golf_round_logged" | "golf_goal_set" | "ambitions_saved" | "sport_goal_saved" | "availability_saved" | "golf_week_proposed" | "golf_week_added" | "golf_profile_saved" | "golf_clubs_edited" | "app_install_clicked" | "run_week_planned" | "run_days_saved" | "onboarding_completed" | "onboarding_skipped" | "week_planned_from_plan";
 
 let trackingPausedUntil = 0;
 const lastSent = new Map<string, number>();
@@ -1295,6 +1309,8 @@ export const api = {
     request<DaySummary[]>(`/calendar/days${qs({ from, to, tzOffset: new Date().getTimezoneOffset() })}`),
   autofillWeek: (start: string, today: string) =>
     request<AutofillResult>("/calendar/autofill", { method: "POST", body: JSON.stringify({ start, today }) }),
+  planWeekFromPlan: (start: string, today: string) =>
+    tracked("week_planned_from_plan", request<WeekFromPlanResult>("/calendar/week-plan", { method: "POST", body: JSON.stringify({ start, today }) })),
   planRunWeek: (start: string, today: string) =>
     tracked("run_week_planned", request<RunPlanResult>("/calendar/run-plan", { method: "POST", body: JSON.stringify({ start, today }) })),
 };

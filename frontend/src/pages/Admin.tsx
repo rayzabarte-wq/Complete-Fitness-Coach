@@ -376,6 +376,7 @@ const FEATURE_LABELS: Record<string, string> = {
   golf_week_added: "Golf week added to calendar",
   run_week_planned: "Running week planned",
   run_days_saved: "Runs per week saved",
+  week_planned_from_plan: "Week planned from training plan",
   onboarding_completed: "Welcome journey finished",
   onboarding_skipped: "Welcome journey skipped",
   golf_profile_saved: "Golf handicap / shaping saved",

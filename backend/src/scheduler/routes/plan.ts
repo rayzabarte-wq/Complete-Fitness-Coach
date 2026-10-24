@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { Prisma } from "@prisma/client";
+import { Prisma, type TimeOfDay } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { AuthedRequest } from "../../lib/requireAuth.js";
 import {
@@ -329,19 +329,19 @@ planRouter.get("/:id/framework/slots-needed", async (req: AuthedRequest, res) =>
 // closes the current version and opens a new one, the same versioning an
 // approach-content amendment (POST /:id/amend) uses, so the dashboard can
 // still show progress against the schedule as it stood before this change.
+// A slot is a sport, a day and the minutes available. The time of day is
+// optional (it's worked out when left out), and the session type / movement
+// pattern are optional too: "Plan my week" chooses the actual workouts from
+// what has been done so far (see services/weekFromPlan.ts).
 const saveFrameworkSlotSchema = z
   .object({
     sport: sportSchema,
     dayOfWeek: z.number().int().min(0).max(6),
-    timeOfDay: timeOfDaySchema,
+    timeOfDay: timeOfDaySchema.optional(),
     sessionType: sessionTypeSchema.optional(),
     movementPattern: movementPatternSchema.optional(),
     estimatedMinutes: z.number().int().positive().optional(),
     label: z.string().optional(),
-  })
-  .refine((s) => s.sport !== "STRENGTH" || s.movementPattern, {
-    message: "movementPattern is required for STRENGTH sessions",
-    path: ["movementPattern"],
   })
   .refine((s) => s.sport === "STRENGTH" || !s.movementPattern, {
     message: "movementPattern only applies to STRENGTH sessions",
@@ -367,7 +367,28 @@ planRouter.put("/:id/framework", async (req: AuthedRequest, res) => {
 
   const parsed = saveFrameworkSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-  const { slots, note } = parsed.data;
+  const { note } = parsed.data;
+
+  // Sessions placed without a time of day get the first one that is free that
+  // day and not blocked by a constraint. Times that were given are kept.
+  const takenTimes = new Set(parsed.data.slots.filter((s) => s.timeOfDay).map((s) => `${s.dayOfWeek}-${s.timeOfDay}`));
+  const slots: (Omit<(typeof parsed.data.slots)[number], "timeOfDay"> & { timeOfDay: TimeOfDay })[] = [];
+  for (const s of parsed.data.slots) {
+    if (s.timeOfDay) {
+      slots.push({ ...s, timeOfDay: s.timeOfDay });
+      continue;
+    }
+    const time = (["MORNING", "AFTERNOON", "EVENING"] as TimeOfDay[]).find(
+      (t) => !takenTimes.has(`${s.dayOfWeek}-${t}`) && !plan.constraints.some((c) => c.daysOfWeek.includes(s.dayOfWeek) && c.blockedTimeOfDay.includes(t)),
+    );
+    if (!time) {
+      return res.status(400).json({
+        error: `There's no room for another session on ${DAY_LABELS[s.dayOfWeek]}: up to three a day, and your constraints may block some times. Pick a different day for one of them.`,
+      });
+    }
+    takenTimes.add(`${s.dayOfWeek}-${time}`);
+    slots.push({ ...s, timeOfDay: time });
+  }
 
   // No two sessions in the same day + time-of-day slot.
   const seen = new Set<string>();

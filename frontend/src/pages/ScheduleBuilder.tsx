@@ -1,6 +1,5 @@
 import { useMemo, useState, type CSSProperties } from "react";
-import { api, Sport, SportApproach, FrameworkSlot, ScheduleConstraint, TrainingPlan, TimeOfDay, MovementPattern, SessionType, DraftFrameworkSlot } from "../lib/api.js";
-import { findCategoryByLabel } from "../lib/sessionTypes.js";
+import { api, Sport, SportApproach, FrameworkSlot, ScheduleConstraint, TrainingPlan, TimeOfDay, DraftFrameworkSlot } from "../lib/api.js";
 
 const SPORT_LABELS: Record<Sport, string> = {
   STRENGTH: "Strength",
@@ -12,22 +11,21 @@ const SPORT_LABELS: Record<Sport, string> = {
   SWIM: "Swim",
 };
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const TIME_LABELS = { MORNING: "Morning", AFTERNOON: "Afternoon", EVENING: "Evening" } as const;
 const TIMES: TimeOfDay[] = ["MORNING", "AFTERNOON", "EVENING"];
-const MOVEMENT_PATTERNS: MovementPattern[] = ["PUSH", "PULL", "LEGS", "CORE"];
+const MAX_PER_DAY = TIMES.length;
+
+// A session in the weekly pattern is only a sport, a day and the minutes
+// available. What the workout actually is (which strength day, which kind of
+// run or golf practice) is chosen by "Plan my week" on the Calendar, from
+// what has been done so far in the plan.
 
 interface Card {
   key: string;
   sport: Sport;
   dayOfWeek: number | null;
+  /** Kept from a saved schedule so an unchanged day keeps its time; otherwise worked out on save. */
   timeOfDay: TimeOfDay | null;
-  sessionType: SessionType | null;
-  movementPattern: MovementPattern | null;
   estimatedMinutes: number;
-}
-
-function subTypeOptions(sport: Sport): { type: SessionType; label: string }[] {
-  return findCategoryByLabel(SPORT_LABELS[sport])?.children ?? [];
 }
 
 function buildInitialCards(approaches: SportApproach[], existingSlots: FrameworkSlot[]): Card[] {
@@ -42,8 +40,6 @@ function buildInitialCards(approaches: SportApproach[], existingSlots: Framework
         sport: approach.sport,
         dayOfWeek: existing?.dayOfWeek ?? null,
         timeOfDay: existing?.timeOfDay ?? null,
-        sessionType: existing?.sessionType ?? null,
-        movementPattern: existing?.movementPattern ?? null,
         estimatedMinutes: existing?.estimatedMinutes ?? approach.sessionMinutes,
       });
     }
@@ -83,33 +79,26 @@ export default function ScheduleBuilder({
     setCards((cur) => cur.map((c) => (c.key === key ? { ...c, ...patch } : c)));
   }
 
-  const isConstraintBlocked = (dayOfWeek: number, timeOfDay: TimeOfDay) =>
-    constraints.some((c) => c.daysOfWeek.includes(dayOfWeek) && c.blockedTimeOfDay.includes(timeOfDay));
+  // Times of day a constraint blocks, per day, so a day with no free time left
+  // (or with more sessions than free times) is flagged before saving.
+  const freeTimesOn = (dayOfWeek: number) =>
+    TIMES.filter((t) => !constraints.some((c) => c.daysOfWeek.includes(dayOfWeek) && c.blockedTimeOfDay.includes(t))).length;
 
-  // Which cards collide with another card's day+time, or with a constraint.
-  const { duplicateKeys, blockedKeys } = useMemo(() => {
-    const counts = new Map<string, string[]>();
+  const { crowdedKeys } = useMemo(() => {
+    const perDay = new Map<number, string[]>();
     for (const c of cards) {
-      if (c.dayOfWeek === null || c.timeOfDay === null) continue;
-      const key = `${c.dayOfWeek}-${c.timeOfDay}`;
-      counts.set(key, [...(counts.get(key) ?? []), c.key]);
+      if (c.dayOfWeek === null) continue;
+      perDay.set(c.dayOfWeek, [...(perDay.get(c.dayOfWeek) ?? []), c.key]);
     }
-    const duplicateKeys = new Set<string>();
-    for (const keys of counts.values()) {
-      if (keys.length > 1) keys.forEach((k) => duplicateKeys.add(k));
+    const crowdedKeys = new Set<string>();
+    for (const [day, keys] of perDay) {
+      if (keys.length > Math.min(MAX_PER_DAY, freeTimesOn(day))) keys.forEach((k) => crowdedKeys.add(k));
     }
-    const blockedKeys = new Set<string>();
-    for (const c of cards) {
-      if (c.dayOfWeek !== null && c.timeOfDay !== null && isConstraintBlocked(c.dayOfWeek, c.timeOfDay)) {
-        blockedKeys.add(c.key);
-      }
-    }
-    return { duplicateKeys, blockedKeys };
+    return { crowdedKeys };
   }, [cards, constraints]);
 
-  const unplaced = cards.filter((c) => c.dayOfWeek === null || c.timeOfDay === null);
-  const missingMovementPattern = cards.filter((c) => c.sport === "STRENGTH" && !c.movementPattern);
-  const canSave = unplaced.length === 0 && missingMovementPattern.length === 0 && duplicateKeys.size === 0 && blockedKeys.size === 0;
+  const unplaced = cards.filter((c) => c.dayOfWeek === null);
+  const canSave = unplaced.length === 0 && crowdedKeys.size === 0 && cards.every((c) => c.estimatedMinutes > 0);
 
   // Total planned minutes per day, for the grid preview.
   const minutesPerDay = useMemo(() => {
@@ -128,9 +117,7 @@ export default function ScheduleBuilder({
       const slots: DraftFrameworkSlot[] = cards.map((c) => ({
         sport: c.sport,
         dayOfWeek: c.dayOfWeek,
-        timeOfDay: c.timeOfDay,
-        sessionType: c.sessionType ?? undefined,
-        movementPattern: c.movementPattern ?? undefined,
+        timeOfDay: c.timeOfDay ?? undefined,
         estimatedMinutes: c.estimatedMinutes,
       }));
       const updated = await api.saveFramework(plan.id, slots, plan.status === "ACTIVE" ? note || undefined : undefined);
@@ -152,8 +139,8 @@ export default function ScheduleBuilder({
       <div className="card">
         <strong>Build your weekly schedule</strong>
         <p className="text-dim" style={{ fontSize: 13, marginTop: 6 }}>
-          For each session below, choose a day and time of day. The grid at the bottom updates as you go, so you can see total planned
-          time per day before saving.
+          For each session below, choose the day and how many minutes you have. That's all: when you ask for a week plan on the Calendar,
+          each of these becomes a real workout for that day, chosen from what you've done so far. The grid at the bottom shows the total per day.
         </p>
       </div>
 
@@ -164,13 +151,12 @@ export default function ScheduleBuilder({
       )}
 
       {[...cardsBySport.entries()].map(([sport, sportCards]) => {
-        const subOptions = subTypeOptions(sport);
         return (
           <div key={sport} className="card">
             <strong>{SPORT_LABELS[sport]}</strong>
             <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 10 }}>
               {sportCards.map((c, i) => {
-                const hasConflict = duplicateKeys.has(c.key) || blockedKeys.has(c.key);
+                const hasConflict = crowdedKeys.has(c.key);
                 return (
                   <div
                     key={c.key}
@@ -189,25 +175,13 @@ export default function ScheduleBuilder({
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                       <select
                         value={c.dayOfWeek ?? ""}
-                        onChange={(e) => updateCard(c.key, { dayOfWeek: e.target.value === "" ? null : Number(e.target.value) })}
+                        onChange={(e) => updateCard(c.key, { dayOfWeek: e.target.value === "" ? null : Number(e.target.value), timeOfDay: null })}
                         style={selectStyle}
                       >
                         <option value="">Day...</option>
                         {DAY_LABELS.map((d, idx) => (
                           <option key={d} value={idx}>
                             {d}
-                          </option>
-                        ))}
-                      </select>
-                      <select
-                        value={c.timeOfDay ?? ""}
-                        onChange={(e) => updateCard(c.key, { timeOfDay: (e.target.value || null) as TimeOfDay | null })}
-                        style={selectStyle}
-                      >
-                        <option value="">Time...</option>
-                        {TIMES.map((t) => (
-                          <option key={t} value={t}>
-                            {TIME_LABELS[t]}
                           </option>
                         ))}
                       </select>
@@ -225,41 +199,9 @@ export default function ScheduleBuilder({
                       </span>
                     </div>
 
-                    {sport === "STRENGTH" && (
-                      <select
-                        value={c.movementPattern ?? ""}
-                        onChange={(e) => updateCard(c.key, { movementPattern: (e.target.value || null) as MovementPattern | null })}
-                        style={selectStyle}
-                      >
-                        <option value="">Movement pattern...</option>
-                        {MOVEMENT_PATTERNS.map((mp) => (
-                          <option key={mp} value={mp}>
-                            {mp.charAt(0) + mp.slice(1).toLowerCase()}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-
-                    {subOptions.length > 0 && (
-                      <select
-                        value={c.sessionType ?? ""}
-                        onChange={(e) => updateCard(c.key, { sessionType: (e.target.value || null) as SessionType | null })}
-                        style={selectStyle}
-                      >
-                        <option value="">Any {SPORT_LABELS[sport].toLowerCase()} session</option>
-                        {subOptions.map((o) => (
-                          <option key={o.type} value={o.type}>
-                            {o.label}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-
                     {hasConflict && (
                       <p style={{ color: "var(--danger)", fontSize: 12, margin: 0 }}>
-                        {duplicateKeys.has(c.key)
-                          ? "Another session is already placed at this day/time."
-                          : "This day/time conflicts with one of your scheduling constraints."}
+                        Too many sessions on this day: up to three a day, fewer if your scheduling constraints block some times.
                       </p>
                     )}
                   </div>
@@ -300,10 +242,8 @@ export default function ScheduleBuilder({
       {!canSave && (
         <p className="text-dim" style={{ fontSize: 12 }}>
           {unplaced.length > 0
-            ? `${unplaced.length} session${unplaced.length === 1 ? "" : "s"} still need a day and time.`
-            : missingMovementPattern.length > 0
-            ? "Every Strength session needs a movement pattern."
-            : "Fix the conflicts marked in red above before saving."}
+            ? `${unplaced.length} session${unplaced.length === 1 ? "" : "s"} still need a day.`
+            : "Fix the days marked in red above before saving."}
         </p>
       )}
 

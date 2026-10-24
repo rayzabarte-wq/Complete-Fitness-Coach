@@ -7,6 +7,7 @@ export const USAGE_EVENTS = [
   "page_calendar",
   "run_week_planned",
   "run_days_saved",
+  "week_planned_from_plan",
   "onboarding_completed",
   "onboarding_skipped",
   "page_day",

@@ -1268,6 +1268,18 @@ New accounts, after the consent step, go through a four-step journey. It can be 
 
 Accounts that existed before this update are marked as done (migration `20261024210000_onboarding`), so only new accounts see it automatically. Everyone can run it again from Settings → Planning → "Set up goals and a new plan", which replaces the current plan. `POST /plan` (the manual route on the plan screen) now uses the same quarter-end rule instead of a fixed three months.
 
+## Weekly pattern and "Plan my week"
+
+The plan's weekly pattern (the schedule step after the approaches are approved) is only a **sport, a day and the minutes available** for each session. There is no workout type, movement pattern or time of day to pick; a time of day is worked out on save (the first free one that day that your constraints don't block, up to three sessions a day). Older schedules that include those details still work.
+
+Calendar → Plan → **Week from your training plan** → "Plan my week" turns that pattern into the next 7 days of real workouts (`POST /calendar/week-plan`, `scheduler/services/weekFromPlan.ts`). What each session *is* comes from what has been done so far:
+
+- **Strength** continues the split's rotation from the last strength day trained (logged or completed), spread over the pattern's days.
+- **Running** takes the run types for this week of the quarter's periodised plan (long run, tempo, fartlek, intervals, easy runs), fitted onto the days in the pattern with the usual rules (no back-to-back hard days) and capped at the slot's minutes. Run length builds from your longest recent run.
+- **Golf, cycling, turbo, walking, swimming** rotate through their session types, taking the one done least in the last 4 weeks first. The longest slot becomes the long ride / hike, and a golf slot of 3 hours or more a round. The golf simulator is only used if it's switched on.
+
+Sessions the app planned earlier that haven't happened are replaced; anything you added or changed stays, and its day's slot is left alone. Days outside the plan's dates are skipped, and the result also shows how many sessions have been done against what the pattern called for so far (it informs; it doesn't pile the missed sessions onto later weeks). The per-sport planners (strength auto-fill, running, golf) still work on their own.
+
 ## If Railway deployments stop or pause
 
 This happened after Railway's platform outage of 21-23 October 2026 (see status.railway.com). GitHub's commit status shows each service's last deploy (`gh api repos/<owner>/<repo>/commits/<sha>/status`), which tells you whether the problem is Railway or the code.

@@ -9,6 +9,7 @@ import { AuthedRequest } from "../../lib/requireAuth.js";
 import { addDays, dateToDayKey, dayKeyToDate, isDayKey } from "../../lib/dates.js";
 import { autofillWeek } from "../services/strengthAutofill.js";
 import { planRunWeek } from "../services/runPlanner.js";
+import { planWeekFromPlan, PlanWeekError } from "../services/weekFromPlan.js";
 
 export const calendarRouter = Router();
 
@@ -120,6 +121,23 @@ calendarRouter.post("/run-plan", async (req: AuthedRequest, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err instanceof Error ? err.message : "Run planning failed" });
+  }
+});
+
+// POST /calendar/week-plan - the next 7 days of workouts from the training
+// plan's weekly pattern (a day and minutes per session), choosing what each
+// session is from what has been done so far. See services/weekFromPlan.ts.
+calendarRouter.post("/week-plan", async (req: AuthedRequest, res) => {
+  const parsed = autofillSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+  try {
+    res.json(await planWeekFromPlan(req.userId!, parsed.data.start, parsed.data.today));
+  } catch (err) {
+    if (err instanceof PlanWeekError) return res.status(400).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: err instanceof Error ? err.message : "Couldn't plan the week" });
   }
 });
 

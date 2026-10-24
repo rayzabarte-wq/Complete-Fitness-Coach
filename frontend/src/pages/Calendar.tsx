@@ -1,6 +1,7 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api, RunPlanResult, DayForecast, DaySummary, PlannedSession, SessionType, MovementPattern, StravaActivity, GolfSessionType } from "../lib/api.js";
+import { api, RunPlanResult, WeekFromPlanResult, DayForecast, DaySummary, PlannedSession, SessionType, MovementPattern, StravaActivity, GolfSessionType } from "../lib/api.js";
+import { SPORT_LABELS } from "../lib/sports.js";
 import { ACTIVITY_COLORS, FOCUS_LABELS, activityForSessionType } from "../lib/activity.js";
 import { quoteForDate } from "../lib/quotes.js";
 import MessageCards from "../components/MessageCards.js";
@@ -100,6 +101,10 @@ export default function Calendar() {
   const [autofilling, setAutofilling] = useState(false);
   const [autofillNotes, setAutofillNotes] = useState<string[] | null>(null);
   const [autofillError, setAutofillError] = useState<string | null>(null);
+  const [hasPattern, setHasPattern] = useState(false);
+  const [weekPlanning, setWeekPlanning] = useState(false);
+  const [weekResult, setWeekResult] = useState<WeekFromPlanResult | null>(null);
+  const [weekError, setWeekError] = useState<string | null>(null);
   const [runPlanning, setRunPlanning] = useState(false);
   const [runResult, setRunResult] = useState<RunPlanResult | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
@@ -116,6 +121,14 @@ export default function Calendar() {
       .getPreferences()
       .then((p) => setVisibleTypes(p.visibleSessionTypes))
       .catch(() => setVisibleTypes(["STRENGTH"]));
+  }, []);
+
+  // Whether the training plan has a weekly pattern to plan a week from.
+  useEffect(() => {
+    api
+      .getCurrentPlan()
+      .then((p) => setHasPattern(!!p && p.slots.length > 0))
+      .catch(() => setHasPattern(false));
   }, []);
 
   useEffect(() => {
@@ -196,6 +209,19 @@ export default function Calendar() {
     }
   }
 
+  async function planFromPlan() {
+    setWeekPlanning(true);
+    setWeekError(null);
+    try {
+      setWeekResult(await api.planWeekFromPlan(days[0].key, formatLocalDateKey(new Date())));
+      loadWeek();
+    } catch (err: any) {
+      setWeekError(err.message ?? "Couldn't plan your week");
+    } finally {
+      setWeekPlanning(false);
+    }
+  }
+
   async function planRuns() {
     setRunPlanning(true);
     setRunError(null);
@@ -212,6 +238,23 @@ export default function Calendar() {
   // Everything that plans workouts lives in the Plan section. To add another
   // workout type, add an entry here.
   const planners: Planner[] = [];
+  if (hasPattern) {
+    planners.push({
+      key: "plan-week",
+      title: "Week from your training plan",
+      blurb: "Turn the weekly pattern in your plan (a day and minutes for each session) into the next 7 days of workouts, chosen from what you've done so far.",
+      buttonLabel: weekResult ? "Plan again" : "Plan my week",
+      busy: weekPlanning,
+      onPress: planFromPlan,
+      body:
+        weekResult || weekError ? (
+          <>
+            {weekResult && <WeekFromPlanSummary result={weekResult} />}
+            {weekError && <p style={{ color: "var(--danger)", fontSize: 13, margin: 0 }}>{weekError}</p>}
+          </>
+        ) : undefined,
+    });
+  }
   if (visibleTypes.includes("STRENGTH")) {
     planners.push({
       key: "strength",
@@ -832,6 +875,41 @@ const PHASE_COLOR: Record<RunPlanResult["phase"], string> = {
   Taper: "var(--good-soft)",
   Reset: "var(--surface-2)",
 };
+
+/** What "Plan my week" laid out, and how the plan is going so far. */
+function WeekFromPlanSummary({ result }: { result: WeekFromPlanResult }) {
+  return (
+    <div>
+      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--navy)" }}>
+        Week {result.weekOfPlan} of {result.totalWeeks} of your plan · ends {parseLocalDate(result.endDate).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}
+      </div>
+      {result.sessions.length > 0 && (
+        <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 12 }}>
+          {result.sessions.map((s, i) => (
+            <li key={i}>
+              {parseLocalDate(s.date).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })} · {s.label} · {s.minutes} min
+            </li>
+          ))}
+        </ul>
+      )}
+      <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 12 }} className="text-dim">
+        {result.progress
+          .filter((p) => p.expected > 0)
+          .map((p) => (
+            <li key={p.sport}>
+              {SPORT_LABELS[p.sport]}: {p.done} done of about {p.expected} planned so far
+            </li>
+          ))}
+        {result.notes.map((n, i) => (
+          <li key={`n${i}`}>{n}</li>
+        ))}
+      </ul>
+      <p className="text-dim" style={{ fontSize: 11, margin: "6px 0 0" }}>
+        Tap a day to change or remove any of these. Golf drills are built in Log when you start the session.
+      </p>
+    </div>
+  );
+}
 
 /** What the run planner did, and the quarter's 13 weeks with this one marked. */
 function RunPlanSummary({ result }: { result: RunPlanResult }) {
