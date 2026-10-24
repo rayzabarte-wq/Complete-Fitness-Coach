@@ -1243,3 +1243,14 @@ After a report that someone couldn't create an account: a wrong 2FA code at the 
 2FA is the person's choice. After sign-up they pick "Set up 2FA" or "Skip for now" (and can skip from the QR screen too). Settings → Security shows whether it is on: off, it offers "Turn on 2FA" (QR code, then a code to confirm); on, it offers "Turn off 2FA", which needs the password and a current code (`POST /auth/2fa/disable`). Setting up again while 2FA is on is refused, so nobody can swap the authenticator from a borrowed session or be locked out by an abandoned replacement; turn it off first. Admin accounts can't turn 2FA off, because the admin area needs it.
 
 **Lost authenticator.** Admin → Users shows "Turn off 2FA" on any account that has it (`POST /admin/users/:id/reset-2fa`, recorded in the audit log). It clears the secret and signs out the person's trusted devices. They then use "Forgot password" on the login screen (a reset link doesn't remove the code step by itself), log in without a code and turn 2FA back on in Settings → Security. There are no recovery codes. No database change.
+
+## Lost authenticator (admin / owner)
+
+Admin accounts can't be changed from the Admin page and can't turn 2FA off themselves (the admin area needs it), so a lost phone is recovered from the server settings, the same place that decides who is an admin.
+
+1. In Railway, open the **backend** service → Variables and add `ADMIN_2FA_RESET` = `your-admin-email:any-note` (for example `ray@example.com:lost-phone-oct-2026`). The email must be in `ADMIN_EMAILS`.
+2. Redeploy or restart the backend. On start-up it switches 2FA off for that account, signs out its sessions and trusted devices, and writes `reset-2fa-env` to the audit log. The Railway log shows `[recovery] 2FA switched off for ...`.
+3. Log in with the password only. If the password is lost too, use **Forgot password** on the login screen first (it emails a link, and a reset doesn't remove the code step, which is why step 1 comes first).
+4. Turn 2FA back on in **Settings → Security**, then remove `ADMIN_2FA_RESET`.
+
+Each distinct value works once, so leaving the variable in place doesn't switch 2FA off again on every restart. To do it again, change the note. For other users the Admin page already has **Turn off 2FA** (see Optional 2FA). No database change.

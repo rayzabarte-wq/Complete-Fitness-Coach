@@ -289,6 +289,9 @@ export default function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
               <p className="text-dim" style={{ fontSize: 12, margin: "0 0 8px" }}>
                 You won't be asked for a code again on this device for 24 hours.
               </p>
+              <p className="text-dim" style={{ fontSize: 12, margin: "0 0 8px" }}>
+                Lost your phone or authenticator? Ask the app's owner to turn 2FA off for your account, then use "Forgot password" and log in without a code. If you are the owner, see "Lost authenticator" in the README.
+              </p>
             </>
           )}
           <button className="button-primary" style={{ width: "100%" }}>

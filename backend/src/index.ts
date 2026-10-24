@@ -34,6 +34,7 @@ import { usageRouter } from "./routes/usage.js";
 import { ambitionsRouter } from "./routes/ambitions.js";
 import { availabilityRouter } from "./routes/availability.js";
 import { purgeOldUsage } from "./services/usage.js";
+import { applyAdminRecovery } from "./services/adminRecovery.js";
 import { requireAuth } from "./lib/requireAuth.js";
 
 const app = express();
@@ -118,5 +119,6 @@ app.listen(port, () => {
   // Usage records are kept for a year (see services/usage.ts): trim now, then daily.
   const trim = () => purgeOldUsage().catch((err) => console.error("[usage] purge failed:", err));
   trim();
+  applyAdminRecovery().catch((err) => console.error("[recovery] failed:", err));
   setInterval(trim, 24 * 60 * 60 * 1000).unref();
 });
