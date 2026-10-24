@@ -1280,6 +1280,10 @@ Calendar → Plan → **Week from your training plan** → "Plan my week" turns 
 
 Sessions the app planned earlier that haven't happened are replaced; anything you added or changed stays, and its day's slot is left alone. Days outside the plan's dates are skipped, and the result also shows how many sessions have been done against what the pattern called for so far (it informs; it doesn't pile the missed sessions onto later weeks). The per-sport planners (strength auto-fill, running, golf) still work on their own.
 
+### Changing sessions a week after the AI has suggested it
+
+The AI's suggested sessions a week is a starting point. It can be changed at any stage, with − and + controls, and no AI call is needed: on each sport's approach card while the plan is a draft (the approval is left as it was), and per sport at the top of the weekly-pattern builder at any time, including on an active plan. Saving the pattern makes the number of sessions in it the sessions a week for that sport: the approach is updated to match, and so is the matching Settings value (strength days 2-6, runs 2-6, golf practice 1-5) so the strength, running and golf planners agree. Settings changes do not edit an existing plan's approach; "Plan my week" works from the pattern.
+
 ## If Railway deployments stop or pause
 
 This happened after Railway's platform outage of 21-23 October 2026 (see status.railway.com). GitHub's commit status shows each service's last deploy (`gh api repos/<owner>/<repo>/commits/<sha>/status`), which tells you whether the problem is Railway or the code.

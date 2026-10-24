@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { Prisma, type TimeOfDay } from "@prisma/client";
+import { Prisma, type Sport, type TimeOfDay } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { AuthedRequest } from "../../lib/requireAuth.js";
 import {
@@ -79,6 +79,18 @@ async function loadFullPlan(planId: string) {
       amendmentRequest: v.amendmentRequest,
     })),
   };
+}
+
+// Sessions a week is one number the person can change in several places (the
+// approach, the weekly pattern, Settings). When it changes here, the matching
+// Settings value follows (where it has one and the number is in its range), so
+// the strength, running and golf planners agree with the plan.
+async function syncFrequencySetting(userId: string, sport: Sport, n: number) {
+  if (sport === "STRENGTH" && n >= 2 && n <= 6) await prisma.user.update({ where: { id: userId }, data: { trainingDaysPerWeek: n } });
+  else if (sport === "RUN" && n >= 2 && n <= 6) await prisma.user.update({ where: { id: userId }, data: { runDaysPerWeek: n } });
+  else if (sport === "GOLF" && n >= 1 && n <= 5) {
+    await prisma.golfProfile.upsert({ where: { userId }, update: { practiceSessionsPerWeek: n }, create: { userId, practiceSessionsPerWeek: n } });
+  }
 }
 
 async function loadOwnedPlan(userId: string | undefined, planId: string) {
@@ -253,7 +265,7 @@ const milestoneSchema = z.object({ phase: z.string(), target: z.string() });
 const updateApproachSchema = z.object({
   status: z.enum(["PROPOSED", "APPROVED"]).optional(),
   approachText: z.string().optional(),
-  weeklySessionTarget: z.number().int().positive().optional(),
+  weeklySessionTarget: z.number().int().min(1).max(14).optional(),
   sessionMinutes: z.number().int().positive().optional(),
   milestones: z.array(milestoneSchema).optional(),
 });
@@ -282,6 +294,7 @@ planRouter.patch("/:id/approaches/:sport", async (req: AuthedRequest, res) => {
       status: status ?? (approachText || weeklySessionTarget || sessionMinutes || milestones ? "APPROVED" : undefined),
     },
   });
+  if (weeklySessionTarget !== undefined) await syncFrequencySetting(req.userId!, sportParsed.data, weeklySessionTarget);
 
   res.json(await loadFullPlan(plan.id));
 });
@@ -436,6 +449,15 @@ planRouter.put("/:id/framework", async (req: AuthedRequest, res) => {
       await tx.frameworkSlot.createMany({ data: slots.map((s) => ({ ...s, versionId })) });
     }
   });
+
+  // The number of sessions in the pattern is the sessions a week now, whatever
+  // the AI first suggested: carry it to the approach and to Settings.
+  const perSport = new Map<Sport, number>();
+  for (const sl of slots) perSport.set(sl.sport, (perSport.get(sl.sport) ?? 0) + 1);
+  for (const [sport, n] of perSport) {
+    await prisma.sportApproach.updateMany({ where: { planId: plan.id, sport, NOT: { weeklySessionTarget: n } }, data: { weeklySessionTarget: n } });
+    await syncFrequencySetting(req.userId!, sport, n);
+  }
 
   res.json(await loadFullPlan(plan.id));
 });

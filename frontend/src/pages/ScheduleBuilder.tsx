@@ -129,6 +129,27 @@ export default function ScheduleBuilder({
     }
   }
 
+  // The number of sessions a week can be changed here too, whatever the AI first suggested.
+  function addCard(sport: Sport) {
+    setCards((cur) => {
+      const same = cur.filter((c) => c.sport === sport);
+      if (same.length >= 7) return cur;
+      const minutes = approaches.find((a) => a.sport === sport)?.sessionMinutes ?? same[same.length - 1]?.estimatedMinutes ?? 45;
+      const card: Card = { key: `card-new-${Date.now()}-${same.length}`, sport, dayOfWeek: null, timeOfDay: null, estimatedMinutes: minutes };
+      const lastAt = cur.map((c) => c.sport).lastIndexOf(sport);
+      return [...cur.slice(0, lastAt + 1), card, ...cur.slice(lastAt + 1)];
+    });
+  }
+  function removeCard(sport: Sport) {
+    setCards((cur) => {
+      const same = cur.filter((c) => c.sport === sport);
+      if (same.length <= 1) return cur;
+      // Drop one that has no day yet, otherwise the last one.
+      const drop = [...same].reverse().find((c) => c.dayOfWeek === null) ?? same[same.length - 1];
+      return cur.filter((c) => c.key !== drop.key);
+    });
+  }
+
   const cardsBySport = new Map<Sport, Card[]>();
   for (const c of cards) {
     cardsBySport.set(c.sport, [...(cardsBySport.get(c.sport) ?? []), c]);
@@ -140,7 +161,7 @@ export default function ScheduleBuilder({
         <strong>Build your weekly schedule</strong>
         <p className="text-dim" style={{ fontSize: 13, marginTop: 6 }}>
           For each session below, choose the day and how many minutes you have. That's all: when you ask for a week plan on the Calendar,
-          each of these becomes a real workout for that day, chosen from what you've done so far. The grid at the bottom shows the total per day.
+          each of these becomes a real workout for that day, chosen from what you've done so far. The grid at the bottom shows the total per day. Use − and + to change how many sessions a week each sport has; that updates your plan and your sessions-a-week setting too.
         </p>
       </div>
 
@@ -153,7 +174,17 @@ export default function ScheduleBuilder({
       {[...cardsBySport.entries()].map(([sport, sportCards]) => {
         return (
           <div key={sport} className="card">
-            <strong>{SPORT_LABELS[sport]}</strong>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <strong style={{ flex: 1 }}>{SPORT_LABELS[sport]}</strong>
+              <span className="text-dim" style={{ fontSize: 12 }}>Sessions a week</span>
+              <button className="button-secondary" style={{ padding: "2px 12px" }} aria-label={`One fewer ${SPORT_LABELS[sport]} session`} disabled={sportCards.length <= 1} onClick={() => removeCard(sport)}>
+                −
+              </button>
+              <strong style={{ minWidth: 18, textAlign: "center" }}>{sportCards.length}</strong>
+              <button className="button-secondary" style={{ padding: "2px 12px" }} aria-label={`One more ${SPORT_LABELS[sport]} session`} disabled={sportCards.length >= 7} onClick={() => addCard(sport)}>
+                +
+              </button>
+            </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 10 }}>
               {sportCards.map((c, i) => {
                 const hasConflict = crowdedKeys.has(c.key);

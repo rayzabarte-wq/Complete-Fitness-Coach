@@ -160,6 +160,20 @@ export default function Plan() {
     }
   }
 
+  // Sessions a week can be changed at any point, without touching the approval.
+  async function handleFrequency(approach: SportApproach, weeklySessionTarget: number) {
+    if (!plan) return;
+    setBusy(true);
+    setError(null);
+    try {
+      setPlan(await api.updateApproach(plan.id, approach.sport, { status: approach.status, weeklySessionTarget }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to change sessions per week");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function handleScheduleSaved(updated: TrainingPlan) {
     setPlan(updated);
     setShowScheduleBuilder(false);
@@ -362,7 +376,7 @@ export default function Plan() {
       {plan && plan.approaches.length > 0 && plan.status === "DRAFT" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {plan.approaches.map((a) => (
-            <ApproachCard key={a.sport} approach={a} busy={busy} onApprove={handleApproveApproach} />
+            <ApproachCard key={a.sport} approach={a} busy={busy} onApprove={handleApproveApproach} onFrequency={handleFrequency} />
           ))}
 
           <button className="button-primary" disabled={busy} onClick={handleGenerateApproaches} style={{ background: "transparent", border: "1px solid var(--border)", color: "var(--text)" }}>
@@ -644,9 +658,11 @@ function ApproachCard({
   approach,
   busy,
   onApprove,
+  onFrequency,
 }: {
   approach: SportApproach;
   busy: boolean;
+  onFrequency: (a: SportApproach, sessionsPerWeek: number) => void;
   onApprove: (
     a: SportApproach,
     edits?: { approachText?: string; weeklySessionTarget?: number; sessionMinutes?: number; milestones?: Milestone[] }
@@ -739,9 +755,17 @@ function ApproachCard({
       ) : (
         <>
           <p style={{ fontSize: 14, margin: "8px 0" }}>{approach.approachText}</p>
-          <p className="text-dim" style={{ fontSize: 13, margin: "0 0 10px" }}>
-            {approach.weeklySessionTarget} sessions/week, ~{approach.sessionMinutes} min each
-          </p>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 0 10px" }}>
+            <span className="text-dim" style={{ fontSize: 13 }}>Sessions a week</span>
+            <button className="button-secondary" style={{ padding: "2px 12px" }} aria-label="One fewer session a week" disabled={busy || approach.weeklySessionTarget <= 1} onClick={() => onFrequency(approach, approach.weeklySessionTarget - 1)}>
+              −
+            </button>
+            <strong style={{ minWidth: 18, textAlign: "center" }}>{approach.weeklySessionTarget}</strong>
+            <button className="button-secondary" style={{ padding: "2px 12px" }} aria-label="One more session a week" disabled={busy || approach.weeklySessionTarget >= 7} onClick={() => onFrequency(approach, approach.weeklySessionTarget + 1)}>
+              +
+            </button>
+            <span className="text-dim" style={{ fontSize: 13 }}>~{approach.sessionMinutes} min each</span>
+          </div>
           {approach.milestones && approach.milestones.length > 0 && (
             <div style={{ display: "flex", flexDirection: "column", gap: 4, margin: "0 0 10px" }}>
               {approach.milestones.map((m, i) => (
