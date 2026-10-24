@@ -1284,6 +1284,10 @@ Sessions the app planned earlier that haven't happened are replaced; anything yo
 
 The AI's suggested sessions a week is a starting point. It can be changed at any stage, with − and + controls, and no AI call is needed: on each sport's approach card while the plan is a draft (the approval is left as it was), and per sport at the top of the weekly-pattern builder at any time, including on an active plan. Saving the pattern makes the number of sessions in it the sessions a week for that sport: the approach is updated to match, and so is the matching Settings value (strength days 2-6, runs 2-6, golf practice 1-5) so the strength, running and golf planners agree. Settings changes do not edit an existing plan's approach; "Plan my week" works from the pattern.
 
+### Checking the frequencies against your goals
+
+On the plan screen (under the approach cards while drafting, and above the weekly pattern once there is one), "Check my frequencies against my goals" asks the AI (`POST /plan/:id/assess`, `scheduler/services/planAssessment.ts`) whether each sport's sessions a week will realistically move you towards your goal over the plan's length. It sees the overall aim, each sport's priority, goal, sessions a week, minutes and milestones, how often you actually did that sport over the last 90 days, and your weekly time if set. For each sport it gives a verdict (more than needed / on track / a stretch / likely to fall short), a sentence or two on the progress to expect, and, only when clearly better, a different number with a one-tap "Use N a week". It also comments on the plan's total load. It changes nothing by itself, saves nothing, and the result is cleared when a number changes so it never describes old figures. Rate limited to 6 checks a minute.
+
 ## If Railway deployments stop or pause
 
 This happened after Railway's platform outage of 21-23 October 2026 (see status.railway.com). GitHub's commit status shows each service's last deploy (`gh api repos/<owner>/<repo>/commits/<sha>/status`), which tells you whether the problem is Railway or the code.

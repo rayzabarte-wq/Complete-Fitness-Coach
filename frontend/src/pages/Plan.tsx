@@ -8,6 +8,8 @@ import {
   FrameworkSlot,
   SlotConflict,
   Milestone,
+  PlanAssessment,
+  FrequencyVerdict,
 } from "../lib/api.js";
 import PlanDashboard from "./PlanDashboard.js";
 import ScheduleBuilder from "./ScheduleBuilder.js";
@@ -69,6 +71,9 @@ export default function Plan() {
   const [amendmentText, setAmendmentText] = useState("");
   const [view, setView] = useState<"plan" | "dashboard">("plan");
   const [showScheduleBuilder, setShowScheduleBuilder] = useState(false);
+  const [assessment, setAssessment] = useState<PlanAssessment | null>(null);
+  const [assessing, setAssessing] = useState(false);
+  const [assessError, setAssessError] = useState<string | null>(null);
 
   useEffect(() => {
     refresh();
@@ -160,6 +165,19 @@ export default function Plan() {
     }
   }
 
+  async function runAssessment() {
+    if (!plan) return;
+    setAssessing(true);
+    setAssessError(null);
+    try {
+      setAssessment(await api.assessPlan(plan.id));
+    } catch (err) {
+      setAssessError(err instanceof Error ? err.message : "Couldn't check the plan just now");
+    } finally {
+      setAssessing(false);
+    }
+  }
+
   // Sessions a week can be changed at any point, without touching the approval.
   async function handleFrequency(approach: SportApproach, weeklySessionTarget: number) {
     if (!plan) return;
@@ -167,6 +185,7 @@ export default function Plan() {
     setError(null);
     try {
       setPlan(await api.updateApproach(plan.id, approach.sport, { status: approach.status, weeklySessionTarget }));
+      setAssessment(null); // it was about the old numbers
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to change sessions per week");
     } finally {
@@ -379,6 +398,19 @@ export default function Plan() {
             <ApproachCard key={a.sport} approach={a} busy={busy} onApprove={handleApproveApproach} onFrequency={handleFrequency} />
           ))}
 
+          <AssessmentCard
+            plan={plan}
+            assessment={assessment}
+            assessing={assessing}
+            error={assessError}
+            busy={busy}
+            onRun={runAssessment}
+            onApply={(sport, n) => {
+              const a = plan.approaches.find((x) => x.sport === sport);
+              if (a) handleFrequency(a, n);
+            }}
+          />
+
           <button className="button-primary" disabled={busy} onClick={handleGenerateApproaches} style={{ background: "transparent", border: "1px solid var(--border)", color: "var(--text)" }}>
             Regenerate all approaches
           </button>
@@ -398,6 +430,19 @@ export default function Plan() {
       {plan && plan.slots.length > 0 && (plan.status === "FRAMEWORK" || plan.status === "ACTIVE") && (
         <>
           <WeekGrid slots={plan.slots} />
+
+          <AssessmentCard
+            plan={plan}
+            assessment={assessment}
+            assessing={assessing}
+            error={assessError}
+            busy={busy}
+            onRun={runAssessment}
+            onApply={(sport, n) => {
+              const a = plan.approaches.find((x) => x.sport === sport);
+              if (a) handleFrequency(a, n);
+            }}
+          />
 
           {plan.status === "FRAMEWORK" && (
             <button className="button-primary" disabled={busy} onClick={handleActivate}>
@@ -790,6 +835,72 @@ function ApproachCard({
             </div>
           )}
         </>
+      )}
+    </div>
+  );
+}
+
+const VERDICT_STYLE: Record<FrequencyVerdict, { label: string; bg: string }> = {
+  MORE_THAN_NEEDED: { label: "More than needed", bg: "var(--surface-2)" },
+  ENOUGH: { label: "On track", bg: "var(--good-soft)" },
+  STRETCH: { label: "A stretch", bg: "var(--sun-soft)" },
+  NOT_ENOUGH: { label: "Likely to fall short", bg: "var(--danger-soft)" },
+};
+
+/** The AI's view of whether each sport's sessions a week will move the person towards their goals. */
+function AssessmentCard({
+  plan,
+  assessment,
+  assessing,
+  error,
+  busy,
+  onRun,
+  onApply,
+}: {
+  plan: TrainingPlan;
+  assessment: PlanAssessment | null;
+  assessing: boolean;
+  error: string | null;
+  busy: boolean;
+  onRun: () => void;
+  onApply: (sport: Sport, sessionsPerWeek: number) => void;
+}) {
+  if (plan.approaches.length === 0) return null;
+  return (
+    <div className="card">
+      <strong>Will these frequencies get you there?</strong>
+      <p className="text-dim" style={{ fontSize: 13, margin: "6px 0 8px" }}>
+        The AI looks at each sport's sessions a week against your goal for it, what you've actually been doing lately, and the time you have, and says how far
+        it expects you to get. It's advice, not a promise. You decide, and you can change any number.
+      </p>
+      <button className="button-secondary" disabled={assessing || busy} onClick={onRun}>
+        {assessing ? "Checking…" : assessment ? "Check again" : "Check my frequencies against my goals"}
+      </button>
+      {error && <p style={{ color: "var(--danger)", fontSize: 13, margin: "8px 0 0" }}>{error}</p>}
+      {assessment && (
+        <div style={{ marginTop: 10 }}>
+          {assessment.overall && <p style={{ fontSize: 13, margin: "0 0 10px" }}>{assessment.overall}</p>}
+          {assessment.sports.map((s) => {
+            const current = plan.approaches.find((a) => a.sport === s.sport)?.weeklySessionTarget;
+            const v = VERDICT_STYLE[s.verdict];
+            return (
+              <div key={s.sport} style={{ borderTop: "1px solid var(--border)", padding: "8px 0" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <strong style={{ fontSize: 13 }}>
+                    {SPORT_LABELS[s.sport]} · {current} a week
+                  </strong>
+                  <span style={{ background: v.bg, borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700 }}>{v.label}</span>
+                </div>
+                <p className="text-dim" style={{ fontSize: 13, margin: "4px 0 0" }}>{s.assessment}</p>
+                {s.suggestedSessionsPerWeek !== null && (
+                  <button className="button-quiet" style={{ marginTop: 6 }} disabled={busy} onClick={() => onApply(s.sport, s.suggestedSessionsPerWeek!)}>
+                    Use {s.suggestedSessionsPerWeek} a week
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
       )}
     </div>
   );

@@ -13,6 +13,8 @@ import {
 } from "../services/trainingPlanner.js";
 import { buildDashboard } from "../services/dashboard.js";
 import { suggestHorizon } from "../services/horizon.js";
+import { assessPlan } from "../services/planAssessment.js";
+import rateLimit from "express-rate-limit";
 import { dateToDayKey, dayKeyToDate } from "../../lib/dates.js";
 
 export const planRouter = Router();
@@ -254,6 +256,20 @@ planRouter.post("/:id/approaches/generate", async (req: AuthedRequest, res) => {
     res.json(await loadFullPlan(plan.id));
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : "Failed to generate sport approaches" });
+  }
+});
+
+// POST /plan/:id/assess - the AI's view of whether each sport's sessions a week
+// will realistically move the person towards their goals. Advice only; changes nothing.
+const assessLimiter = rateLimit({ windowMs: 60 * 1000, limit: 6, standardHeaders: true, legacyHeaders: false, message: { error: "That's a lot of checks in a minute. Wait a moment and try again." } });
+
+planRouter.post("/:id/assess", assessLimiter, async (req: AuthedRequest, res) => {
+  const plan = await loadOwnedPlan(req.userId, req.params.id);
+  if (!plan) return res.status(404).json({ error: "Plan not found" });
+  try {
+    res.json(await assessPlan(plan.id, req.userId!));
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Couldn't assess the plan" });
   }
 });
 

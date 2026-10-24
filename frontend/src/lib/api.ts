@@ -674,6 +674,13 @@ export interface DaySummary {
   scan: { weightKg: number | null; bodyFatPct: number | null; muscleMassKg: number | null; source: string } | null;
 }
 
+export type FrequencyVerdict = "MORE_THAN_NEEDED" | "ENOUGH" | "STRETCH" | "NOT_ENOUGH";
+
+export interface PlanAssessment {
+  overall: string;
+  sports: { sport: Sport; verdict: FrequencyVerdict; assessment: string; suggestedSessionsPerWeek: number | null }[];
+}
+
 export interface WeekFromPlanResult {
   planId: string;
   planStatus: PlanStatus;
@@ -820,7 +827,7 @@ export type UsageEventName =
   | "log_steps_tab" | "log_nutrition_tab" | "log_other_sport_tab"
   | "workout_generated" | "workout_saved" | "gym_switched" | "gym_preset_applied"
   | "custom_equipment_added" | "custom_exercise_created" | "steps_saved" | "nutrition_saved"
-  | "body_scan_added" | "goal_created" | "message_dismissed" | "golf_round_logged" | "golf_goal_set" | "ambitions_saved" | "sport_goal_saved" | "availability_saved" | "golf_week_proposed" | "golf_week_added" | "golf_profile_saved" | "golf_clubs_edited" | "app_install_clicked" | "run_week_planned" | "run_days_saved" | "onboarding_completed" | "onboarding_skipped" | "week_planned_from_plan";
+  | "body_scan_added" | "goal_created" | "message_dismissed" | "golf_round_logged" | "golf_goal_set" | "ambitions_saved" | "sport_goal_saved" | "availability_saved" | "golf_week_proposed" | "golf_week_added" | "golf_profile_saved" | "golf_clubs_edited" | "app_install_clicked" | "run_week_planned" | "run_days_saved" | "onboarding_completed" | "onboarding_skipped" | "week_planned_from_plan" | "plan_assessed";
 
 let trackingPausedUntil = 0;
 const lastSent = new Map<string, number>();
@@ -1148,6 +1155,7 @@ export const api = {
     }
   ) => request<TrainingPlan>(`/plan/${planId}/priorities`, { method: "PATCH", body: JSON.stringify(data) }),
 
+  assessPlan: (planId: string) => tracked("plan_assessed", request<PlanAssessment>(`/plan/${planId}/assess`, { method: "POST" })),
   generateApproaches: (planId: string) => request<TrainingPlan>(`/plan/${planId}/approaches/generate`, { method: "POST" }),
 
   updateApproach: (
