@@ -12,6 +12,8 @@ import {
   type Milestone,
 } from "../services/trainingPlanner.js";
 import { buildDashboard } from "../services/dashboard.js";
+import { suggestHorizon } from "../services/horizon.js";
+import { dateToDayKey, dayKeyToDate } from "../../lib/dates.js";
 
 export const planRouter = Router();
 
@@ -83,7 +85,7 @@ async function loadOwnedPlan(userId: string | undefined, planId: string) {
   return prisma.trainingPlan.findFirst({ where: { id: planId, userId } });
 }
 
-// POST /plan - start a new 3-month plan. Archives any existing non-archived
+// POST /plan - start a new plan (to the end of a calendar quarter). Archives any existing non-archived
 // plan for this user first, since only one plan is "current" at a time.
 const priorityInputSchema = z.object({
   sport: sportSchema,
@@ -107,9 +109,11 @@ planRouter.post("/", async (req: AuthedRequest, res) => {
   }
   const { overallGoal, priorities } = parsed.data;
 
-  const startDate = new Date();
-  const endDate = new Date(startDate);
-  endDate.setMonth(endDate.getMonth() + 3);
+  // Starts today and runs to the end of a calendar quarter (see
+  // services/horizon.ts), the same rule the welcome journey suggests.
+  const todayKey = dateToDayKey(new Date());
+  const startDate = dayKeyToDate(todayKey);
+  const endDate = dayKeyToDate(suggestHorizon(todayKey).endDate);
 
   const plan = await prisma.$transaction(async (tx) => {
     await tx.trainingPlan.updateMany({
@@ -201,7 +205,23 @@ planRouter.post("/:id/approaches/generate", async (req: AuthedRequest, res) => {
   }
 
   try {
-    const generated = await generateSportApproaches(plan.overallGoal, plan.priorities);
+    // Use the plan's real length, and the sessions a week already set in
+    // Settings, so the approach agrees with what the planners will build.
+    const weeks = Math.max(2, Math.round(((plan.endDate.getTime() - plan.startDate.getTime()) / 86400_000 + 1) / 7));
+    const [user, golf] = await Promise.all([
+      prisma.user.findUniqueOrThrow({ where: { id: req.userId }, select: { trainingDaysPerWeek: true, runDaysPerWeek: true } }),
+      prisma.golfProfile.findUnique({ where: { userId: req.userId! }, select: { practiceSessionsPerWeek: true } }),
+    ]);
+    const chosen = new Set(plan.priorities.map((p) => p.sport));
+    const fixedSessions: Partial<Record<"STRENGTH" | "RUN" | "GOLF", number>> = {};
+    if (chosen.has("STRENGTH")) fixedSessions.STRENGTH = user.trainingDaysPerWeek;
+    if (chosen.has("RUN")) fixedSessions.RUN = user.runDaysPerWeek;
+    if (chosen.has("GOLF") && golf) fixedSessions.GOLF = golf.practiceSessionsPerWeek;
+    const generated = await generateSportApproaches(plan.overallGoal, plan.priorities, {
+      weeks,
+      endDate: plan.endDate.toISOString().slice(0, 10),
+      fixedSessions,
+    });
 
     await prisma.$transaction([
       prisma.sportApproach.deleteMany({ where: { planId: plan.id } }),

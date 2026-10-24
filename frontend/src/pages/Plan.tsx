@@ -263,7 +263,7 @@ export default function Plan() {
       <div>
         <h2 style={{ margin: "4px 0" }}>3-Month Plan</h2>
         <p className="text-dim" style={{ fontSize: 13, margin: 0 }}>
-          Set priorities per sport, review the AI's proposed 3-month approach for each, then approve a weekly scheduling framework.
+          Set priorities per sport, review the AI's proposed approach for each, then approve a weekly scheduling framework.
         </p>
       </div>
 
@@ -355,7 +355,7 @@ export default function Plan() {
 
       {plan && plan.status === "DRAFT" && !showPriorityForm && plan.approaches.length === 0 && (
         <button className="button-primary" disabled={busy} onClick={handleGenerateApproaches}>
-          {busy ? "Generating..." : "Generate 3-month approach per sport"}
+          {busy ? "Generating..." : "Generate approach per sport"}
         </button>
       )}
 
@@ -563,7 +563,7 @@ function PriorityForm({
   return (
     <div className="card" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <div>
-        <strong>{isNewPlan ? "Start a 3-month plan" : "Sport priorities"}</strong>
+        <strong>{isNewPlan ? "Start a training plan" : "Sport priorities"}</strong>
         <p className="text-dim" style={{ fontSize: 13, margin: "4px 0 0" }}>
           Overall goal for the next 3 months (optional):
         </p>

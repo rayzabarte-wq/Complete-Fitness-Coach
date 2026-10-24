@@ -55,6 +55,11 @@ model User {
   // it's only shown once. Individual choices live in ConsentRecord.
   consentReviewedAt DateTime?
 
+  // Set when the welcome journey (goals in prose, sports, plan horizon) has
+  // been finished or skipped, so it's only offered once. It can be run again
+  // from Settings. Accounts that existed before the journey were marked done.
+  onboardingCompletedAt DateTime?
+
   // SHA-256 of a personal upload token used by an iPhone Shortcut (Apple
   // Health steps/body data) or the Renpho sync script to post data without
   // a login session. Only the hash is stored; the token is shown once.

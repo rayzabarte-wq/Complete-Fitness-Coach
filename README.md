@@ -1255,6 +1255,19 @@ Admin accounts can't be changed from the Admin page and can't turn 2FA off thems
 
 Each distinct value works once, so leaving the variable in place doesn't switch 2FA off again on every restart. To do it again, change the note. For other users the Admin page already has **Turn off 2FA** (see Optional 2FA). No database change.
 
+## Welcome journey (new accounts, and Settings → Planning)
+
+New accounts, after the consent step, go through a four-step journey. It can be skipped at any point ("Skip setup") and every question in it is optional.
+
+1. **Goals in prose.** Three free-text questions: what you want from training, anything specific you're aiming for (an event, a number, a date), and what a normal week looks like. The answers are sent to Claude, which suggests the settings below as JSON (`services/onboarding.ts`; the screen says so). Nothing is saved at this point. If the AI call fails, plain word matching still ticks the sports mentioned, so the journey never depends on it.
+2. **Sports.** The sports the answers pointed to are pre-ticked, each with a priority (main focus / regular / keep ticking over) and an optional goal sentence. A sport's goal sentence is saved as its "ambition" (shown with your progress), and the overall aim goes to Progress → ambitions and to the plan.
+3. **Weekly rhythm.** Sessions a week for strength, running and golf practice (the same settings as in Settings, and used by the same planners), and an optional daily step goal.
+4. **Horizon.** The plan starts today and ends either on the **suggested calendar-quarter end** or on **a date you choose**. The suggested end is the end of the current quarter if at least 8 weeks of it remain (so a full 3 months, or the part that's left), otherwise the end of the **next** quarter. A chosen date must be 2 weeks to 18 months away. If the answers named an event date, it is pre-filled as the chosen date. The rule lives in `scheduler/services/horizon.ts`.
+
+"Build my plan" (`POST /onboarding/start`) saves only what was confirmed: it turns on the workout types for the chosen sports (the first time through it shows exactly those; later runs only add; the golf simulator stays a separate opt-in), saves the settings, and opens a training plan in DRAFT. The AI then proposes an approach per sport for the plan's real length, using the sessions a week already set in Settings, and the person lands on the plan screen to review it, approve it and set the weekly framework as before.
+
+Accounts that existed before this update are marked as done (migration `20261024210000_onboarding`), so only new accounts see it automatically. Everyone can run it again from Settings → Planning → "Set up goals and a new plan", which replaces the current plan. `POST /plan` (the manual route on the plan screen) now uses the same quarter-end rule instead of a fixed three months.
+
 ## If Railway deployments stop or pause
 
 This happened after Railway's platform outage of 21-23 October 2026 (see status.railway.com). GitHub's commit status shows each service's last deploy (`gh api repos/<owner>/<repo>/commits/<sha>/status`), which tells you whether the problem is Railway or the code.

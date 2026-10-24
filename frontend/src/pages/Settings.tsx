@@ -100,13 +100,19 @@ export default function Settings({ onLoggedOut }: { onLoggedOut: () => void }) {
 
       <Collapsible title="Planning">
         <div className="card">
-          <strong>3-month training plan</strong>
+          <strong>Training plan</strong>
           <p className="text-dim" style={{ fontSize: 13, marginTop: 6 }}>
-            The multi-sport quarterly planner (priorities, approaches, weekly framework). The strength auto-fill on the Calendar works without it.
+            The multi-sport planner (priorities, approaches, weekly framework), running to the end of a calendar quarter or a date you choose. The strength auto-fill on the Calendar works without it.
           </p>
           <Link to="/plan" className="button-secondary" style={{ display: "block", textAlign: "center", textDecoration: "none", marginTop: 8 }}>
-            Open the 3-month plan
+            Open the training plan
           </Link>
+          <Link to="/welcome" className="button-secondary" style={{ display: "block", textAlign: "center", textDecoration: "none", marginTop: 8 }}>
+            Set up goals and a new plan
+          </Link>
+          <p className="text-dim" style={{ fontSize: 12, margin: "6px 0 0" }}>
+            Answer a few questions in your own words, pick your sports, and choose how far ahead to plan. A new plan replaces the current one.
+          </p>
         </div>
       </Collapsible>
 

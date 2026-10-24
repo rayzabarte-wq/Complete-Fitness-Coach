@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BrowserRouter, Routes, Route, NavLink, Link, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, NavLink, Link, useLocation, useNavigate } from "react-router-dom";
 import Log from "./pages/Log.js";
 import Login from "./pages/Login.js";
 import Settings from "./pages/Settings.js";
@@ -7,6 +7,7 @@ import Calendar, { DayDetail } from "./pages/Calendar.js";
 import Progress from "./pages/Progress.js";
 import Plan from "./pages/Plan.js";
 import Admin from "./pages/Admin.js";
+import Onboarding from "./pages/Onboarding.js";
 import { api, auth, track, UsageEventName } from "./lib/api.js";
 import { PlanProvider } from "./lib/planContext.js";
 import { GymProvider } from "./lib/gymContext.js";
@@ -36,6 +37,12 @@ function RouteTracker() {
   return null;
 }
 
+// The welcome journey opened from Settings, once the app is already running.
+function WelcomeRoute() {
+  const navigate = useNavigate();
+  return <Onboarding onDone={(openPlan) => navigate(openPlan ? "/plan" : "/", { replace: true })} />;
+}
+
 export default function App() {
   const [loggedIn, setLoggedIn] = useState(() => {
     // Opening a password reset link always shows the reset page, even on a
@@ -44,12 +51,16 @@ export default function App() {
     return !!auth.getToken();
   });
   const [consentReviewed, setConsentReviewed] = useState<boolean | null>(null);
+  const [onboarded, setOnboarded] = useState(true);
 
   useEffect(() => {
     if (!loggedIn) return;
     api
       .getProfile()
-      .then((p) => setConsentReviewed(p.consentReviewed))
+      .then((p) => {
+        setOnboarded(p.onboardingCompleted);
+        setConsentReviewed(p.consentReviewed);
+      })
       .catch(() => {
         // An expired session clears the token in api.ts — fall back to login.
         if (!auth.getToken()) setLoggedIn(false);
@@ -79,6 +90,19 @@ export default function App() {
   // before anything that could collect personal data.
   if (!consentReviewed) {
     return <ConsentOnboarding onDone={() => setConsentReviewed(true)} />;
+  }
+
+  // Then, once, the welcome journey (goals, sports, plan horizon). Skippable.
+  if (!onboarded) {
+    return (
+      <Onboarding
+        onDone={(openPlan) => {
+          // The router isn't mounted yet; set where it should open.
+          window.history.replaceState(null, "", openPlan ? "/plan" : "/");
+          setOnboarded(true);
+        }}
+      />
+    );
   }
 
   return (
@@ -137,6 +161,7 @@ export default function App() {
               <Route path="/progress" element={<Progress />} />
               <Route path="/settings" element={<Settings onLoggedOut={() => setLoggedIn(false)} />} />
               <Route path="/plan" element={<Plan />} />
+              <Route path="/welcome" element={<WelcomeRoute />} />
               <Route path="/admin" element={<Admin />} />
             </Routes>
           </main>

@@ -41,6 +41,7 @@ profileRouter.get("/", async (req: AuthedRequest, res) => {
     }),
     dailyStepGoal: user.dailyStepGoal,
     consentReviewed: user.consentReviewedAt !== null,
+    onboardingCompleted: user.onboardingCompletedAt !== null,
     hasIngestToken: user.ingestTokenHash !== null,
     lastStepsImport: lastImport ? { date: lastImport.date.toISOString().slice(0, 10), steps: lastImport.steps, receivedAt: lastImport.updatedAt.toISOString() } : null,
   });

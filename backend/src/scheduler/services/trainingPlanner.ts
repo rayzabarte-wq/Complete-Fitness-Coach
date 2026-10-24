@@ -58,10 +58,29 @@ export interface GeneratedApproach {
   milestones: Milestone[];
 }
 
+export interface ApproachOptions {
+  /** Length of the plan in weeks (default 12). */
+  weeks?: number;
+  /** Plan end date, YYYY-MM-DD, when it isn't a plain 12 weeks. */
+  endDate?: string;
+  /** Sessions a week the person has already set for a sport (Settings); the
+   * approach has to use exactly these. */
+  fixedSessions?: Partial<Record<Sport, number>>;
+}
+
 export async function generateSportApproaches(
   overallGoal: string | null,
-  priorities: Pick<SportPriority, "sport" | "priority" | "goalNote" | "weeklyMinutesAvailable">[]
+  priorities: Pick<SportPriority, "sport" | "priority" | "goalNote" | "weeklyMinutesAvailable">[],
+  options: ApproachOptions = {}
 ): Promise<GeneratedApproach[]> {
+  const weeks = Math.max(2, Math.round(options.weeks ?? 12));
+  const lengthText = weeks === 12 ? "3-month (12-week)" : `${weeks}-week${options.endDate ? ` (ending ${options.endDate})` : ""}`;
+  const fixed = Object.entries(options.fixedSessions ?? {}) as [Sport, number][];
+  const fixedText = fixed.length
+    ? `\nThe person has already chosen how many sessions a week they do in these sports, so weeklySessionTarget MUST be exactly this number for them: ${fixed
+        .map(([sport, n]) => `${SPORT_LABELS[sport]} ${n}`)
+        .join(", ")}. Size the other sports around those.\n`
+    : "";
   const priorityLines = priorities
     .map(
       (p) =>
@@ -71,17 +90,17 @@ export async function generateSportApproaches(
     )
     .join("\n");
 
-  const prompt = `You are a training coach building a balanced 3-month (12-week) plan across multiple sports/activities for one person.
+  const prompt = `You are a training coach building a balanced ${lengthText} plan across multiple sports/activities for one person.
 
 ${overallGoal ? `Overall goal stated by the person: "${overallGoal}"\n` : ""}
-Sports they want included this quarter, with their priority level, any specific goal, and (where given) how much weekly time they actually have available for that sport:
+Sports they want included in this plan, with their priority level, any specific goal, and (where given) how much weekly time they actually have available for that sport:
 ${priorityLines}
-
+${fixedText}
 For EACH sport listed above, propose:
-1. A short approach (2-4 sentences) describing how training in that sport should be structured and progress across the 12 weeks — mention phasing where it helps (e.g. base building, then intensity), and what the main focus is given its priority level and goal.
+1. A short approach (2-4 sentences) describing how training in that sport should be structured and progress across the ${weeks} weeks — mention phasing where it helps (e.g. base building, then intensity), and what the main focus is given its priority level and goal.
 2. A realistic weekly session count (weeklySessionTarget) for that sport.
 3. A typical single-session length in minutes (sessionMinutes) for that sport.
-4. Phased milestones (milestones): break the 12 weeks into 3 phases (roughly weeks 1-4, 5-8, 9-12, adjusted if a different split makes more sense for that sport/goal) and give each phase a short label and a SPECIFIC, MEASURABLE target — a number, time, distance, or concrete skill check, not a vague statement. Each later phase's target should build on the one before it, and the final phase's target should visibly move the needle on the sport's stated goal (or, with no goal given, on general improvement at the person's current level). If there isn't enough information to name a precise number (e.g. no baseline was given), propose a sensible concrete one anyway and phrase it so it's obviously adjustable (e.g. "add roughly 10lb to your current back squat working weight" rather than refusing to give a number).
+4. Phased milestones (milestones): break the ${weeks} weeks into 3 phases (for 12 weeks, roughly weeks 1-4, 5-8, 9-12; scale to ${weeks} weeks, adjusted if a different split makes more sense for that sport/goal) and give each phase a short label and a SPECIFIC, MEASURABLE target — a number, time, distance, or concrete skill check, not a vague statement. Each later phase's target should build on the one before it, and the final phase's target should visibly move the needle on the sport's stated goal (or, with no goal given, on general improvement at the person's current level). If there isn't enough information to name a precise number (e.g. no baseline was given), propose a sensible concrete one anyway and phrase it so it's obviously adjustable (e.g. "add roughly 10lb to your current back squat working weight" rather than refusing to give a number).
 
 Where a weekly time-available figure is given, treat it as a hard ceiling: weeklySessionTarget x sessionMinutes must not exceed it (round session count/length down rather than over-committing). Where none is given, use your own judgment for a realistic weekly commitment. Balance the weekly session targets ACROSS all sports together too — the total weekly commitment must be realistic for one person to actually do (a HIGH priority sport should get more sessions/week than a LOW priority one). A sport marked LOW priority should still appear with a maintenance-level approach and a small session count, not be dropped.
 
