@@ -83,6 +83,7 @@ model User {
   ambitions          String?
   ambitionsUpdatedAt DateTime?
   sportAmbitions     SportAmbition[]
+  savedSessions      SavedSession[]
   weeklyAvailability WeeklyAvailability?
   stravaImports      StravaImport[]
   golfProfile        GolfProfile?
@@ -1095,6 +1096,28 @@ model SportAmbition {
   updatedAt DateTime @updatedAt
 
   @@unique([userId, sport])
+}
+
+// A rehab or own session kept for reuse (e.g. a physio's exercise sheet typed in
+// once). Scheduling one copies it onto a day as an ad hoc strength session, so
+// editing the library later never changes sessions already on the calendar.
+// Names are unique per person, ignoring case. See routes/savedSessions.ts.
+model SavedSession {
+  id               String    @id @default(cuid())
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId           String
+  name             String
+  estimatedMinutes Int?
+  notes            String?
+  // [{ name, detail }], in order.
+  exercises        Json
+  timesUsed        Int       @default(0)
+  lastUsedAt       DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@unique([userId, name])
+  @@index([userId])
 }
 
 // How much time the person can usually give to training on each day of an

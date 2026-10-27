@@ -17,7 +17,7 @@ export const accountRouter = Router();
 accountRouter.get("/export", requireAuth, async (req: AuthedRequest, res) => {
   const userId = req.userId!;
 
-  const [user, sessions, recommendations, plannedSessions, nutritionLogs, trainingPlans, outlookConnected, stravaConnected, consents, bodyMeasurements, bodyGoals, stepDays, nutritionDays, trainingBlocks, gyms, customEquipment, customExercises, usageEvents, golfRounds, golfRoundGoals, sportAmbitions, weeklyAvailability, stravaImports, golfProfile, golfClubs, golfHandicaps] =
+  const [user, sessions, recommendations, plannedSessions, nutritionLogs, trainingPlans, outlookConnected, stravaConnected, consents, bodyMeasurements, bodyGoals, stepDays, nutritionDays, trainingBlocks, gyms, customEquipment, customExercises, usageEvents, golfRounds, golfRoundGoals, sportAmbitions, weeklyAvailability, stravaImports, golfProfile, golfClubs, golfHandicaps, savedSessions] =
     await Promise.all([
       prisma.user.findUniqueOrThrow({
         where: { id: userId },
@@ -74,6 +74,7 @@ accountRouter.get("/export", requireAuth, async (req: AuthedRequest, res) => {
       prisma.golfProfile.findUnique({ where: { userId }, select: { handicap: true, canShapeShots: true, updatedAt: true } }),
       prisma.golfClub.findMany({ where: { userId }, select: { name: true, type: true } }),
       prisma.golfHandicapEntry.findMany({ where: { userId }, orderBy: { date: "asc" }, select: { handicap: true, date: true } }),
+      prisma.savedSession.findMany({ where: { userId }, orderBy: { name: "asc" } }),
     ]);
 
   res.json({
@@ -96,6 +97,7 @@ accountRouter.get("/export", requireAuth, async (req: AuthedRequest, res) => {
     golfProfile,
     golfClubs,
     golfHandicaps,
+    savedSessions,
     consentHistory: consents,
     bodyMeasurements,
     bodyGoals,

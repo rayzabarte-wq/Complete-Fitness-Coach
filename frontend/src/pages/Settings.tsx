@@ -1,3 +1,4 @@
+import { SavedSessionsManager } from "../components/SavedSessions.js";
 import { ReactNode, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, auth, track, Profile, SessionType } from "../lib/api.js";
@@ -92,6 +93,10 @@ export default function Settings({ onLoggedOut }: { onLoggedOut: () => void }) {
 
       <Collapsible title="Golf" id="golf" hint="handicap, clubs">
         <GolfSettings />
+      </Collapsible>
+
+      <Collapsible title="My sessions" id="my-sessions" hint="rehab, own sessions">
+        <SavedSessionsManager />
       </Collapsible>
 
       <Collapsible title="Workout types" id="workout-types">

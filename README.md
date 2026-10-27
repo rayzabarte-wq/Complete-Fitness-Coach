@@ -1296,6 +1296,17 @@ For a physio's rehab sheet, or any session that is not a gym workout, add a Stre
 
 How it counts: it is a **strength session** (type Strength, flagged `adHoc`, no movement pattern), so it counts in the consistency dashboard (as an unspecified strength session, with its minutes) and in the strength sessions on Progress. It does **not** change muscular recovery (recovery comes only from logged workout sets), does not move the strength split along (the last-trained day comes from logged workouts and planned sessions with a movement pattern), does not count as a gym day in the "three in a row" rule, and does not fill a day: strength auto-fill can still place a gym workout on the same day, and "Plan my week" does not treat it as covering a strength slot. Importing the exercises from a Word or PDF document is not built yet.
 
+### The library of saved sessions (Settings → My sessions)
+
+A rehab or own session can be kept and reused, so a physio's sheet only has to be typed in once. The library is a list of named sessions (minutes, notes, exercises) that builds over time:
+
+- **Save:** in the add or edit form for a rehab session, "Keep this for next time" saves it to the library under a name (the session's name by default). If the name is taken, change it to save a new one, or choose "replace the saved one".
+- **Reuse:** the add-session form on the Calendar has "Add from my library…" at the top. Picking one fills in the name, minutes, notes and exercises, which can still be changed for that day only. Each use is counted, and the most recently used sessions come first.
+- **Manage:** Settings → My sessions lists them with how often each has been used. They can be created from scratch, edited and renamed, **saved as a new session** under a different name (the original is left as it was), copied, or deleted (with a confirmation).
+- **Copies, not links:** adding a saved session to a day copies it, so editing or deleting a library entry never changes sessions already on the calendar or what was ticked off.
+
+Names are unique per person ignoring case, and the library holds up to 100 sessions. It is included in "Download my data" and removed with the account. (`/saved-sessions`, `SavedSession` table.)
+
 ## If Railway deployments stop or pause
 
 This happened after Railway's platform outage of 21-23 October 2026 (see status.railway.com). GitHub's commit status shows each service's last deploy (`gh api repos/<owner>/<repo>/commits/<sha>/status`), which tells you whether the problem is Railway or the code.

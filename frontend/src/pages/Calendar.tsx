@@ -1,12 +1,13 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api, RunPlanResult, WeekFromPlanResult, DayForecast, DaySummary, PlannedSession, SessionType, MovementPattern, StravaActivity, GolfSessionType } from "../lib/api.js";
+import { api, SavedSession, RunPlanResult, WeekFromPlanResult, DayForecast, DaySummary, PlannedSession, SessionType, MovementPattern, StravaActivity, GolfSessionType } from "../lib/api.js";
 import { SPORT_LABELS } from "../lib/sports.js";
 import { ACTIVITY_COLORS, FOCUS_LABELS, activityForSessionType } from "../lib/activity.js";
 import { quoteForDate } from "../lib/quotes.js";
 import MessageCards from "../components/MessageCards.js";
 import GolfWeek from "../components/GolfWeek.js";
 import GolfDrillChecklist from "../components/GolfDrillChecklist.js";
+import { SaveToLibraryBox } from "../components/SavedSessions.js";
 import { parseExerciseLines, drillsToLines, MAX_EXERCISES } from "../lib/exerciseLines.js";
 import { InstallBanner } from "../components/InstallApp.js";
 import PlanPanel, { Planner } from "../components/PlanPanel.js";
@@ -977,6 +978,25 @@ function AddSessionForm({
   const [title, setTitle] = useState("");
   const [exerciseText, setExerciseText] = useState("");
   const own = ownSession && type === "STRENGTH";
+  // Saved rehab / own sessions to start from.
+  const [library, setLibrary] = useState<SavedSession[]>([]);
+  const [fromLibraryId, setFromLibraryId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!visibleTypes.includes("STRENGTH")) return;
+    api.listSavedSessions().then(setLibrary).catch(() => undefined);
+  }, [visibleTypes]);
+
+  function applySaved(id: string) {
+    const s = library.find((x) => x.id === id);
+    setFromLibraryId(s ? s.id : null);
+    if (!s) return;
+    handleCategoryChange(categoryLabelForType("STRENGTH"));
+    setOwnSession(true);
+    setTitle(s.name);
+    setExerciseText(drillsToLines(s.exercises));
+    setEstimatedMinutes(s.estimatedMinutes ? String(s.estimatedMinutes) : "30");
+    setNotes(s.notes ?? "");
+  }
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -1006,6 +1026,7 @@ function AddSessionForm({
         estimatedMinutes: type !== "REST" && estimatedMinutes ? Number(estimatedMinutes) : undefined,
         ...(own ? { adHoc: true, title: title.trim(), drills: parseExerciseLines(exerciseText) } : {}),
       });
+      if (own && fromLibraryId) api.markSavedSessionUsed(fromLibraryId).catch(() => undefined);
       onCreated();
     } catch (err: any) {
       setError(err.message ?? "Failed to schedule session");
@@ -1016,6 +1037,16 @@ function AddSessionForm({
 
   return (
     <form onSubmit={handleSubmit} className="card" style={{ marginTop: 8 }}>
+      {library.length > 0 && (
+        <select value={fromLibraryId ?? ""} onChange={(e) => applySaved(e.target.value)} aria-label="Add from my library" style={{ width: "100%", padding: 8, marginBottom: 8 }}>
+          <option value="">Add from my library…</option>
+          {library.map((l) => (
+            <option key={l.id} value={l.id}>
+              {l.name}
+            </option>
+          ))}
+        </select>
+      )}
       <CategorySelect value={category} visibleTypes={visibleTypes} onChange={handleCategoryChange} />
 
       <SubTypeSelect categoryLabel={category} value={subType} visibleTypes={visibleTypes} onChange={handleSubTypeChange} />
@@ -1027,7 +1058,15 @@ function AddSessionForm({
         </label>
       )}
 
-      {own && <OwnSessionFields title={title} setTitle={setTitle} exerciseText={exerciseText} setExerciseText={setExerciseText} />}
+      {own && (
+        <OwnSessionFields
+          title={title}
+          setTitle={setTitle}
+          exerciseText={exerciseText}
+          setExerciseText={setExerciseText}
+          getDraft={() => ({ estimatedMinutes: estimatedMinutes ? Number(estimatedMinutes) : null, notes: notes.trim() || null, exercises: parseExerciseLines(exerciseText).map((d) => ({ name: d.name, detail: d.detail })) })}
+        />
+      )}
 
       {type === "STRENGTH" && !own && (
         <select
@@ -1307,7 +1346,13 @@ function EditSessionForm({
       />
 
       {session.adHoc ? (
-        <OwnSessionFields title={title} setTitle={setTitle} exerciseText={exerciseText} setExerciseText={setExerciseText} />
+        <OwnSessionFields
+          title={title}
+          setTitle={setTitle}
+          exerciseText={exerciseText}
+          setExerciseText={setExerciseText}
+          getDraft={() => ({ estimatedMinutes: estimatedMinutes ? Number(estimatedMinutes) : null, notes: notes.trim() || null, exercises: parseExerciseLines(exerciseText, session.drills ?? []).map((d) => ({ name: d.name, detail: d.detail })) })}
+        />
       ) : (
         <>
           <CategorySelect value={category} visibleTypes={typesForThisForm} onChange={handleCategoryChange} />
@@ -1381,11 +1426,14 @@ function OwnSessionFields({
   setTitle,
   exerciseText,
   setExerciseText,
+  getDraft,
 }: {
   title: string;
   setTitle: (v: string) => void;
   exerciseText: string;
   setExerciseText: (v: string) => void;
+  /** What would be saved to the library: minutes, notes and the exercises as typed. */
+  getDraft: () => { estimatedMinutes: number | null; notes: string | null; exercises: { name: string; detail: string }[] };
 }) {
   return (
     <>
@@ -1408,6 +1456,7 @@ function OwnSessionFields({
       <p className="text-dim" style={{ fontSize: 12, margin: "4px 0 0" }}>
         Up to {MAX_EXERCISES} exercises. Text before a dash or colon is the exercise, the rest is how to do it. You tick them off on the day. This counts as a strength session but adds no muscle load, so your recovery and split are unchanged.
       </p>
+      <SaveToLibraryBox defaultName={title} getDraft={getDraft} />
     </>
   );
 }

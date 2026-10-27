@@ -22,6 +22,6 @@ export function parseExerciseLines(text: string, previous: PlannedDrill[] = []):
   });
 }
 
-export function drillsToLines(drills: PlannedDrill[] | null | undefined): string {
+export function drillsToLines(drills: { name: string; detail?: string }[] | null | undefined): string {
   return (drills ?? []).map((d) => (d.detail ? `${d.name} — ${d.detail}` : d.name)).join("\n");
 }

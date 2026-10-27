@@ -212,6 +212,30 @@ export interface PlannedDrill {
   rating?: number | null;
 }
 
+export interface SavedSessionExercise {
+  name: string;
+  detail: string;
+}
+
+/** A rehab / own session kept in the library for reuse. */
+export interface SavedSession {
+  id: string;
+  name: string;
+  estimatedMinutes: number | null;
+  notes: string | null;
+  exercises: SavedSessionExercise[];
+  timesUsed: number;
+  lastUsedAt: string | null;
+  updatedAt: string;
+}
+
+export interface SavedSessionInput {
+  name: string;
+  estimatedMinutes?: number | null;
+  notes?: string | null;
+  exercises: SavedSessionExercise[];
+}
+
 export interface PlannedSession {
   id: string;
   date: string;
@@ -1082,6 +1106,16 @@ export const api = {
       title?: string;
     }
   ) => request<PlannedSession>(`/calendar/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+
+  listSavedSessions: () => request<SavedSession[]>("/saved-sessions"),
+  createSavedSession: (data: SavedSessionInput & { overwrite?: boolean }) =>
+    request<SavedSession>("/saved-sessions", { method: "POST", body: JSON.stringify(data) }),
+  updateSavedSession: (id: string, data: SavedSessionInput) =>
+    request<SavedSession>(`/saved-sessions/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  duplicateSavedSession: (id: string, name?: string) =>
+    request<SavedSession>(`/saved-sessions/${id}/duplicate`, { method: "POST", body: JSON.stringify({ name }) }),
+  markSavedSessionUsed: (id: string) => request<{ ok: true }>(`/saved-sessions/${id}/used`, { method: "POST" }),
+  deleteSavedSession: (id: string) => request<{ ok: true }>(`/saved-sessions/${id}`, { method: "DELETE" }),
 
   deletePlannedSession: (id: string) => request(`/calendar/${id}`, { method: "DELETE" }),
 
