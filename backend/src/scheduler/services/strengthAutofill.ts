@@ -149,7 +149,8 @@ export async function autofillWeek(userId: string, startKey: string, todayKey: s
   let trainedBefore = 0;
   for (let i = 1; i <= MAX_CONSECUTIVE_TRAINING_DAYS; i++) {
     const k = dateToDayKey(addDays(start, -i));
-    if ((byDay.get(k) ?? []).some((s) => s.type === "STRENGTH")) trainedBefore++;
+    // A rehab or own session is not a gym day, so it doesn't count towards the streak.
+    if ((byDay.get(k) ?? []).some((s) => s.type === "STRENGTH" && !s.adHoc)) trainedBefore++;
     else break;
   }
 
@@ -160,7 +161,8 @@ export async function autofillWeek(userId: string, startKey: string, todayKey: s
     return {
       key,
       existingFocus: (strength?.movementPattern as Focus | undefined) ?? null,
-      occupied: list.length > 0,
+      // A rehab or own session doesn't take the day: a gym workout can still go on it.
+      occupied: list.some((s) => !s.adHoc),
       past: addDays(start, i) < today,
     };
   });
@@ -188,7 +190,8 @@ export async function autofillWeek(userId: string, startKey: string, todayKey: s
   });
 
   const placedKeys = new Set(placements.map((p) => p.key));
-  const restKeys = days.filter((d) => !d.past && !d.occupied && !d.existingFocus && !placedKeys.has(d.key)).map((d) => d.key);
+  const adHocKeys = new Set(sessions.filter((s) => s.adHoc).map((s) => dateToDayKey(s.date)));
+  const restKeys = days.filter((d) => !d.past && !d.occupied && !d.existingFocus && !placedKeys.has(d.key) && !adHocKeys.has(d.key)).map((d) => d.key);
 
   await prisma.plannedSession.createMany({
     data: [

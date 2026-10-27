@@ -54,7 +54,7 @@ const drillsSchema = z
       rating: z.number().int().min(1).max(10).nullish(),
     })
   )
-  .max(10);
+  .max(20);
 
 const createPlannedSessionSchema = z
   .object({
@@ -67,10 +67,18 @@ const createPlannedSessionSchema = z
     // scheduled time totals.
     estimatedMinutes: z.number().int().positive().optional(),
     drills: drillsSchema.optional(),
+    // A session the person wrote themselves (e.g. physio rehab): needs a name,
+    // and takes no movement pattern.
+    adHoc: z.boolean().optional(),
+    title: z.string().trim().min(1).max(80).optional(),
   })
-  .refine((data) => data.type !== "STRENGTH" || data.movementPattern, {
+  .refine((data) => data.adHoc || data.type !== "STRENGTH" || data.movementPattern, {
     message: "movementPattern is required when type is STRENGTH",
     path: ["movementPattern"],
+  })
+  .refine((data) => !data.adHoc || (data.title && data.type !== "REST"), {
+    message: "Give your own session a name",
+    path: ["title"],
   });
 
 // GET /calendar - the signed-in user's upcoming planned sessions (default:
@@ -213,7 +221,7 @@ calendarRouter.post("/", async (req: AuthedRequest, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.flatten() });
   }
-  const { date, type, movementPattern, notes, estimatedMinutes, drills } = parsed.data;
+  const { date, type, movementPattern, notes, estimatedMinutes, drills, adHoc, title } = parsed.data;
 
   const session = await prisma.plannedSession.create({
     data: {
@@ -224,6 +232,8 @@ calendarRouter.post("/", async (req: AuthedRequest, res) => {
       notes,
       estimatedMinutes: type === "REST" ? undefined : estimatedMinutes,
       drills: drills?.length ? drills : undefined,
+      adHoc: adHoc ?? false,
+      title: adHoc ? title : undefined,
     },
   });
   res.status(201).json(session);
@@ -242,10 +252,7 @@ const updatePlannedSessionSchema = z
     // goes through POST /:id/strava-activity instead).
     actualMinutes: z.number().int().positive().optional(),
     drills: drillsSchema.optional(),
-  })
-  .refine((data) => data.type !== "STRENGTH" || data.movementPattern, {
-    message: "movementPattern is required when changing type to STRENGTH",
-    path: ["movementPattern"],
+    title: z.string().trim().min(1).max(80).optional(),
   });
 
 // PATCH /calendar/:id - amend any part of a scheduled session (date, type,
@@ -257,11 +264,16 @@ calendarRouter.patch("/:id", async (req: AuthedRequest, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.flatten() });
   }
-  const { date, type, movementPattern, estimatedMinutes, notes, completed, actualMinutes, drills } = parsed.data;
+  const { date, type, movementPattern, estimatedMinutes, notes, completed, actualMinutes, drills, title } = parsed.data;
 
   const existing = await prisma.plannedSession.findFirst({ where: { id: req.params.id, userId: req.userId } });
   if (!existing) {
     return res.status(404).json({ error: "Planned session not found" });
+  }
+  // Changing a session to Strength needs a movement pattern, except for a
+  // session the person wrote themselves, which never has one.
+  if (type === "STRENGTH" && !movementPattern && !existing.adHoc) {
+    return res.status(400).json({ error: "movementPattern is required when changing type to STRENGTH" });
   }
 
   // If switching to REST, clear the movement pattern and estimate — a rest
@@ -278,11 +290,12 @@ calendarRouter.patch("/:id", async (req: AuthedRequest, res) => {
       estimatedMinutes: resolvedType === "REST" ? null : estimatedMinutes,
       notes,
       completed,
+      title: existing.adHoc ? title : undefined,
       // An empty list clears the checklist.
       drills: drills === undefined ? undefined : drills.length ? drills : Prisma.DbNull,
       // A hand edit makes it the person's own entry: re-running auto-fill
       // will no longer replace it.
-      ...(date || type || movementPattern || estimatedMinutes || notes !== undefined || drills !== undefined ? { autoPlanned: false } : {}),
+      ...(date || type || movementPattern || estimatedMinutes || notes !== undefined || drills !== undefined || title !== undefined ? { autoPlanned: false } : {}),
       ...(actualMinutes !== undefined
         ? { actualMinutes, actualSource: "MANUAL" as const, stravaActivityId: null }
         : {}),

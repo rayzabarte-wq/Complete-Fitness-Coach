@@ -224,8 +224,11 @@ export interface PlannedSession {
   actualSource: ActualTimeSource | null;
   stravaActivityId: string | null;
   autoPlanned: boolean;
-  /** Golf practice only. */
+  /** Golf practice, or a rehab / own session's exercises. */
   drills?: PlannedDrill[] | null;
+  /** A rehab or own session: counts as a session of its type but isn't a gym workout. */
+  adHoc?: boolean;
+  title?: string | null;
 }
 
 export interface StravaActivity {
@@ -1061,6 +1064,8 @@ export const api = {
     notes?: string;
     estimatedMinutes?: number;
     drills?: PlannedDrill[];
+    adHoc?: boolean;
+    title?: string;
   }) => request<PlannedSession>("/calendar", { method: "POST", body: JSON.stringify(data) }),
 
   updatePlannedSession: (
@@ -1074,6 +1079,7 @@ export const api = {
       completed?: boolean;
       actualMinutes?: number;
       drills?: PlannedDrill[];
+      title?: string;
     }
   ) => request<PlannedSession>(`/calendar/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
 

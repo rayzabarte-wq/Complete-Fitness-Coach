@@ -6,6 +6,8 @@ import { ACTIVITY_COLORS, FOCUS_LABELS, activityForSessionType } from "../lib/ac
 import { quoteForDate } from "../lib/quotes.js";
 import MessageCards from "../components/MessageCards.js";
 import GolfWeek from "../components/GolfWeek.js";
+import GolfDrillChecklist from "../components/GolfDrillChecklist.js";
+import { parseExerciseLines, drillsToLines, MAX_EXERCISES } from "../lib/exerciseLines.js";
 import { InstallBanner } from "../components/InstallApp.js";
 import PlanPanel, { Planner } from "../components/PlanPanel.js";
 import { getLocation, parseLocalDate, formatLocalDateKey } from "../lib/location.js";
@@ -482,7 +484,7 @@ function DaySummaryRow({
             <ActivityLine
               key={s.id}
               color={ACTIVITY_COLORS[activity]}
-              label={s.type === "STRENGTH" && s.movementPattern ? `Strength · ${FOCUS_LABELS[s.movementPattern] ?? s.movementPattern}` : fullLabelFor(s.type)}
+              label={s.adHoc && s.title ? `Strength · ${s.title}` : s.type === "STRENGTH" && s.movementPattern ? `Strength · ${FOCUS_LABELS[s.movementPattern] ?? s.movementPattern}` : fullLabelFor(s.type)}
               done={s.completed}
               rest={s.type === "REST"}
             />
@@ -970,6 +972,11 @@ function AddSessionForm({
   const type = resolveType(category, subType);
   const [estimatedMinutes, setEstimatedMinutes] = useState(() => String(DEFAULT_MINUTES[type] || 45));
   const [notes, setNotes] = useState("");
+  // A rehab or own session (e.g. from a physio) instead of a gym workout.
+  const [ownSession, setOwnSession] = useState(false);
+  const [title, setTitle] = useState("");
+  const [exerciseText, setExerciseText] = useState("");
+  const own = ownSession && type === "STRENGTH";
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -994,9 +1001,10 @@ function AddSessionForm({
       await api.createPlannedSession({
         date: new Date(date).toISOString(),
         type,
-        movementPattern: type === "STRENGTH" ? movementPattern : undefined,
+        movementPattern: type === "STRENGTH" && !own ? movementPattern : undefined,
         notes: notes || undefined,
         estimatedMinutes: type !== "REST" && estimatedMinutes ? Number(estimatedMinutes) : undefined,
+        ...(own ? { adHoc: true, title: title.trim(), drills: parseExerciseLines(exerciseText) } : {}),
       });
       onCreated();
     } catch (err: any) {
@@ -1013,6 +1021,15 @@ function AddSessionForm({
       <SubTypeSelect categoryLabel={category} value={subType} visibleTypes={visibleTypes} onChange={handleSubTypeChange} />
 
       {type === "STRENGTH" && (
+        <label style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8, fontSize: 13 }}>
+          <input type="checkbox" checked={ownSession} onChange={(e) => setOwnSession(e.target.checked)} style={{ width: 18, height: 18 }} />
+          Rehab or my own session (e.g. from a physio), not a gym workout
+        </label>
+      )}
+
+      {own && <OwnSessionFields title={title} setTitle={setTitle} exerciseText={exerciseText} setExerciseText={setExerciseText} />}
+
+      {type === "STRENGTH" && !own && (
         <select
           value={movementPattern}
           onChange={(e) => setMovementPattern(e.target.value as MovementPattern)}
@@ -1114,7 +1131,7 @@ function SessionRow({
         <strong style={{ fontSize: 14, display: "flex", alignItems: "center", gap: 6 }}>
           <span className="swatch" style={{ background: ACTIVITY_COLORS[activityForSessionType(session.type)] }} />
           {fullLabelFor(session.type)}
-          {session.movementPattern ? ` · ${FOCUS_LABELS[session.movementPattern] ?? session.movementPattern}` : ""}
+          {session.adHoc && session.title ? ` · ${session.title}` : session.movementPattern ? ` · ${FOCUS_LABELS[session.movementPattern] ?? session.movementPattern}` : ""}
           {session.autoPlanned && <span className="chip">Auto</span>}
         </strong>
         {!isRestDay && session.estimatedMinutes && (
@@ -1144,6 +1161,10 @@ function SessionRow({
         >
           {session.drills && session.drills.length > 0 ? "Open this practice" : "Build and start this practice"}
         </Link>
+      )}
+
+      {session.adHoc && session.drills && session.drills.length > 0 && (
+        <GolfDrillChecklist session={session} onUpdated={onUpdated} commentPlaceholder="How did it feel? (e.g. 12 reps, mild twinge on the last set)" />
       )}
 
       {session.type === "STRENGTH" && session.movementPattern && !session.completed && (
@@ -1227,6 +1248,8 @@ function EditSessionForm({
     session.estimatedMinutes ? String(session.estimatedMinutes) : ""
   );
   const [notes, setNotes] = useState(session.notes ?? "");
+  const [title, setTitle] = useState(session.title ?? "");
+  const [exerciseText, setExerciseText] = useState(() => drillsToLines(session.drills));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -1258,10 +1281,11 @@ function EditSessionForm({
     try {
       await api.updatePlannedSession(session.id, {
         date: new Date(date).toISOString(),
-        type,
-        movementPattern: type === "STRENGTH" ? movementPattern : undefined,
+        type: session.adHoc ? undefined : type,
+        movementPattern: !session.adHoc && type === "STRENGTH" ? movementPattern : undefined,
         estimatedMinutes: type !== "REST" && estimatedMinutes ? Number(estimatedMinutes) : undefined,
         notes: notes || undefined,
+        ...(session.adHoc ? { title: title.trim() || undefined, drills: parseExerciseLines(exerciseText, session.drills ?? []) } : {}),
       });
       onSaved();
     } catch (err: any) {
@@ -1282,11 +1306,17 @@ function EditSessionForm({
         style={{ width: "100%", padding: 8, marginTop: 8 }}
       />
 
-      <CategorySelect value={category} visibleTypes={typesForThisForm} onChange={handleCategoryChange} />
+      {session.adHoc ? (
+        <OwnSessionFields title={title} setTitle={setTitle} exerciseText={exerciseText} setExerciseText={setExerciseText} />
+      ) : (
+        <>
+          <CategorySelect value={category} visibleTypes={typesForThisForm} onChange={handleCategoryChange} />
 
-      <SubTypeSelect categoryLabel={category} value={subType} visibleTypes={typesForThisForm} onChange={handleSubTypeChange} />
+          <SubTypeSelect categoryLabel={category} value={subType} visibleTypes={typesForThisForm} onChange={handleSubTypeChange} />
+        </>
+      )}
 
-      {type === "STRENGTH" && (
+      {type === "STRENGTH" && !session.adHoc && (
         <select
           value={movementPattern}
           onChange={(e) => setMovementPattern(e.target.value as MovementPattern)}
@@ -1342,6 +1372,43 @@ function EditSessionForm({
         </button>
       </div>
     </div>
+  );
+}
+
+/** The name and exercise list of a rehab or own session. */
+function OwnSessionFields({
+  title,
+  setTitle,
+  exerciseText,
+  setExerciseText,
+}: {
+  title: string;
+  setTitle: (v: string) => void;
+  exerciseText: string;
+  setExerciseText: (v: string) => void;
+}) {
+  return (
+    <>
+      <input
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        maxLength={80}
+        placeholder="Name, e.g. Physio: right shoulder"
+        aria-label="Session name"
+        style={{ width: "100%", padding: 8, marginTop: 8 }}
+      />
+      <textarea
+        value={exerciseText}
+        onChange={(e) => setExerciseText(e.target.value)}
+        rows={5}
+        placeholder={"Exercises, one per line, as on your sheet:\nBand external rotation — 3 x 15 each side\nWall slides — 2 x 10, slow"}
+        aria-label="Exercises, one per line"
+        style={{ width: "100%", padding: 8, marginTop: 8 }}
+      />
+      <p className="text-dim" style={{ fontSize: 12, margin: "4px 0 0" }}>
+        Up to {MAX_EXERCISES} exercises. Text before a dash or colon is the exercise, the rest is how to do it. You tick them off on the day. This counts as a strength session but adds no muscle load, so your recovery and split are unchanged.
+      </p>
+    </>
   );
 }
 

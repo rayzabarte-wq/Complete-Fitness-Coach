@@ -1290,6 +1290,12 @@ On the plan screen (under the approach cards while drafting, and above the weekl
 
 The verdict is meant to be acted on. Under it, each sport has − and + for its sessions a week, and "Adjust my goals" opens the overall aim and each sport's goal for rewording (`PATCH /plan/:id/goals`, allowed at any stage, no approaches regenerated; a sport's goal is also its ambition shown with progress, so both are updated). Once a number or goal has changed, the card says the verdict is out of date, and "Save and check again" saves the goals and re-runs the check in one step.
 
+## Rehab and your own sessions (Calendar → add a session → Strength)
+
+For a physio's rehab sheet, or any session that is not a gym workout, add a Strength session and tick "Rehab or my own session". Give it a name (e.g. "Physio: right shoulder"), the minutes, and the exercises one per line as on the sheet, e.g. `Band external rotation — 3 x 15 each side` (text before a dash or colon is the exercise, the rest is how to do it; up to 20). It shows on the Calendar as "Strength · <name>", and on the day it has a checklist: tick each exercise, add a comment on how it felt, and ticking the last one marks the session done. There are no set-by-set log entries. The exercises can be edited later; ticks and comments are kept for exercises whose name is unchanged. It is the same checklist the golf practice sessions use.
+
+How it counts: it is a **strength session** (type Strength, flagged `adHoc`, no movement pattern), so it counts in the consistency dashboard (as an unspecified strength session, with its minutes) and in the strength sessions on Progress. It does **not** change muscular recovery (recovery comes only from logged workout sets), does not move the strength split along (the last-trained day comes from logged workouts and planned sessions with a movement pattern), does not count as a gym day in the "three in a row" rule, and does not fill a day: strength auto-fill can still place a gym workout on the same day, and "Plan my week" does not treat it as covering a strength slot. Importing the exercises from a Word or PDF document is not built yet.
+
 ## If Railway deployments stop or pause
 
 This happened after Railway's platform outage of 21-23 October 2026 (see status.railway.com). GitHub's commit status shows each service's last deploy (`gh api repos/<owner>/<repo>/commits/<sha>/status`), which tells you whether the problem is Railway or the code.

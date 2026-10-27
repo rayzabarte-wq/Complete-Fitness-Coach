@@ -555,6 +555,14 @@ model PlannedSession {
   // `notes` stays free text for how the session went overall.
   drills Json?
 
+  // A session the person wrote themselves, e.g. physio rehab: it counts as a
+  // session of its type (Strength) with a name and a checklist, but it is not
+  // a gym workout, so it adds no muscle load, doesn't move the strength split
+  // along and doesn't fill a strength day in the planners. See
+  // scheduler/routes/calendar.ts.
+  title String?
+  adHoc Boolean @default(false)
+
   @@index([userId, date])
 }
 

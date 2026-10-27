@@ -5,7 +5,7 @@ import { api, PlannedDrill, PlannedSession } from "../lib/api.js";
 // circle to tick a drill off, and add a comment on how it went. Every change
 // is saved straight away. Ticking the last drill marks the session done.
 
-export default function GolfDrillChecklist({ session, onUpdated }: { session: PlannedSession; onUpdated: () => void }) {
+export default function GolfDrillChecklist({ session, onUpdated, commentPlaceholder }: { session: PlannedSession; onUpdated: () => void; commentPlaceholder?: string }) {
   const [drills, setDrills] = useState<PlannedDrill[]>(session.drills ?? []);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -86,7 +86,7 @@ export default function GolfDrillChecklist({ session, onUpdated }: { session: Pl
             </button>
           </div>
           <input
-            placeholder="How did it go? (e.g. pulled the 7-iron left, 6/10 inside 10 ft)"
+            placeholder={commentPlaceholder ?? "How did it go? (e.g. pulled the 7-iron left, 6/10 inside 10 ft)"}
             aria-label={`Comment on ${d.name}`}
             value={d.comment}
             maxLength={500}

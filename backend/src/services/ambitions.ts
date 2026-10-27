@@ -57,6 +57,15 @@ export async function progressFor(userId: string, sport: Sport, now = new Date()
     sessions = recent.length;
     previousSessions = logged.length - recent.length;
     minutes = recent.reduce((sum, s) => (s.startedAt && s.endedAt ? sum + Math.round((s.endedAt.getTime() - s.startedAt.getTime()) / 60000) : sum), 0);
+    // Completed rehab / own sessions count as strength sessions too.
+    const own = await prisma.plannedSession.findMany({
+      where: { userId, adHoc: true, completed: true, type: "STRENGTH", date: { gte: prevFrom, lte: now } },
+      select: { date: true, actualMinutes: true, estimatedMinutes: true },
+    });
+    const ownRecent = own.filter((s) => s.date >= from);
+    sessions += ownRecent.length;
+    previousSessions += own.length - ownRecent.length;
+    minutes += ownRecent.reduce((sum, s) => sum + (s.actualMinutes ?? s.estimatedMinutes ?? 0), 0);
   } else {
     const done = await prisma.plannedSession.findMany({
       where: { userId, completed: true, type: { in: SPORT_SESSION_TYPES[sport] }, date: { gte: prevFrom, lte: now } },

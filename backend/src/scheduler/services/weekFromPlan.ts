@@ -233,7 +233,8 @@ export async function planWeekFromPlan(userId: string, startKey: string, todayKe
       const daySlots = slots.filter((s) => s.sport === sport && s.dayOfWeek === d.dow);
       if (daySlots.length === 0) continue;
       const here = keptOn(d.key);
-      const covered = here.some((s) => sportOf(s.type) === sport) || here.some((s) => s.type === "REST");
+      // A rehab or own session doesn't stand in for a planned workout of its sport.
+      const covered = here.some((s) => !s.adHoc && sportOf(s.type) === sport) || here.some((s) => s.type === "REST");
       if (covered) {
         skipped += daySlots.length;
         continue;
