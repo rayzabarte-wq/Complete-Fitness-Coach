@@ -3,6 +3,7 @@ import { api, SetInput, PlannedExercise, ReadinessLevel, WorkoutProgress } from 
 import { usePlan } from "../lib/planContext.js";
 import { Equipment, EquipmentSetting } from "../lib/equipment.js";
 import { FOCUS_LABELS } from "../lib/activity.js";
+import RestTimer, { RestState, primeAudio, readAutoStart, writeAutoStart } from "../components/RestTimer.js";
 
 interface SetRow {
   weightLb: number;
@@ -41,6 +42,8 @@ export default function LogWorkout({ onSaved, notice }: { onSaved: (sessionId: s
   const [soreness, setSoreness] = useState<ReadinessLevel | null>(null);
   const [energyLevel, setEnergyLevel] = useState<ReadinessLevel | null>(null);
   const [saving, setSaving] = useState(false);
+  const [rest, setRest] = useState<RestState | null>(null);
+  const [autoRest, setAutoRest] = useState(readAutoStart);
   const [error, setError] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
   // What the person sees about saving: the workout and everything entered
@@ -157,6 +160,16 @@ export default function LogWorkout({ onSaved, notice }: { onSaved: (sessionId: s
     if (!row) return;
     if (!row.logged && row.reps === "") return; // require reps before logging
     updateRow(exerciseId, index, { logged: !row.logged });
+    // Logging a set (not un-logging) starts the rest countdown.
+    if (!row.logged) {
+      primeAudio();
+      const ex = plan?.exercises.find((e) => e.exerciseId === exerciseId);
+      if (autoRest && ex && ex.restSeconds > 0) {
+        setRest({ endsAt: Date.now() + ex.restSeconds * 1000, total: ex.restSeconds, label: ex.name });
+      }
+    } else {
+      setRest(null);
+    }
   }
 
   async function saveWorkout() {
@@ -256,6 +269,20 @@ export default function LogWorkout({ onSaved, notice }: { onSaved: (sessionId: s
         </button>
       </div>
 
+      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, marginBottom: 12 }}>
+        <input
+          type="checkbox"
+          checked={autoRest}
+          onChange={(e) => {
+            setAutoRest(e.target.checked);
+            writeAutoStart(e.target.checked);
+            if (!e.target.checked) setRest(null);
+            else primeAudio();
+          }}
+        />
+        Start a rest timer when I log a set
+      </label>
+
       <ReadinessCheckIn
         sleepQuality={sleepQuality}
         soreness={soreness}
@@ -285,6 +312,8 @@ export default function LogWorkout({ onSaved, notice }: { onSaved: (sessionId: s
       <button className="button-primary" onClick={saveWorkout} disabled={saving} style={{ width: "100%", marginTop: 8 }}>
         {saving ? "Saving..." : "Save workout"}
       </button>
+      {rest && <div style={{ height: 96 }} />}
+      {rest && <RestTimer rest={rest} onChange={setRest} onDismiss={() => setRest(null)} />}
     </div>
   );
 }
