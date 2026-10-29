@@ -22,10 +22,10 @@ type LogView = "STRENGTH" | "STEPS" | "NUTRITION" | "RUN" | "CYCLING" | "WALK" |
 
 const PASSIVE_SPORTS: { key: Exclude<LogView, "STRENGTH" | "STEPS" | "NUTRITION">; matches: (t: SessionType) => boolean }[] = [
   { key: "RUN", matches: (t) => t.startsWith("RUN_") },
+  { key: "GOLF", matches: (t) => t.startsWith("GOLF_") },
   { key: "CYCLING", matches: (t) => t.startsWith("CYCLING") },
   { key: "WALK", matches: (t) => t.startsWith("WALK_") },
   { key: "SWIM", matches: (t) => t === "SWIM" },
-  { key: "GOLF", matches: (t) => t.startsWith("GOLF_") },
 ];
 
 export default function Log() {
@@ -40,7 +40,9 @@ export default function Log() {
       .catch(() => setVisibleTypes(["STRENGTH"]));
   }, []);
 
-  const views: LogView[] = ["STRENGTH", "STEPS", "NUTRITION", ...PASSIVE_SPORTS.filter((s) => visibleTypes.some(s.matches)).map((s) => s.key)];
+  // Order: Strength, Run, Golf, then the other sports, with the logs fed by
+  // AI input or Strava / Health sync (Steps, Nutrition) on the right.
+  const views: LogView[] = ["STRENGTH", ...PASSIVE_SPORTS.filter((s) => visibleTypes.some(s.matches)).map((s) => s.key), "STEPS", "NUTRITION"];
 
   return (
     <div>
