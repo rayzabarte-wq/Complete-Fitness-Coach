@@ -49,16 +49,24 @@ function beep() {
   }
   try {
     if (!audioCtx) return;
-    for (let i = 0; i < 3; i++) {
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.frequency.value = 880;
-      gain.gain.value = 0.15;
-      osc.connect(gain).connect(audioCtx.destination);
-      const t = audioCtx.currentTime + i * 0.25;
-      osc.start(t);
-      osc.stop(t + 0.15);
-    }
+    // Three soft bell chimes, rising: each is a sine with a quiet overtone
+    // that fades away, which sounds like a chime rather than a beep.
+    const notes = [784, 988, 1175];
+    notes.forEach((freq, i) => {
+      const t = audioCtx!.currentTime + i * 0.5;
+      for (const [mult, peak] of [[1, 0.22], [2.76, 0.05]] as const) {
+        const osc = audioCtx!.createOscillator();
+        const gain = audioCtx!.createGain();
+        osc.type = "sine";
+        osc.frequency.value = freq * mult;
+        gain.gain.setValueAtTime(0.0001, t);
+        gain.gain.exponentialRampToValueAtTime(peak, t + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + 1.2);
+        osc.connect(gain).connect(audioCtx!.destination);
+        osc.start(t);
+        osc.stop(t + 1.25);
+      }
+    });
   } catch {
     // ignore
   }
