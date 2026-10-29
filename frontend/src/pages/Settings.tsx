@@ -121,6 +121,39 @@ export default function Settings({ onLoggedOut }: { onLoggedOut: () => void }) {
         </div>
       </Collapsible>
 
+      <Collapsible title="App">
+        <div className="card">
+          <strong>Refresh the app</strong>
+          <p className="text-dim" style={{ fontSize: 13, marginTop: 6 }}>
+            Opened from your home screen and it looks out of date? This reloads the latest version. You stay signed in.
+          </p>
+          <button
+            className="button-secondary"
+            style={{ width: "100%", marginTop: 8 }}
+            onClick={async () => {
+              try {
+                if ("serviceWorker" in navigator) {
+                  const regs = await navigator.serviceWorker.getRegistrations();
+                  await Promise.all(regs.map((r) => r.unregister()));
+                }
+                if ("caches" in window) {
+                  const keys = await caches.keys();
+                  await Promise.all(keys.map((k) => caches.delete(k)));
+                }
+              } catch {
+                // Reload anyway.
+              }
+              // A changed query string forces a fresh copy of the page.
+              const url = new URL(window.location.href);
+              url.searchParams.set("r", String(Date.now()));
+              window.location.replace(url.toString());
+            }}
+          >
+            Refresh now
+          </button>
+        </div>
+      </Collapsible>
+
       <Collapsible title="Your data">
         <YourDataSection />
       </Collapsible>
