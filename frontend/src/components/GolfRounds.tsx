@@ -193,7 +193,7 @@ export default function GolfRounds() {
                   <span style={{ fontWeight: 600 }}>
                     {r.course}
                     {r.source === "strava" && (
-                      <span className="chip" style={{ marginLeft: 6, fontSize: 10, fontWeight: 500 }}>
+                      <span className="chip" style={{ marginLeft: 6, fontSize: 12, fontWeight: 500 }}>
                         Strava
                       </span>
                     )}

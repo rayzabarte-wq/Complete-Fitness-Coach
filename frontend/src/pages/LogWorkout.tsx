@@ -282,6 +282,9 @@ export default function LogWorkout({ onSaved, notice }: { onSaved: (sessionId: s
         />
         Start a rest timer when I log a set
       </label>
+      <p className="text-dim" style={{ fontSize: 12, margin: "-4px 0 12px" }}>
+        RPE is how hard a set felt, from 1 (easy) to 10 (nothing left). It is optional.
+      </p>
 
       <ReadinessCheckIn
         sleepQuality={sleepQuality}
@@ -484,7 +487,7 @@ function ExerciseCard({
       <div style={{ marginTop: 6 }}>
         <div
           className="text-dim"
-          style={{ display: "grid", gridTemplateColumns: "24px 1fr 70px 32px", gap: 8, fontSize: 11, padding: "4px 0" }}
+          style={{ display: "grid", gridTemplateColumns: "24px 1fr 70px 32px", gap: 8, fontSize: 12, padding: "4px 0" }}
         >
           <span />
           <span>Actual weight</span>
@@ -564,7 +567,7 @@ function ExerciseCard({
 
             {!row.logged && (
               <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 4, marginLeft: 32 }}>
-                <span className="text-dim" style={{ fontSize: 10, marginRight: 2 }}>
+                <span className="text-dim" style={{ fontSize: 12, marginRight: 2 }}>
                   RPE
                 </span>
                 {Array.from({ length: 10 }, (_, n) => n + 1).map((n) => (
@@ -574,7 +577,7 @@ function ExerciseCard({
                     style={{
                       width: 20,
                       height: 20,
-                      fontSize: 10,
+                      fontSize: 12,
                       padding: 0,
                       borderRadius: 4,
                       border: "none",

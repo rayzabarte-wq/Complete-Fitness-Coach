@@ -59,6 +59,13 @@ export default function Log() {
           ))}
         </div>
       )}
+      {PASSIVE_SPORTS.some((s) => !visibleTypes.some(s.matches)) && (
+        <p className="text-dim" style={{ fontSize: 12, margin: "-4px 0 10px", textAlign: "right" }}>
+          <Link to="/settings#workout-types" style={{ color: "var(--accent)" }}>
+            More sports
+          </Link>
+        </p>
+      )}
       {view === "STRENGTH" && <StrengthLog />}
       {view === "STEPS" && <StepsLog />}
       {view === "NUTRITION" && <NutritionLog />}
@@ -455,7 +462,7 @@ function SavedWorkouts({
             <div key={w.id} style={{ padding: "10px 0", borderTop: "1px solid var(--border)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
                 <strong style={{ fontSize: 14 }}>{formatDay(w.date, today)}</strong>
-                <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 10, background: badge.bg, color: badge.color }}>
+                <span style={{ fontSize: 12, fontWeight: 600, padding: "2px 8px", borderRadius: 10, background: badge.bg, color: badge.color }}>
                   {w.status === "MOVED" && w.reusedOnDate ? `Moved to ${formatDay(w.reusedOnDate, today)}` : badge.label}
                 </span>
               </div>
@@ -798,7 +805,7 @@ function NutritionLog() {
             {MACRO_FIELDS.map((f) => (
               <div key={f.key}>
                 <div style={{ fontWeight: 700, fontSize: 16 }}>{show(data.average[f.key], f.unit)}</div>
-                <div className="text-dim" style={{ fontSize: 11 }}>
+                <div className="text-dim" style={{ fontSize: 12 }}>
                   {f.label}
                 </div>
               </div>

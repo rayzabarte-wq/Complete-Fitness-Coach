@@ -131,8 +131,11 @@ export default function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
         <div className="card">
           <h2>Create your account</h2>
           <form onSubmit={handleRegister}>
-            <input
-              placeholder="Email"
+            <label className="field-label" htmlFor="login-email-1">Email
+              </label>
+              <input
+                id="login-email-1"
+                placeholder="Email"
               type="email"
               inputMode="email"
               autoComplete="email"
@@ -143,16 +146,23 @@ export default function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
               onChange={(e) => setEmail(e.target.value)}
               style={{ width: "100%", padding: 10, marginBottom: 8, boxSizing: "border-box" }}
             />
-            <input
-              placeholder="Password (at least 10 characters)"
+            <label className="field-label" htmlFor="login-password-2">Password
+                <span className="text-dim" style={{ fontSize: 12 }}> (at least 10 characters)</span>
+              </label>
+              <input
+                id="login-password-2"
+                placeholder="Password (at least 10 characters)"
               type="password"
               autoComplete="new-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               style={{ width: "100%", padding: 10, marginBottom: 8, boxSizing: "border-box" }}
             />
-            <input
-              placeholder="Repeat the password"
+            <label className="field-label" htmlFor="login-password2-3">Repeat the password
+              </label>
+              <input
+                id="login-password2-3"
+                placeholder="Repeat the password"
               type="password"
               autoComplete="new-password"
               value={password2}
@@ -224,8 +234,11 @@ export default function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
             Can't scan? Enter manually: <code>{setupSecret}</code>
           </p>
           <form onSubmit={handleConfirm2fa}>
-            <input
-              placeholder="6-digit code"
+            <label className="field-label" htmlFor="login-code-4">6-digit code
+              </label>
+              <input
+                id="login-code-4"
+                placeholder="6-digit code"
               inputMode="numeric"
               autoComplete="one-time-code"
               maxLength={7}
@@ -254,8 +267,11 @@ export default function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
         <form onSubmit={handleLogin}>
           {!needsCode && (
             <>
-              <input
-                placeholder="Email"
+              <label className="field-label" htmlFor="login-email-5">Email
+                </label>
+                <input
+                  id="login-email-5"
+                  placeholder="Email"
                 type="email"
                 inputMode="email"
                 autoComplete="email"
@@ -266,8 +282,12 @@ export default function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
                 onChange={(e) => setEmail(e.target.value)}
                 style={{ width: "100%", padding: 10, marginBottom: 8 }}
               />
-              <input
-                placeholder="Password (at least 10 characters)"
+              <label className="field-label" htmlFor="login-password-6">Password
+                  <span className="text-dim" style={{ fontSize: 12 }}> (at least 10 characters)</span>
+                </label>
+                <input
+                  id="login-password-6"
+                  placeholder="Password (at least 10 characters)"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -277,8 +297,11 @@ export default function Login({ onLoggedIn }: { onLoggedIn: () => void }) {
           )}
           {needsCode && (
             <>
-              <input
-                placeholder="6-digit code"
+              <label className="field-label" htmlFor="login-code-7">6-digit code
+                </label>
+                <input
+                  id="login-code-7"
+                  placeholder="6-digit code"
                 inputMode="numeric"
                 autoComplete="one-time-code"
                 maxLength={7}

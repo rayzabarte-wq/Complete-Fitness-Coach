@@ -248,7 +248,7 @@ export default function ScheduleBuilder({
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6, marginTop: 10 }}>
           {DAY_LABELS.map((d, i) => (
             <div key={d} style={{ textAlign: "center" }}>
-              <div className="text-dim" style={{ fontSize: 11, fontWeight: 600 }}>
+              <div className="text-dim" style={{ fontSize: 12, fontWeight: 600 }}>
                 {d}
               </div>
               <div style={{ fontSize: 13, marginTop: 4 }}>{minutesPerDay[i] > 0 ? formatHoursMinutes(minutesPerDay[i]) : "–"}</div>

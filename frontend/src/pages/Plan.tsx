@@ -980,7 +980,7 @@ function AssessmentCard({
               <div key={s.sport} style={{ borderTop: "1px solid var(--border)", padding: "8px 0" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                   <strong style={{ fontSize: 13 }}>{SPORT_LABELS[s.sport]}</strong>
-                  <span style={{ background: v.bg, borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 700 }}>{v.label}</span>
+                  <span style={{ background: v.bg, borderRadius: 6, padding: "2px 8px", fontSize: 12, fontWeight: 700 }}>{v.label}</span>
                   <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6 }}>
                     <button className="button-quiet" aria-label={`One fewer ${SPORT_LABELS[s.sport]} session a week`} disabled={busy || assessing || (current ?? 1) <= 1} onClick={() => onApply(s.sport, (current ?? 2) - 1)}>
                       −
@@ -1013,7 +1013,7 @@ function WeekGrid({ slots }: { slots: FrameworkSlot[] }) {
       <p className="text-dim" style={{ fontSize: 12, margin: "4px 0 10px" }}>
         A recurring weekly shape, not dated sessions — use it as a guide when scheduling on the Calendar tab.
       </p>
-      <div style={{ display: "grid", gridTemplateColumns: "56px repeat(7, 1fr)", gap: 4, fontSize: 11 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "56px repeat(7, 1fr)", gap: 4, fontSize: 12 }}>
         <div />
         {DAY_LABELS.map((d) => (
           <div key={d} className="text-dim" style={{ textAlign: "center", fontWeight: 600 }}>
@@ -1037,7 +1037,7 @@ function WeekGrid({ slots }: { slots: FrameworkSlot[] }) {
                     border: slot ? "1px solid var(--border)" : "1px dashed var(--border)",
                     borderRadius: 6,
                     padding: 4,
-                    fontSize: 10,
+                    fontSize: 12,
                     lineHeight: 1.3,
                     display: "flex",
                     alignItems: "center",

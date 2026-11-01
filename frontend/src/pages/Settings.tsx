@@ -175,7 +175,7 @@ export default function Settings({ onLoggedOut }: { onLoggedOut: () => void }) {
         Log out
       </button>
 
-      <p className="text-dim" style={{ fontSize: 11, textAlign: "center", marginTop: 12 }}>
+      <p className="text-dim" style={{ fontSize: 12, textAlign: "center", marginTop: 12 }}>
         {server ? describeVersions(server) : `App version ${APP_VERSION}.`}
       </p>
     </div>
@@ -804,7 +804,7 @@ function WorkoutTypesSection() {
         </div>
       )}
       {saving && (
-        <p className="text-dim" style={{ fontSize: 11, marginTop: 6 }}>
+        <p className="text-dim" style={{ fontSize: 12, marginTop: 6 }}>
           Saving...
         </p>
       )}

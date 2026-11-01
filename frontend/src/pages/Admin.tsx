@@ -75,7 +75,7 @@ export default function Admin() {
                 <b>{l.action}</b>
                 {l.targetEmail ? ` · ${l.targetEmail}` : ""}
                 {l.detail ? ` · ${l.detail}` : ""}
-                <div className="text-dim" style={{ fontSize: 11 }}>
+                <div className="text-dim" style={{ fontSize: 12 }}>
                   {l.adminEmail} · {new Date(l.createdAt).toLocaleString()}
                 </div>
               </li>
@@ -103,7 +103,7 @@ function Summary({ s }: { s: AdminUsersResponse["summary"] }) {
       {items.map(([label, n]) => (
         <div key={label} className="card" style={{ padding: 10, textAlign: "center" }}>
           <div style={{ fontFamily: '"Poppins", sans-serif', fontWeight: 600, fontSize: 20, color: "var(--navy)" }}>{n}</div>
-          <div className="text-dim" style={{ fontSize: 11 }}>{label}</div>
+          <div className="text-dim" style={{ fontSize: 12 }}>{label}</div>
         </div>
       ))}
     </div>

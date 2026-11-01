@@ -107,7 +107,7 @@ export function ConsentSettings({ onChanged }: { onChanged?: () => void }) {
             {p.description}
           </div>
           {p.updatedAt && (
-            <div className="text-dim" style={{ fontSize: 11, marginTop: 2 }}>
+            <div className="text-dim" style={{ fontSize: 12, marginTop: 2 }}>
               Last changed {new Date(p.updatedAt).toLocaleDateString()}
             </div>
           )}

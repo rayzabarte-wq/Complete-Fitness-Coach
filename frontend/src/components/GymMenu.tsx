@@ -61,7 +61,7 @@ export default function GymMenu() {
       >
         <PinIcon />
         {SHORT_LABEL[current.kind]}
-        <span aria-hidden="true" style={{ fontSize: 10, opacity: 0.85 }}>
+        <span aria-hidden="true" style={{ fontSize: 12, opacity: 0.85 }}>
           ▾
         </span>
       </button>
@@ -84,7 +84,7 @@ export default function GymMenu() {
             zIndex: 20,
           }}
         >
-          <div className="text-dim" style={{ fontSize: 11, padding: "4px 8px 6px" }}>
+          <div className="text-dim" style={{ fontSize: 12, padding: "4px 8px 6px" }}>
             Where are you training? Workouts only use that gym's equipment.
           </div>
           {gyms.map((g) => {

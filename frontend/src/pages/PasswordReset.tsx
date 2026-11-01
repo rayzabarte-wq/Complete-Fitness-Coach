@@ -47,7 +47,8 @@ export function ForgotPassword({ initialEmail, onBack }: { initialEmail: string;
           <p className="text-dim" style={{ fontSize: 13, marginTop: 0 }}>
             Enter the email you signed up with. We'll send you a link to choose a new password. The link expires after 3 minutes.
           </p>
-          <input placeholder="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} style={inputStyle} />
+          <label className="field-label" htmlFor="reset-email">Email</label>
+          <input id="reset-email" placeholder="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} style={inputStyle} />
           <button className="button-primary" style={{ width: "100%" }} disabled={busy || !email.trim()}>
             {busy ? "Sending…" : "Email me a reset link"}
           </button>
@@ -179,7 +180,9 @@ export function ResetPassword({
         This link expires in <strong>{formatCountdown(secondsLeft)}</strong>.
       </p>
       <form onSubmit={handleSubmit}>
+        <label className="field-label" htmlFor="reset-new">New password <span className="text-dim" style={{ fontSize: 12 }}>(at least 10 characters)</span></label>
         <input
+          id="reset-new"
           placeholder="New password (at least 10 characters)"
           type="password"
           autoComplete="new-password"
@@ -187,7 +190,9 @@ export function ResetPassword({
           onChange={(e) => setPassword(e.target.value)}
           style={inputStyle}
         />
+        <label className="field-label" htmlFor="reset-again">Type it again</label>
         <input
+          id="reset-again"
           placeholder="Type it again"
           type="password"
           autoComplete="new-password"

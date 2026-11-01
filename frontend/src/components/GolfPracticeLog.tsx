@@ -282,7 +282,7 @@ function DrillCard({ index, drill, clubOptions, onPatch }: { index: number; dril
       )}
 
       <div style={{ marginTop: 6 }}>
-        <div className="text-dim" style={{ display: "grid", gridTemplateColumns: "24px 1fr 32px", gap: 8, fontSize: 11, padding: "4px 0" }}>
+        <div className="text-dim" style={{ display: "grid", gridTemplateColumns: "24px 1fr 32px", gap: 8, fontSize: 12, padding: "4px 0" }}>
           <span />
           <span>How it went</span>
           <span />
@@ -318,7 +318,7 @@ function DrillCard({ index, drill, clubOptions, onPatch }: { index: number; dril
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 4, marginLeft: 32 }}>
-            <span className="text-dim" style={{ fontSize: 10, marginRight: 2 }}>Feel</span>
+            <span className="text-dim" style={{ fontSize: 12, marginRight: 2 }}>Feel</span>
             {Array.from({ length: 10 }, (_, n) => n + 1).map((n) => (
               <button
                 key={n}
@@ -327,7 +327,7 @@ function DrillCard({ index, drill, clubOptions, onPatch }: { index: number; dril
                 style={{
                   width: 20,
                   height: 20,
-                  fontSize: 10,
+                  fontSize: 12,
                   padding: 0,
                   borderRadius: 4,
                   border: "none",

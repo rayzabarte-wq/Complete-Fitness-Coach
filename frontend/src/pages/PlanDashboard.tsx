@@ -115,7 +115,7 @@ function PeriodCard({ period, view }: { period: PeriodDashboard; view: "current"
     <div className="card">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
         <strong>{period.label}</strong>
-        <span className="text-dim" style={{ fontSize: 11 }}>
+        <span className="text-dim" style={{ fontSize: 12 }}>
           {period.from} – {period.to}
         </span>
       </div>
@@ -159,14 +159,14 @@ function SportRow({ sportReport }: { sportReport: SportReport }) {
       >
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <strong style={{ fontSize: 14 }}>{SPORT_LABELS[sportReport.sport]}</strong>
-          {hasSubTypes && <span className="text-dim" style={{ fontSize: 11 }}>{expanded ? "▲" : "▼"}</span>}
+          {hasSubTypes && <span className="text-dim" style={{ fontSize: 12 }}>{expanded ? "▲" : "▼"}</span>}
         </div>
         <div style={{ textAlign: "right" }}>
           <div style={{ fontSize: 13, color: consistencyColor(sportReport.consistencyPercent) }}>
             {sportReport.completedCount}/{sportReport.plannedCount}
             {sportReport.consistencyPercent !== null ? ` (${sportReport.consistencyPercent}%)` : ""}
           </div>
-          <div className="text-dim" style={{ fontSize: 11 }}>{formatHoursMinutes(sportReport.completedMinutes)}</div>
+          <div className="text-dim" style={{ fontSize: 12 }}>{formatHoursMinutes(sportReport.completedMinutes)}</div>
         </div>
       </div>
 

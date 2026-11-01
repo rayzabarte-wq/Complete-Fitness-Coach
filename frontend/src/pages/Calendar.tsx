@@ -366,32 +366,6 @@ export default function Calendar() {
 
       <InstallBanner />
 
-      {stravaNote.connected && (
-        <p className="text-dim" style={{ fontSize: 12, margin: "0 0 8px" }}>
-          {stravaNote.text ? `${stravaNote.text}. ` : ""}
-          <button type="button" className="button-quiet" style={{ fontSize: 12 }} disabled={syncing} onClick={() => syncStrava(true)}>
-            {syncing ? "Syncing…" : "Sync Strava"}
-          </button>
-        </p>
-      )}
-
-      <figure className="card" style={{ margin: "0 0 12px", borderLeft: "4px solid var(--sun)" }}>
-        <blockquote style={{ margin: 0, fontSize: 14, fontStyle: "italic", lineHeight: 1.45 }}>“{quote.text}”</blockquote>
-        <figcaption className="text-dim" style={{ fontSize: 12, marginTop: 6 }}>
-          — {quote.author}, {quote.context}
-        </figcaption>
-      </figure>
-
-      {showWeather && <WeatherStrip forecast={forecast} error={weatherError} locationDenied={locationDenied} onRetryLocation={() => loadForecast(true)} />}
-      {showWeather && forecast && !weatherError && (
-        <p className="text-dim" style={{ fontSize: 12, margin: "-8px 0 12px" }}>
-          {usingSavedLocation ? "Using the location saved on this device. " : "Using your current location. "}
-          <button type="button" className="button-quiet" style={{ fontSize: 12 }} disabled={updatingLocation} onClick={() => loadForecast(true)}>
-            {updatingLocation ? "Updating…" : "Update location"}
-          </button>
-        </p>
-      )}
-
       <PlanPanel planners={planners} />
 
       <div className="card" style={{ marginBottom: 12 }}>
@@ -434,6 +408,33 @@ export default function Calendar() {
           dayForecast={showWeather ? forecastByDate.get(key) : undefined}
         />
       ))}
+
+      {/* Secondary extras sit below the week so the days come first. */}
+      {stravaNote.connected && (
+        <p className="text-dim" style={{ fontSize: 12, margin: "0 0 8px" }}>
+          {stravaNote.text ? `${stravaNote.text}. ` : ""}
+          <button type="button" className="button-quiet" style={{ fontSize: 12 }} disabled={syncing} onClick={() => syncStrava(true)}>
+            {syncing ? "Syncing…" : "Sync Strava"}
+          </button>
+        </p>
+      )}
+
+      <figure className="card" style={{ margin: "0 0 12px", borderLeft: "4px solid var(--sun)" }}>
+        <blockquote style={{ margin: 0, fontSize: 14, fontStyle: "italic", lineHeight: 1.45 }}>“{quote.text}”</blockquote>
+        <figcaption className="text-dim" style={{ fontSize: 12, marginTop: 6 }}>
+          — {quote.author}, {quote.context}
+        </figcaption>
+      </figure>
+
+      {showWeather && <WeatherStrip forecast={forecast} error={weatherError} locationDenied={locationDenied} onRetryLocation={() => loadForecast(true)} />}
+      {showWeather && forecast && !weatherError && (
+        <p className="text-dim" style={{ fontSize: 12, margin: "-8px 0 12px" }}>
+          {usingSavedLocation ? "Using the location saved on this device. " : "Using your current location. "}
+          <button type="button" className="button-quiet" style={{ fontSize: 12 }} disabled={updatingLocation} onClick={() => loadForecast(true)}>
+            {updatingLocation ? "Updating…" : "Update location"}
+          </button>
+        </p>
+      )}
     </div>
   );
 }
@@ -758,19 +759,19 @@ function WeatherStrip({
           <div style={{ fontSize: 12, fontWeight: 600 }}>
             {parseLocalDate(day.date).toLocaleDateString(undefined, { weekday: "short" })}
           </div>
-          <div className="text-dim" style={{ fontSize: 11, marginTop: 2 }}>
+          <div className="text-dim" style={{ fontSize: 12, marginTop: 2 }}>
             {day.condition}
           </div>
           <div style={{ fontSize: 14, marginTop: 4 }}>
             {day.tempMaxC}° / {day.tempMinC}°
           </div>
-          <div className="text-dim" style={{ fontSize: 10, marginTop: 2 }}>
+          <div className="text-dim" style={{ fontSize: 12, marginTop: 2 }}>
             💧{day.precipProbability}% 🌬{day.windMaxMph}mph
           </div>
           <div
             style={{
               marginTop: 6,
-              fontSize: 10,
+              fontSize: 12,
               fontWeight: 700,
               padding: "2px 0",
               borderRadius: 4,
@@ -907,7 +908,7 @@ function WeekFromPlanSummary({ result }: { result: WeekFromPlanResult }) {
           <li key={`n${i}`}>{n}</li>
         ))}
       </ul>
-      <p className="text-dim" style={{ fontSize: 11, margin: "6px 0 0" }}>
+      <p className="text-dim" style={{ fontSize: 12, margin: "6px 0 0" }}>
         Tap a day to change or remove any of these. Golf drills are built in Log when you start the session.
       </p>
     </div>
@@ -937,7 +938,7 @@ function RunPlanSummary({ result }: { result: RunPlanResult }) {
               outline: w.week === result.week ? "2px solid var(--navy)" : undefined,
               borderRadius: 4,
               textAlign: "center",
-              fontSize: 10,
+              fontSize: 12,
               padding: "4px 0",
               opacity: w.lighter ? 0.7 : 1,
             }}
@@ -946,7 +947,7 @@ function RunPlanSummary({ result }: { result: RunPlanResult }) {
           </div>
         ))}
       </div>
-      <div className="text-dim" style={{ fontSize: 11, marginTop: 4 }}>
+      <div className="text-dim" style={{ fontSize: 12, marginTop: 4 }}>
         Base 1-4 · Build 5-8 · Peak 9-11 · Taper 12 · Reset 13. Weeks 4, 8 and 12 are lighter. Long run this week about{" "}
         {result.outline[result.week - 1].longRunMinutes} min.
       </div>
@@ -1573,7 +1574,7 @@ function ActualTimeEntry({
         </div>
       ) : (
         <div>
-          <div className="text-dim" style={{ fontSize: 11, marginBottom: 4 }}>
+          <div className="text-dim" style={{ fontSize: 12, marginBottom: 4 }}>
             Strava activities that day:
           </div>
           {stravaLoading ? (
@@ -1611,7 +1612,7 @@ function ActualTimeEntry({
           <button
             onClick={() => setShowStravaPicker(false)}
             style={{
-              fontSize: 11,
+              fontSize: 12,
               background: "none",
               border: "none",
               color: "var(--text-dim)",
@@ -1624,7 +1625,7 @@ function ActualTimeEntry({
           </button>
         </div>
       )}
-      {error && <p style={{ color: "var(--danger)", fontSize: 11, marginTop: 4 }}>{error}</p>}
+      {error && <p style={{ color: "var(--danger)", fontSize: 12, marginTop: 4 }}>{error}</p>}
     </div>
   );
 }
