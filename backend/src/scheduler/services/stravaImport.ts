@@ -3,6 +3,7 @@ import { prisma } from "../../lib/prisma.js";
 import { addDays, dateToDayKey, dayKeyToDate, isDayKey } from "../../lib/dates.js";
 import { getActivitiesBetween, isStravaConnected, StravaActivityDetail } from "./stravaSync.js";
 import { SPORT_SESSION_TYPES } from "../lib/sportMapping.js";
+import { pushRecentWorkouts } from "./stravaPush.js";
 
 // Brings Strava activities into the calendar automatically. An activity that
 // matches a planned session that day (same sport, not yet done) completes it;
@@ -112,6 +113,13 @@ export async function syncStravaActivities(userId: string, force = false): Promi
       created++;
     }
     await prisma.stravaImport.create({ data: { userId, stravaActivityId: a.id, plannedSessionId: sessionId } });
+  }
+  // Strength workouts are not imported (the watch's recording is the same
+  // workout), but with automatic updates on, fill that recording in.
+  try {
+    await pushRecentWorkouts(userId);
+  } catch (err) {
+    console.error("[strava] automatic update failed:", err);
   }
   return { connected: true, created, completed };
 }

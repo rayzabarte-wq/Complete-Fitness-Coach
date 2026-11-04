@@ -3,10 +3,12 @@ import { z } from "zod";
 import {
   getAuthorizeUrl,
   handleAuthCallback,
-  isStravaConnected,
+  getStravaStatus,
+  setStravaAutoUpdate,
   disconnectStrava,
   getActivitiesForDate,
 } from "../services/stravaSync.js";
+import { pushWorkoutToStrava } from "../services/stravaPush.js";
 import { requireAuth, AuthedRequest } from "../../lib/requireAuth.js";
 import { verifySessionToken } from "../../services/auth.js";
 
@@ -43,6 +45,8 @@ stravaPublicRouter.get("/callback", async (req, res) => {
   const code = req.query.code as string | undefined;
   const userId = req.query.state as string | undefined;
   const error = req.query.error as string | undefined;
+  // Strava reports which permissions were actually granted.
+  const scope = typeof req.query.scope === "string" ? req.query.scope : undefined;
 
   if (error) {
     return res.redirect(`${FRONTEND_URL}/settings?strava=error&message=${encodeURIComponent(error)}`);
@@ -52,7 +56,7 @@ stravaPublicRouter.get("/callback", async (req, res) => {
   }
 
   try {
-    await handleAuthCallback(code, userId);
+    await handleAuthCallback(code, userId, scope);
     res.redirect(`${FRONTEND_URL}/settings?strava=connected`);
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown_error";
@@ -62,7 +66,25 @@ stravaPublicRouter.get("/callback", async (req, res) => {
 
 // GET /integrations/strava/status - whether the signed-in user has Strava linked.
 stravaPrivateRouter.get("/status", requireAuth, async (req: AuthedRequest, res) => {
-  res.json({ connected: await isStravaConnected(req.userId!) });
+  res.json(await getStravaStatus(req.userId!));
+});
+
+// PATCH /integrations/strava/settings - { autoUpdate } turns automatic
+// workout updates on or off.
+stravaPrivateRouter.patch("/settings", requireAuth, async (req: AuthedRequest, res) => {
+  const parsed = z.object({ autoUpdate: z.boolean() }).safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "autoUpdate must be true or false" });
+  await setStravaAutoUpdate(req.userId!, parsed.data.autoUpdate);
+  res.json(await getStravaStatus(req.userId!));
+});
+
+// POST /integrations/strava/update-workout - { sessionId }: fill in the
+// watch's Strava activity from a logged workout. Always 200 with ok true or
+// false and a message to show, since "no match yet" is a normal outcome.
+stravaPrivateRouter.post("/update-workout", requireAuth, async (req: AuthedRequest, res) => {
+  const parsed = z.object({ sessionId: z.string().min(1).max(64) }).safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "sessionId is required" });
+  res.json(await pushWorkoutToStrava(req.userId!, parsed.data.sessionId));
 });
 
 // POST /integrations/strava/disconnect - removes this user's stored tokens.

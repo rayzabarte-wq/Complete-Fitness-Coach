@@ -692,12 +692,23 @@ export interface StrengthSummary {
   bestLifts: Record<string, { name: string; value: number }>;
 }
 
+export interface StravaStatus {
+  connected: boolean;
+  /** Allowed to update activities (false for people who connected before this existed). */
+  canWrite: boolean;
+  autoUpdate: boolean;
+}
+
+export type StravaPushResult =
+  | { ok: true; activityId: string; renamed: boolean; estimatedKcal: number | null; units: "metric" | "imperial"; alreadyUpToDate: boolean }
+  | { ok: false; code: string; message: string };
+
 export interface DaySummary {
   date: string;
   steps: number | null;
   stepGoal: number | null;
   hitStepGoal: boolean | null;
-  workouts: { id: string; focus: MovementPattern | null; setCount: number; minutes: number | null; exercises: { name: string; sets: string[] }[] }[];
+  workouts: { id: string; focus: MovementPattern | null; stravaPushed?: boolean; setCount: number; minutes: number | null; exercises: { name: string; sets: string[] }[] }[];
   scan: { weightKg: number | null; bodyFatPct: number | null; muscleMassKg: number | null; source: string } | null;
 }
 
@@ -1137,7 +1148,11 @@ export const api = {
       body: JSON.stringify({ visibleSessionTypes }),
     }),
 
-  getStravaStatus: () => request<{ connected: boolean }>("/integrations/strava/status"),
+  getStravaStatus: () => request<StravaStatus>("/integrations/strava/status"),
+  setStravaAutoUpdate: (autoUpdate: boolean) =>
+    request<StravaStatus>("/integrations/strava/settings", { method: "PATCH", body: JSON.stringify({ autoUpdate }) }),
+  updateStravaWorkout: (sessionId: string) =>
+    request<StravaPushResult>("/integrations/strava/update-workout", { method: "POST", body: JSON.stringify({ sessionId }) }),
 
   disconnectStrava: () => request<{ connected: boolean }>("/integrations/strava/disconnect", { method: "POST" }),
 

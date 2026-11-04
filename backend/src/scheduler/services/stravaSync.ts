@@ -7,7 +7,9 @@ const REDIRECT_URI = process.env.STRAVA_REDIRECT_URI;
 const AUTHORIZE_URL = "https://www.strava.com/oauth/authorize";
 const TOKEN_URL = "https://www.strava.com/oauth/token";
 const API_BASE = "https://www.strava.com/api/v3";
-const SCOPES = "activity:read_all";
+// read_all: your activities. write: update the watch activity with workout
+// details. profile:read_all: only to read the metric/imperial setting.
+const SCOPES = "activity:read_all,activity:write,profile:read_all";
 
 function requireConfig() {
   if (!CLIENT_ID || !CLIENT_SECRET || !REDIRECT_URI) {
@@ -26,7 +28,8 @@ export function getAuthorizeUrl(userId: string): string {
     client_id: CLIENT_ID!,
     redirect_uri: REDIRECT_URI!,
     response_type: "code",
-    approval_prompt: "auto",
+    // "force" so people who connected before are asked for the new permissions.
+    approval_prompt: "force",
     scope: SCOPES,
     state: userId,
   });
@@ -39,7 +42,7 @@ interface TokenResponse {
   expires_at: number; // unix seconds (Strava gives an absolute time, not a duration)
 }
 
-export async function handleAuthCallback(code: string, userId: string): Promise<void> {
+export async function handleAuthCallback(code: string, userId: string, grantedScope?: string): Promise<void> {
   requireConfig();
   const res = await fetch(TOKEN_URL, {
     method: "POST",
@@ -57,15 +60,17 @@ export async function handleAuthCallback(code: string, userId: string): Promise<
   }
 
   const tokens = (await res.json()) as TokenResponse;
-  await saveTokens(userId, tokens);
+  // Strava lets people untick permissions, so record what was actually granted.
+  const granted = (grantedScope ?? "").split(/[,\s]+/);
+  await saveTokens(userId, tokens, { canWrite: granted.includes("activity:write"), canReadUnits: granted.includes("profile:read_all") });
 }
 
-async function saveTokens(userId: string, tokens: TokenResponse): Promise<void> {
+async function saveTokens(userId: string, tokens: TokenResponse, flags?: { canWrite: boolean; canReadUnits: boolean }): Promise<void> {
   const expiresAt = new Date(tokens.expires_at * 1000);
   await prisma.stravaAccount.upsert({
     where: { userId },
-    update: { accessToken: tokens.access_token, refreshToken: tokens.refresh_token, expiresAt },
-    create: { userId, accessToken: tokens.access_token, refreshToken: tokens.refresh_token, expiresAt },
+    update: { accessToken: tokens.access_token, refreshToken: tokens.refresh_token, expiresAt, ...(flags ?? {}) },
+    create: { userId, accessToken: tokens.access_token, refreshToken: tokens.refresh_token, expiresAt, ...(flags ?? {}) },
   });
 }
 
@@ -103,6 +108,87 @@ async function getValidAccessToken(userId: string): Promise<string | null> {
 
 export async function isStravaConnected(userId: string): Promise<boolean> {
   return (await prisma.stravaAccount.findUnique({ where: { userId } })) !== null;
+}
+
+export interface StravaStatus {
+  connected: boolean;
+  /** Allowed to update activities. False for people who connected before this existed. */
+  canWrite: boolean;
+  autoUpdate: boolean;
+}
+
+export async function getStravaStatus(userId: string): Promise<StravaStatus> {
+  const a = await prisma.stravaAccount.findUnique({ where: { userId }, select: { canWrite: true, autoUpdate: true } });
+  return a ? { connected: true, canWrite: a.canWrite, autoUpdate: a.autoUpdate } : { connected: false, canWrite: false, autoUpdate: false };
+}
+
+export async function setStravaAutoUpdate(userId: string, autoUpdate: boolean): Promise<void> {
+  await prisma.stravaAccount.updateMany({ where: { userId }, data: { autoUpdate } });
+}
+
+async function stravaFetch(userId: string, path: string, init?: RequestInit): Promise<Response> {
+  const accessToken = await getValidAccessToken(userId);
+  if (!accessToken) throw new Error("Strava isn't connected");
+  return fetch(`${API_BASE}${path}`, {
+    ...init,
+    headers: { Authorization: `Bearer ${accessToken}`, ...(init?.body ? { "Content-Type": "application/json" } : {}) },
+  });
+}
+
+export interface RawWatchActivity {
+  id: string;
+  name: string;
+  sportType: string;
+  startMs: number;
+  elapsedSeconds: number;
+}
+
+/** Activities starting in a UTC time range, with the UTC start Strava reports. */
+export async function listActivitiesInRange(userId: string, afterMs: number, beforeMs: number): Promise<RawWatchActivity[]> {
+  const params = new URLSearchParams({ after: String(Math.floor(afterMs / 1000)), before: String(Math.floor(beforeMs / 1000)), per_page: "50" });
+  const res = await stravaFetch(userId, `/athlete/activities?${params.toString()}`);
+  if (!res.ok) throw new Error(`Failed to fetch Strava activities: ${res.status}`);
+  const batch = (await res.json()) as Array<{ id: number; name: string; type: string; sport_type?: string; start_date: string; elapsed_time: number }>;
+  return batch.map((a) => ({ id: String(a.id), name: a.name, sportType: a.sport_type ?? a.type, startMs: new Date(a.start_date).getTime(), elapsedSeconds: a.elapsed_time }));
+}
+
+export interface ActivityDetail {
+  id: string;
+  name: string;
+  description: string | null;
+  calories: number | null;
+  elapsedSeconds: number;
+}
+
+export async function getActivityDetail(userId: string, activityId: string): Promise<ActivityDetail> {
+  const res = await stravaFetch(userId, `/activities/${encodeURIComponent(activityId)}`);
+  if (!res.ok) throw new Error(`Failed to read the Strava activity: ${res.status}`);
+  const a = (await res.json()) as { id: number; name: string; description?: string | null; calories?: number; elapsed_time: number };
+  return { id: String(a.id), name: a.name, description: a.description ?? null, calories: a.calories && a.calories > 0 ? a.calories : null, elapsedSeconds: a.elapsed_time };
+}
+
+/** Writes only the fields given. Throws a StravaWriteError when Strava refuses. */
+export class StravaWriteError extends Error {
+  constructor(public status: number, message: string) {
+    super(message);
+  }
+}
+
+export async function updateActivity(userId: string, activityId: string, fields: { name?: string; description?: string }): Promise<void> {
+  const res = await stravaFetch(userId, `/activities/${encodeURIComponent(activityId)}`, { method: "PUT", body: JSON.stringify(fields) });
+  if (!res.ok) throw new StravaWriteError(res.status, `Strava refused the update (${res.status})`);
+}
+
+/** The athlete's own units setting ("feet" = imperial, "meters" = metric), or null if unavailable. */
+export async function getMeasurementPreference(userId: string): Promise<string | null> {
+  try {
+    const res = await stravaFetch(userId, "/athlete");
+    if (!res.ok) return null;
+    const a = (await res.json()) as { measurement_preference?: string };
+    return a.measurement_preference ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export async function disconnectStrava(userId: string): Promise<void> {

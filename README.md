@@ -816,6 +816,39 @@ need to do this yourself):
 Without this configured, the Calendar tab still works for scheduling and
 manual time entry — "Sync from Strava" just won't appear.
 
+#### Updating Strava with strength workouts
+
+If you record strength on a watch (a Garmin "Strength" activity, say), the
+app can fill in that Strava activity from the workout you logged here. It
+does not create a second activity, so heart rate and the watch's calories
+stay as recorded.
+
+- **What is written:** the exercises, sets, reps and weights go in the
+  description, between "— Complete Fitness Coach —" markers (sending again
+  replaces only that block; anything you typed stays). The name is changed
+  to "Strength · Push" and so on only when it is still the watch's generic
+  one ("Strength", "Morning Weight Training"); a name you chose is kept.
+- **Units:** weights follow your Strava units setting (kg for "meters", lb
+  for "feet"). If Strava won't say, kg is used.
+- **Calories:** Strava's API has no calories field, so a calorie estimate
+  is only added to the description when the watch gave none. The estimate
+  is MET × body weight × hours: MET 3.5, plus 0.5 per average-RPE point
+  above 6, up to 5.5; the hours come from the watch's elapsed time. It needs
+  a body weight from a scan, and is rounded to the nearest 5 kcal.
+- **Matching:** a Weight Training, Workout or Crossfit activity starting
+  within 45 minutes of the workout; the closest start wins. Without a
+  recorded start time it uses "the only one that day" and otherwise asks you
+  to try again rather than guess.
+- **How:** the **Update Strava** button on the workout in the day view, or
+  **Settings → Connections → Strava → Update Strava automatically** (off by
+  default). The automatic option runs with the regular Strava check, so a
+  watch that syncs a few minutes late is picked up on the next pass, for
+  workouts from the last three days.
+- **Permissions:** this needs `activity:write` and `profile:read_all` (the
+  latter only to read the units setting). People who connected earlier see
+  "Reconnect Strava". The connect page now always asks for the permissions
+  again.
+
 ### Weather forecast
 
 The 10-day weather strip above the 7-day planner looks a bit further out

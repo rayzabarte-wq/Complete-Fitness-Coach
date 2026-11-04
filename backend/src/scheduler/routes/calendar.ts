@@ -204,6 +204,7 @@ calendarRouter.get("/days", async (req: AuthedRequest, res) => {
       id: w.id,
       focus: w.focus,
       setCount: w.sets.length,
+      stravaPushed: w.stravaPushedAt != null,
       minutes: w.startedAt && w.endedAt ? Math.round((w.endedAt.getTime() - w.startedAt.getTime()) / 60000) : null,
       exercises: [...exercises.values()],
     });

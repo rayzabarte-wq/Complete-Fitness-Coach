@@ -1,6 +1,6 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api, SavedSession, RunPlanResult, WeekFromPlanResult, DayForecast, DaySummary, PlannedSession, SessionType, MovementPattern, StravaActivity, GolfSessionType } from "../lib/api.js";
+import { api, SavedSession, RunPlanResult, WeekFromPlanResult, DayForecast, DaySummary, PlannedSession, SessionType, MovementPattern, StravaActivity, StravaStatus, GolfSessionType } from "../lib/api.js";
 import { SPORT_LABELS } from "../lib/sports.js";
 import { ACTIVITY_COLORS, FOCUS_LABELS, activityForSessionType } from "../lib/activity.js";
 import { quoteForDate } from "../lib/quotes.js";
@@ -655,6 +655,7 @@ export function DayDetail() {
               {e.name}: {e.sets.join(", ")}
             </div>
           ))}
+          <UpdateStravaButton sessionId={w.id} alreadySent={w.stravaPushed === true} />
         </div>
       ))}
 
@@ -700,6 +701,60 @@ export function DayDetail() {
               .join(" · ")}
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+/** Fills in the watch's Strava activity from a logged workout. Only shown
+ * when Strava is connected. */
+function UpdateStravaButton({ sessionId, alreadySent }: { sessionId: string; alreadySent: boolean }) {
+  const [status, setStatus] = useState<StravaStatus | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(alreadySent ? { ok: true, text: "Sent to Strava" } : null);
+
+  useEffect(() => {
+    api.getStravaStatus().then(setStatus).catch(() => setStatus(null));
+  }, []);
+
+  if (!status?.connected) return null;
+  if (!status.canWrite) {
+    return (
+      <p className="text-dim" style={{ fontSize: 12, margin: "8px 0 0" }}>
+        To send this to Strava, <Link to="/settings" style={{ color: "var(--accent)" }}>reconnect Strava in Settings</Link>.
+      </p>
+    );
+  }
+
+  async function send() {
+    setBusy(true);
+    setResult(null);
+    try {
+      const r = await api.updateStravaWorkout(sessionId);
+      if (r.ok) {
+        const bits = [r.alreadyUpToDate ? "Strava already had this" : "Strava updated"];
+        if (r.estimatedKcal != null) bits.push(`about ${r.estimatedKcal} kcal (estimate)`);
+        setResult({ ok: true, text: bits.join(" · ") });
+      } else {
+        setResult({ ok: false, text: r.message });
+      }
+    } catch {
+      setResult({ ok: false, text: "Couldn't reach the server. Try again." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ marginTop: 8 }}>
+      <button type="button" className="button-secondary" disabled={busy} onClick={send} style={{ width: "100%" }}>
+        {busy ? "Updating Strava…" : result?.ok ? "Update Strava again" : "Update Strava"}
+      </button>
+      {result && (
+        <p style={{ fontSize: 12, margin: "6px 0 0", color: result.ok ? "var(--good)" : "var(--danger)" }}>
+          {result.ok ? "✓ " : ""}
+          {result.text}
+        </p>
       )}
     </div>
   );

@@ -385,6 +385,10 @@ model WorkoutSession {
   outlookEventId String?
   // The gym profile this session was done at (plain id, informational).
   gymId String?
+  // The Strava activity (your watch's recording) this session's details were
+  // written to, and when. Set by "Update Strava"; see services/stravaPush.ts.
+  stravaActivityId String?
+  stravaPushedAt   DateTime?
 
   @@index([userId, date])
 }
@@ -579,6 +583,12 @@ model StravaAccount {
   accessToken  String
   refreshToken String
   expiresAt    DateTime
+  // Whether the person granted "activity:write" (needed to update an
+  // activity) and "profile:read_all" (needed to read their units setting).
+  canWrite     Boolean  @default(false)
+  canReadUnits Boolean  @default(false)
+  // Update the matching Strava activity automatically after a workout.
+  autoUpdate   Boolean  @default(false)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }

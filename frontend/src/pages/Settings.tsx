@@ -665,7 +665,8 @@ function OutlookSection() {
 }
 
 function StravaSection() {
-  const [connected, setConnected] = useState<boolean | null>(null);
+  const [status, setStatus] = useState<{ connected: boolean; canWrite: boolean; autoUpdate: boolean } | null>(null);
+  const connected = status === null ? null : status.connected;
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -683,15 +684,15 @@ function StravaSection() {
 
     api
       .getStravaStatus()
-      .then((s) => setConnected(s.connected))
-      .catch(() => setConnected(false));
+      .then((s) => setStatus(s))
+      .catch(() => setStatus({ connected: false, canWrite: false, autoUpdate: false }));
   }, []);
 
   async function handleDisconnect() {
     setLoading(true);
     try {
       await api.disconnectStrava();
-      setConnected(false);
+      setStatus({ connected: false, canWrite: false, autoUpdate: false });
       setMessage(null);
     } finally {
       setLoading(false);
@@ -704,7 +705,10 @@ function StravaSection() {
       <p className="text-dim" style={{ fontSize: 13, marginTop: 6 }}>
         When connected, cardio and golf sessions on the Calendar tab can
         pull their actual duration straight from a matching Strava
-        activity instead of typing it in by hand.
+        activity instead of typing it in by hand. Strength workouts can
+        fill in the activity your watch recorded: the exercises, sets and
+        weights go in its description, in your Strava units (kg or lb).
+        Heart rate and calories stay as the watch recorded them.
       </p>
 
       {message && (
@@ -720,6 +724,38 @@ function StravaSection() {
       ) : connected ? (
         <div style={{ marginTop: 10 }}>
           <div style={{ color: "var(--accent)", fontWeight: 600, marginBottom: 8 }}>✓ Connected</div>
+          {status && !status.canWrite ? (
+            <div style={{ marginBottom: 10 }}>
+              <p className="text-dim" style={{ fontSize: 13, margin: "0 0 8px" }}>
+                To update your workouts on Strava, reconnect and keep both permissions ticked: uploading and changing your activities, and viewing your profile (only used to read your kg/lb setting).
+              </p>
+              <a href={api.stravaConnectUrl()} className="button-secondary" style={{ display: "block", textAlign: "center", textDecoration: "none" }}>
+                Reconnect Strava
+              </a>
+            </div>
+          ) : (
+            <label style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 13, marginBottom: 10 }}>
+              <input
+                type="checkbox"
+                checked={status?.autoUpdate ?? false}
+                onChange={async (e) => {
+                  const next = e.target.checked;
+                  setStatus((s) => (s ? { ...s, autoUpdate: next } : s));
+                  try {
+                    setStatus(await api.setStravaAutoUpdate(next));
+                  } catch {
+                    setStatus((s) => (s ? { ...s, autoUpdate: !next } : s));
+                  }
+                }}
+              />
+              <span>
+                Update Strava automatically after each strength workout
+                <span className="text-dim" style={{ display: "block", fontSize: 12 }}>
+                  Off by default. Otherwise use the “Update Strava” button on the workout.
+                </span>
+              </span>
+            </label>
+          )}
           <button className="button-primary" onClick={handleDisconnect} disabled={loading} style={{ width: "100%" }}>
             {loading ? "Disconnecting..." : "Disconnect"}
           </button>
